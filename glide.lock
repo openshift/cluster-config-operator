@@ -1,0 +1,6 @@
+hash: 1a4eb74e28eb9866aeb2c6dddc8ee0a9297c69526cf6caf2205802e3514e4fc4
+updated: 2019-01-08T14:49:43.082822335+01:00
+imports:
+- name: github.com/openshift/library-go
+  version: fea77b11a5b20cef63d7c57f8ffde5aa18d8f75d
+testImports: []
