@@ -12,10 +12,6 @@ import (
 	genericrenderoptions "github.com/openshift/library-go/pkg/operator/render/options"
 )
 
-const (
-	bootstrapVersion = "v3.11.0"
-)
-
 // renderOpts holds values to drive the render command.
 type renderOpts struct {
 	manifest genericrenderoptions.ManifestOptions
