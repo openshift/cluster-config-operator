@@ -11,3 +11,7 @@ spec:
     singular: features
     plural: features
     listKind: FeatureList
+  versions:
+    - name: v1
+      served: true
+      storage: true

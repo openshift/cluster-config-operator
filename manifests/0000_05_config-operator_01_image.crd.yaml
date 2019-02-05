@@ -4,12 +4,15 @@ metadata:
   name: images.config.openshift.io
 spec:
   group: config.openshift.io
-  version: v1
   scope: Cluster
   names:
     kind: Image
     singular: image
     plural: images
     listKind: ImageList
+  versions:
+    - name: v1
+      served: true
+      storage: true
   subresources:
     status: {}
