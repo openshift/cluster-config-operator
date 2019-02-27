@@ -11,6 +11,43 @@ spec:
     plural: schedulers
     listKind: SchedulerList
   versions:
-    - name: v1
-      served: true
-      storage: true
+  - name: v1
+    served: true
+    storage: true
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          description: Standard object's metadata.
+          type: object
+        spec:
+          description: spec holds user settable values for configuration
+          properties:
+            policy:
+              description: policy is a reference to a ConfigMap containing scheduler
+                policy which has user specified predicates and priorities. If this
+                ConfigMap is not available scheduler will default to use DefaultAlgorithmProvider.
+                The namespace for this configmap is openshift-config.
+              properties:
+                name:
+                  description: name is the metadata.name of the referenced config
+                    map
+                  type: string
+              type: object
+          type: object
+        status:
+          description: status holds observed values from the cluster. They may not
+            be overridden.
+          type: object
+      required:
+      - spec
