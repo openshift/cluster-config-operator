@@ -97,7 +97,7 @@ func (c RevisionController) createRevisionIfNeeded(operatorSpec *operatorv1.Stat
 	}
 
 	nextRevision := latestRevision + 1
-	glog.Infof("new revision %d triggered by %q", nextRevision, reason)
+	c.eventRecorder.Eventf("RevisionTriggered", "new revision %d triggered by %q", nextRevision, reason)
 	if err := c.createNewRevision(nextRevision); err != nil {
 		cond := operatorv1.OperatorCondition{
 			Type:    "RevisionControllerFailing",
@@ -153,7 +153,7 @@ func (c RevisionController) isLatestRevisionCurrent(revision int32) (bool, strin
 			existingData = existing.Data
 		}
 		if !equality.Semantic.DeepEqual(existingData, requiredData) {
-			return false, fmt.Sprintf("configmap/%s has changed", required.Name)
+			return false, fmt.Sprintf("configmap/%s has changed", cm.Name)
 		}
 	}
 	for _, s := range c.secrets {
@@ -175,7 +175,7 @@ func (c RevisionController) isLatestRevisionCurrent(revision int32) (bool, strin
 			existingData = existing.Data
 		}
 		if !equality.Semantic.DeepEqual(existingData, requiredData) {
-			return false, fmt.Sprintf("secret/%s has changed", required.Name)
+			return false, fmt.Sprintf("secret/%s has changed", s.Name)
 		}
 	}
 
@@ -227,17 +227,20 @@ func (c RevisionController) createNewRevision(revision int32) error {
 }
 
 func (c RevisionController) sync() error {
-	operatorSpec, originalOperatorStatus, resourceVersion, err := c.operatorConfigClient.GetStaticPodOperatorState()
+	operatorSpec, originalOperatorStatus, resourceVersion, err := c.operatorConfigClient.GetStaticPodOperatorStateWithQuorum()
 	if err != nil {
 		return err
 	}
 	operatorStatus := originalOperatorStatus.DeepCopy()
 
 	switch operatorSpec.ManagementState {
+	case operatorv1.Managed:
 	case operatorv1.Unmanaged:
 		return nil
 	case operatorv1.Removed:
-		// TODO probably just fail.  Static pod managers can't be removed.
+		// TODO probably just fail
+		return nil
+	default:
 		return nil
 	}
 
