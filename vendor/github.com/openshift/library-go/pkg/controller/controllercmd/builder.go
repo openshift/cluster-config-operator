@@ -18,6 +18,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1alpha1 "github.com/openshift/api/operator/v1alpha1"
+
 	"github.com/openshift/library-go/pkg/config/client"
 	"github.com/openshift/library-go/pkg/config/configdefaults"
 	leaderelectionconverter "github.com/openshift/library-go/pkg/config/leaderelection"
@@ -31,9 +32,24 @@ type StartFunc func(*ControllerContext) error
 
 type ControllerContext struct {
 	ComponentConfig *unstructured.Unstructured
-	KubeConfig      *rest.Config
-	EventRecorder   events.Recorder
-	Context         context.Context
+
+	// KubeConfig provides the REST config with no content type (it will default to JSON).
+	// Use this config for CR resources.
+	KubeConfig *rest.Config
+
+	// ProtoKubeConfig provides the REST config with "application/vnd.kubernetes.protobuf,application/json" content type.
+	// Note that this config might not be safe for CR resources, instead it should be used for other resources.
+	ProtoKubeConfig *rest.Config
+
+	// EventRecorder is used to record events in controllers.
+	EventRecorder events.Recorder
+
+	stopChan <-chan struct{}
+}
+
+// Done returns a channel which will close on termination.
+func (c ControllerContext) Done() <-chan struct{} {
+	return c.stopChan
 }
 
 // defaultObserverInterval specifies the default interval that file observer will do rehash the files it watches and react to any changes
@@ -70,7 +86,7 @@ func NewController(componentName string, startFunc StartFunc) *ControllerBuilder
 
 // WithRestartOnChange will enable a file observer controller loop that observes changes into specified files. If a change to a file is detected,
 // the specified channel will be closed (allowing to graceful shutdown for other channels).
-func (b *ControllerBuilder) WithRestartOnChange(stopCh chan<- struct{}, files ...string) *ControllerBuilder {
+func (b *ControllerBuilder) WithRestartOnChange(stopCh chan<- struct{}, startingFileContent map[string][]byte, files ...string) *ControllerBuilder {
 	if len(files) == 0 {
 		return b
 	}
@@ -91,7 +107,7 @@ func (b *ControllerBuilder) WithRestartOnChange(stopCh chan<- struct{}, files ..
 		return nil
 	}
 
-	b.fileObserver.AddReactor(b.fileObserverReactorFn, files...)
+	b.fileObserver.AddReactor(b.fileObserverReactorFn, startingFileContent, files...)
 	return b
 }
 
@@ -194,11 +210,16 @@ func (b *ControllerBuilder) Run(config *unstructured.Unstructured, ctx context.C
 		}()
 	}
 
+	protoConfig := rest.CopyConfig(clientConfig)
+	protoConfig.AcceptContentTypes = "application/vnd.kubernetes.protobuf,application/json"
+	protoConfig.ContentType = "application/vnd.kubernetes.protobuf"
+
 	controllerContext := &ControllerContext{
 		ComponentConfig: config,
 		KubeConfig:      clientConfig,
+		ProtoKubeConfig: protoConfig,
 		EventRecorder:   eventRecorder,
-		Context:         ctx,
+		stopChan:        ctx.Done(),
 	}
 
 	if b.leaderElection == nil {
@@ -214,7 +235,7 @@ func (b *ControllerBuilder) Run(config *unstructured.Unstructured, ctx context.C
 	}
 
 	leaderElection.Callbacks.OnStartedLeading = func(ctx context.Context) {
-		controllerContext.Context = ctx
+		controllerContext.stopChan = ctx.Done()
 		if err := b.startFunc(controllerContext); err != nil {
 			glog.Fatal(err)
 		}
