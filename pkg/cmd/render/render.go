@@ -104,6 +104,7 @@ func (r *renderOpts) Run() error {
 		genericrenderoptions.Template{},
 
 		&renderConfig,
+		nil,
 	); err != nil {
 		return err
 	}

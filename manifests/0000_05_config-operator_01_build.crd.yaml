@@ -11,6 +11,137 @@ spec:
     plural: builds
     listKind: BuildList
   versions:
-    - name: v1
-      served: true
-      storage: true
+  - name: v1
+    served: true
+    storage: true
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: Spec holds user-settable values for the build controller configuration
+          properties:
+            additionalTrustedCA:
+              description: AdditionalTrustedCA is a reference to a ConfigMap containing
+                additional CAs that should be trusted for image pushes and pulls during
+                builds. The namespace for this config map is openshift-config.
+              properties:
+                name:
+                  description: name is the metadata.name of the referenced config
+                    map
+                  type: string
+              type: object
+            buildDefaults:
+              description: BuildDefaults controls the default information for Builds
+              properties:
+                defaultProxy:
+                  description: DefaultProxy contains the default proxy settings for
+                    all build operations, including image pull/push and source download.  Values
+                    can be overrode by setting the `HTTP_PROXY`, `HTTPS_PROXY`, and
+                    `NO_PROXY` environment variables in the build config's strategy.
+                  properties:
+                    httpProxy:
+                      description: httpProxy is the URL of the proxy for HTTP requests.  Empty
+                        means unset and will not result in an env var.
+                      type: string
+                    httpsProxy:
+                      description: httpsProxy is the URL of the proxy for HTTPS requests.  Empty
+                        means unset and will not result in an env var.
+                      type: string
+                    noProxy:
+                      description: noProxy is the list of domains for which the proxy
+                        should not be used.  Empty means unset and will not result
+                        in an env var.
+                      type: string
+                  type: object
+                env:
+                  description: Env is a set of default environment variables that
+                    will be applied to the build if the specified variables do not
+                    exist on the build
+                  items:
+                    type: object
+                  type: array
+                gitProxy:
+                  description: GitProxy contains the proxy settings for git operations
+                    only. If set, this will override any Proxy settings for all git
+                    commands, such as git clone.  Values that are not set here will
+                    be inherited from DefaultProxy.
+                  properties:
+                    httpProxy:
+                      description: httpProxy is the URL of the proxy for HTTP requests.  Empty
+                        means unset and will not result in an env var.
+                      type: string
+                    httpsProxy:
+                      description: httpsProxy is the URL of the proxy for HTTPS requests.  Empty
+                        means unset and will not result in an env var.
+                      type: string
+                    noProxy:
+                      description: noProxy is the list of domains for which the proxy
+                        should not be used.  Empty means unset and will not result
+                        in an env var.
+                      type: string
+                  type: object
+                imageLabels:
+                  description: ImageLabels is a list of docker labels that are applied
+                    to the resulting image. User can override a default label by providing
+                    a label with the same name in their Build/BuildConfig.
+                  items:
+                    properties:
+                      name:
+                        description: Name defines the name of the label. It must have
+                          non-zero length.
+                        type: string
+                      value:
+                        description: Value defines the literal value of the label.
+                        type: string
+                    type: object
+                  type: array
+                resources:
+                  description: Resources defines resource requirements to execute
+                    the build.
+                  type: object
+              type: object
+            buildOverrides:
+              description: BuildOverrides controls override settings for builds
+              properties:
+                imageLabels:
+                  description: ImageLabels is a list of docker labels that are applied
+                    to the resulting image. If user provided a label in their Build/BuildConfig
+                    with the same name as one in this list, the user's label will
+                    be overwritten.
+                  items:
+                    properties:
+                      name:
+                        description: Name defines the name of the label. It must have
+                          non-zero length.
+                        type: string
+                      value:
+                        description: Value defines the literal value of the label.
+                        type: string
+                    type: object
+                  type: array
+                nodeSelector:
+                  description: NodeSelector is a selector which must be true for the
+                    build pod to fit on a node
+                  type: object
+                tolerations:
+                  description: Tolerations is a list of Tolerations that will override
+                    any existing tolerations set on a build pod.
+                  items:
+                    type: object
+                  type: array
+              type: object
+          type: object
+      required:
+      - spec

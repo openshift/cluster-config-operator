@@ -11,6 +11,52 @@ spec:
     singular: infrastructure
   scope: Cluster
   versions:
-    - name: v1
-      served: true
-      storage: true
+  - name: v1
+    served: true
+    storage: true
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          description: Standard object's metadata.
+          type: object
+        spec:
+          description: spec holds user settable values for configuration
+          type: object
+        status:
+          description: status holds observed values from the cluster. They may not
+            be overridden.
+          properties:
+            apiServerURL:
+              description: apiServerURL is a valid URL with scheme(http/https), address
+                and port. apiServerURL can be used by components like kubelet on machines,
+                to contact the `apisever` using the infrastructure provider rather
+                than the kubernetes networking.
+              type: string
+            etcdDiscoveryDomain:
+              description: 'etcdDiscoveryDomain is the domain used to fetch the SRV
+                records for discovering etcd servers and clients. For more info: https://github.com/etcd-io/etcd/blob/329be66e8b3f9e2e6af83c123ff89297e49ebd15/Documentation/op-guide/clustering.md#dns-discovery'
+              type: string
+            platform:
+              description: platform is the underlying infrastructure provider for
+                the cluster. This value controls whether infrastructure automation
+                such as service load balancers, dynamic volume provisioning, machine
+                creation and deletion, and other integrations are enabled. If None,
+                no infrastructure automation is enabled. Allowed values are "AWS",
+                "Azure", "GCP", "Libvirt", "OpenStack", "VSphere", and "None". Individual
+                components may not support all platforms, and must handle unrecognized
+                platforms as None if they do not support that platform.
+              type: string
+          type: object
+      required:
+      - spec
