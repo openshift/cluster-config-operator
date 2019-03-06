@@ -1,5 +1,5 @@
 hash: f01c2d97b8df017e8ba621f32149030f04ff60d021f591e60c0b22a51b918d0a
-updated: 2019-03-05T15:46:24.268803+01:00
+updated: 2019-03-06T19:07:23.671342+01:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -18,6 +18,8 @@ imports:
   subpackages:
   - pkg/term
   - pkg/term/windows
+- name: github.com/evanphx/json-patch
+  version: 36442dbdb585210f8d5a1b45e67aa323c197d5c4
 - name: github.com/ghodss/yaml
   version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gobuffalo/envy
@@ -79,12 +81,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 05fbef0ca5da472bbf96c9322b84a53edc03c9fd
 - name: github.com/openshift/api
-  version: ad60feaa9147fd1ba910f6cbbf3fccee48ac9f17
+  version: f044dc43cf333120bf29c5ece86f872555f1a8d5
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: 0e0c8d01a19e8a9f2e517596557f4494a2490d88
+  version: 10585fdc9322d30d622279729036a07f1ff7bbe1
   subpackages:
   - cmd/crd-schema-gen/generator
   - pkg/assets
