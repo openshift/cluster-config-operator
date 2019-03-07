@@ -75,6 +75,7 @@ spec:
                     format: int32
                     type: integer
                 type: object
+              nullable: true
               type: array
             clusterNetworkMTU:
               description: ClusterNetworkMTU is the MTU for inter-pod networking.
@@ -88,6 +89,7 @@ spec:
                 a single entry here.
               items:
                 type: string
+              nullable: true
               type: array
           type: object
       required:
