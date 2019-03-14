@@ -1,5 +1,5 @@
 hash: f01c2d97b8df017e8ba621f32149030f04ff60d021f591e60c0b22a51b918d0a
-updated: 2019-03-06T19:07:23.671342+01:00
+updated: 2019-03-14T08:01:20.665024609-05:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -65,13 +65,11 @@ imports:
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/joho/godotenv
-  version: 6d367c18edf6ca7fd004efd6863e4c5728fa858e
+  version: 5c0e6c6ab1a0a9ef0a8822cba3a05d62f7dad941
 - name: github.com/json-iterator/go
   version: f2b4162afba35581b6d4a50d3b8f34e33c144682
-- name: github.com/kr/fs
-  version: 2788f0dbd16903de03cb8186e5c7d97b69ad387b
 - name: github.com/markbates/inflect
-  version: 24b83195037b3bc61fcda2d28b7b0518bce293b6
+  version: d582c680dc4d29c2279628ae00e743005bfcd4fe
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -81,12 +79,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 05fbef0ca5da472bbf96c9322b84a53edc03c9fd
 - name: github.com/openshift/api
-  version: f044dc43cf333120bf29c5ece86f872555f1a8d5
+  version: d934e5cf5d420c08c09286da79f8fe9ab0f7d6a4
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: 10585fdc9322d30d622279729036a07f1ff7bbe1
+  version: 51a1e47ef123a462296101395ff83998715da643
   subpackages:
   - cmd/crd-schema-gen/generator
   - pkg/assets
@@ -102,8 +100,6 @@ imports:
   version: 5f041e8faa004a95c88a202771f4cc3e991971e6
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
-- name: github.com/pkg/sftp
-  version: 4d0e916071f68db74f8a73926335f809396d6b42
 - name: github.com/prometheus/client_golang
   version: e7e903064f5e9eb5da98208bae10b475d4db0f8c
   subpackages:
@@ -123,7 +119,7 @@ imports:
   subpackages:
   - xfs
 - name: github.com/rogpeppe/go-internal
-  version: 184c5dfc7a1dc73deb0f651dcde70139e8eab2a6
+  version: bb30e2a7ca3553a66c6a740eb5ebe72f9d35ef0e
   subpackages:
   - modfile
   - module
@@ -131,10 +127,9 @@ imports:
 - name: github.com/sirupsen/logrus
   version: 89742aefa4b206dcf400792f3bd35b542998eb3b
 - name: github.com/spf13/afero
-  version: b28a7effac979219c2a2ed6205a4d70e4b1bcd02
+  version: f4711e4db9e9a1d3887343acb72b2bbfc2f686f5
   subpackages:
   - mem
-  - sftp
 - name: github.com/spf13/cobra
   version: c439c4fa093711d42e1b01acb1235b52004753c1
 - name: github.com/spf13/pflag
@@ -144,15 +139,12 @@ imports:
   subpackages:
   - bcrypt
   - blowfish
-  - curve25519
   - ed25519
   - ed25519/internal/edwards25519
-  - internal/chacha20
   - internal/subtle
   - nacl/secretbox
   - poly1305
   - salsa20/salsa
-  - ssh
   - ssh/terminal
 - name: golang.org/x/net
   version: 0ed95abb35c445290478a5348a7b38bb154135fd
@@ -190,12 +182,21 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 2382e3994d48b1d22acc2c86bcad0a2aff028e32
+  version: 1286b2016bb195031cab5657d3244bc996b3f2dd
   subpackages:
   - go/ast/astutil
+  - go/gcexportdata
+  - go/internal/cgo
+  - go/internal/gcimporter
+  - go/internal/packagesdriver
+  - go/packages
   - imports
+  - internal/fastwalk
+  - internal/gopathwalk
+  - internal/module
+  - internal/semver
 - name: google.golang.org/appengine
-  version: 12d5545dc1cfa6047a286d5e853841b6471f4c19
+  version: 54a98f90d1c46b7731eb8fb305d2a321c30ef610
   subpackages:
   - internal
   - internal/base
