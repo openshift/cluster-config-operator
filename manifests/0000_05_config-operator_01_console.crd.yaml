@@ -47,6 +47,7 @@ spec:
                     destroy the user''s token. The logoutRedirect provides the user
                     the option to perform single logout (SLO) through the identity
                     provider to destroy their single sign-on session.'
+                  pattern: ^$|^((https):\/\/?)[^\s()<>]+(?:\([\w\d]+\)|([^[:punct:]\s]|\/?))$
                   type: string
               type: object
           type: object
