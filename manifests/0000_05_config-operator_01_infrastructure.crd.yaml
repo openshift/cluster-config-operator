@@ -32,6 +32,21 @@ spec:
           type: object
         spec:
           description: spec holds user settable values for configuration
+          properties:
+            cloudConfig:
+              description: cloudConfig is a reference to a ConfigMap containing the
+                cloud provider configuration file. This configuration file is used
+                to configure the Kubernetes cloud provider integration when using
+                the built-in cloud provider integration or the external cloud controller
+                manager. The namespace for this config map is openshift-config.
+              properties:
+                key:
+                  description: Key allows pointing to a specific key/value inside
+                    of the configmap.  This is useful for logical file references.
+                  type: string
+                name:
+                  type: string
+              type: object
           type: object
         status:
           description: status holds observed values from the cluster. They may not
