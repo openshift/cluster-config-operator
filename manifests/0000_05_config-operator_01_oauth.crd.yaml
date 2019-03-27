@@ -93,10 +93,6 @@ spec:
                         description: url is the remote URL to connect to
                         type: string
                     type: object
-                  challenge:
-                    description: challenge indicates whether to issue WWW-Authenticate
-                      challenges for this provider
-                    type: boolean
                   github:
                     description: github enables user authentication using GitHub credentials
                     properties:
@@ -373,10 +369,6 @@ spec:
                           search parameters to use. The syntax of the URL is: ldap://host:port/basedn?attribute?scope?filter'
                         type: string
                     type: object
-                  login:
-                    description: login indicates whether to use this identity provider
-                      for unauthenticated browsers to login against
-                    type: boolean
                   mappingMethod:
                     description: mappingMethod determines how identities from this
                       provider are mapped to users Defaults to "claim"
@@ -458,21 +450,11 @@ spec:
                         items:
                           type: string
                         type: array
-                      urls:
-                        description: urls to use to authenticate
-                        properties:
-                          authorize:
-                            description: authorize is the oauth authorization URL
-                            type: string
-                          token:
-                            description: token is the oauth token granting URL
-                            type: string
-                          userInfo:
-                            description: userInfo is the optional userinfo URL. If
-                              present, a granted access_token is used to request claims
-                              If empty, a granted id_token is parsed for claims
-                            type: string
-                        type: object
+                      issuer:
+                        description: issuer is the URL that the OpenID Provider asserts
+                          as its Issuer Identifier. It must use the https scheme with
+                          no query or fragment component.
+                        type: string
                     type: object
                   requestHeader:
                     description: requestHeader enables user authentication using request
