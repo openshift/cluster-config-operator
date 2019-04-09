@@ -10,6 +10,8 @@ spec:
     plural: clusterresourcequotas
     singular: clusterresourcequota
   scope: Cluster
+  subresources:
+    status: {}
   versions:
   - name: v1
     served: true
