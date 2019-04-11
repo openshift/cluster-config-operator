@@ -32,10 +32,10 @@ clean:
 .PHONY: clean
 
 update-codegen-crds:
-	go run ./vendor/github.com/openshift/library-go/cmd/crd-schema-gen/main.go --apis-dir vendor/github.com/openshift/api
+	go run ./vendor/github.com/openshift/library-go/cmd/crd-schema-gen/main.go --apis-dir vendor/github.com/openshift/api --domain openshift.io
 update-codegen: update-codegen-crds
 verify-codegen-crds:
-	go run ./vendor/github.com/openshift/library-go/cmd/crd-schema-gen/main.go --apis-dir vendor/github.com/openshift/api --verify-only
+	go run ./vendor/github.com/openshift/library-go/cmd/crd-schema-gen/main.go --apis-dir vendor/github.com/openshift/api --verify-only --domain openshift.io
 verify-codegen: verify-codegen-crds
 verify: verify-codegen
 
