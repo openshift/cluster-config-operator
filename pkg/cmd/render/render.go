@@ -3,9 +3,9 @@ package render
 import (
 	"io/ioutil"
 
-	"github.com/golang/glog"
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/klog"
 
 	configv1 "github.com/openshift/api/config/v1"
 	genericrender "github.com/openshift/library-go/pkg/operator/render"
@@ -31,13 +31,13 @@ func NewRenderCommand() *cobra.Command {
 		Short: "Render kubernetes API server bootstrap manifests, secrets and configMaps",
 		Run: func(cmd *cobra.Command, args []string) {
 			if err := renderOpts.Validate(); err != nil {
-				glog.Fatal(err)
+				klog.Fatal(err)
 			}
 			if err := renderOpts.Complete(); err != nil {
-				glog.Fatal(err)
+				klog.Fatal(err)
 			}
 			if err := renderOpts.Run(); err != nil {
-				glog.Fatal(err)
+				klog.Fatal(err)
 			}
 		},
 	}

@@ -62,15 +62,21 @@ spec:
               description: 'etcdDiscoveryDomain is the domain used to fetch the SRV
                 records for discovering etcd servers and clients. For more info: https://github.com/etcd-io/etcd/blob/329be66e8b3f9e2e6af83c123ff89297e49ebd15/Documentation/op-guide/clustering.md#dns-discovery'
               type: string
+            infrastructureName:
+              description: infrastructureName uniquely identifies a cluster with a
+                human friendly name. Once set it should not be changed. Must be of
+                max length 27 and must have only alphanumeric or hyphen characters.
+              type: string
             platform:
               description: platform is the underlying infrastructure provider for
                 the cluster. This value controls whether infrastructure automation
                 such as service load balancers, dynamic volume provisioning, machine
                 creation and deletion, and other integrations are enabled. If None,
                 no infrastructure automation is enabled. Allowed values are "AWS",
-                "Azure", "GCP", "Libvirt", "OpenStack", "VSphere", and "None". Individual
-                components may not support all platforms, and must handle unrecognized
-                platforms as None if they do not support that platform.
+                "Azure", "BareMetal", "GCP", "Libvirt", "OpenStack", "VSphere", and
+                "None". Individual components may not support all platforms, and must
+                handle unrecognized platforms as None if they do not support that
+                platform.
               type: string
           type: object
       required:
