@@ -10,5 +10,4 @@ RUN mkdir -p /usr/share/bootkube/manifests/bootstrap-manifests
 COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/manifests/* /usr/share/bootkube/manifests/manifests/
 COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/cluster-config-operator /usr/bin/
 COPY manifests /manifests
-COPY empty-resources /manifests
 LABEL io.openshift.release.operator true
