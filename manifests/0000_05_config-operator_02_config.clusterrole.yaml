@@ -1,0 +1,30 @@
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRole
+metadata:
+  labels:
+    rbac.authorization.k8s.io/aggregate-to-cluster-reader: "true"
+  name: system:openshift:cluster-config-operator:cluster-reader
+rules:
+- apiGroups:
+  - config.openshift.io
+  resources:
+  - apiservers
+  - authentications
+  - builds
+  - clusteroperators
+  - clusterversions
+  - consoles
+  - dnses
+  - featuregates
+  - images
+  - infrastructures
+  - ingresses
+  - networks
+  - oauths
+  - projects
+  - proxies
+  - schedulers
+  verbs:
+  - get
+  - list
+  - watch
