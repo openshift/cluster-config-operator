@@ -7,13 +7,11 @@ import (
 	"k8s.io/klog"
 
 	operatorv1 "github.com/openshift/api/operator/v1"
+	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	utilruntime "k8s.io/apimachinery/pkg/util/runtime"
 	"k8s.io/apimachinery/pkg/util/wait"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
-
-	"github.com/openshift/library-go/pkg/operator/certrotation/metrics"
-	"github.com/openshift/library-go/pkg/operator/v1helpers"
 )
 
 const (
@@ -45,12 +43,8 @@ type CertRotationController struct {
 	TargetRotation   TargetRotation
 	OperatorClient   v1helpers.StaticPodOperatorClient
 
-	cachesSynced []cache.InformerSynced
-
-	registerMetrics bool
-
-	// queue only ever has one item, but it has nice error handling backoff/retry semantics
-	queue workqueue.RateLimitingInterface
+	cachesToSync []cache.InformerSynced
+	queue        workqueue.RateLimitingInterface
 }
 
 func NewCertRotationController(
@@ -59,9 +53,8 @@ func NewCertRotationController(
 	caBundleRotation CABundleRotation,
 	targetRotation TargetRotation,
 	operatorClient v1helpers.StaticPodOperatorClient,
-	registerMetrics bool,
 ) (*CertRotationController, error) {
-	ret := &CertRotationController{
+	c := &CertRotationController{
 		name: name,
 
 		SigningRotation:  signingRotation,
@@ -69,29 +62,25 @@ func NewCertRotationController(
 		TargetRotation:   targetRotation,
 		OperatorClient:   operatorClient,
 
-		cachesSynced: []cache.InformerSynced{
-			signingRotation.Informer.Informer().HasSynced,
-			caBundleRotation.Informer.Informer().HasSynced,
-			targetRotation.Informer.Informer().HasSynced,
-		},
-
-		registerMetrics: registerMetrics,
-
 		queue: workqueue.NewNamedRateLimitingQueue(workqueue.DefaultControllerRateLimiter(), name),
 	}
 
-	signingRotation.Informer.Informer().AddEventHandler(ret.eventHandler())
-	caBundleRotation.Informer.Informer().AddEventHandler(ret.eventHandler())
-	targetRotation.Informer.Informer().AddEventHandler(ret.eventHandler())
+	signingRotation.Informer.Informer().AddEventHandler(c.eventHandler())
+	caBundleRotation.Informer.Informer().AddEventHandler(c.eventHandler())
+	targetRotation.Informer.Informer().AddEventHandler(c.eventHandler())
 
-	return ret, nil
+	c.cachesToSync = append(c.cachesToSync, signingRotation.Informer.Informer().HasSynced)
+	c.cachesToSync = append(c.cachesToSync, caBundleRotation.Informer.Informer().HasSynced)
+	c.cachesToSync = append(c.cachesToSync, targetRotation.Informer.Informer().HasSynced)
+
+	return c, nil
 }
 
 func (c CertRotationController) sync() error {
 	syncErr := c.syncWorker()
 
 	condition := operatorv1.OperatorCondition{
-		Type:   "CertRotation_" + c.name + "_Failing",
+		Type:   "CertRotation_" + c.name + "_Degraded",
 		Status: operatorv1.ConditionFalse,
 	}
 	if syncErr != nil {
@@ -130,15 +119,9 @@ func (c *CertRotationController) Run(workers int, stopCh <-chan struct{}) {
 
 	klog.Infof("Starting CertRotationController - %q", c.name)
 	defer klog.Infof("Shutting down CertRotationController - %q", c.name)
-
-	if !cache.WaitForCacheSync(stopCh, c.cachesSynced...) {
+	if !cache.WaitForCacheSync(stopCh, c.cachesToSync...) {
 		utilruntime.HandleError(fmt.Errorf("caches did not sync"))
 		return
-	}
-
-	// register prometheus metrics for rotated certificates
-	if c.registerMetrics {
-		metrics.Register(c.CABundleRotation.Informer.Lister(), c.SigningRotation.Informer.Lister())
 	}
 
 	// doesn't matter what workers say, only start one.
