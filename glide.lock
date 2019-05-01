@@ -1,5 +1,5 @@
 hash: 17261839e40ff288eee2912959d1984b2ef3394dbfc54f40811f3be90b462a99
-updated: 2019-04-29T13:12:15.351211433-04:00
+updated: 2019-05-01T15:27:24.85900854-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -78,12 +78,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: 77b8897ec79a562e85920134fc65b63300c4d27a
+  version: 168fd4e3c55217ad0042c4ee1ec79e9ce40d5c21
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: d30d2ce056122ec5b5bc0a35056c220103ef7026
+  version: ec70bff287ffcf5b021c0c35a2dd943b14ac0b12
   subpackages:
   - cmd/crd-schema-gen/generator
   - pkg/assets
@@ -183,10 +183,18 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 2382e3994d48b1d22acc2c86bcad0a2aff028e32
+  version: 23463209683dad3f2b9cc7f7c2663e1847c59017
   subpackages:
   - go/ast/astutil
+  - go/gcexportdata
+  - go/internal/gcimporter
+  - go/internal/packagesdriver
+  - go/packages
   - imports
+  - internal/fastwalk
+  - internal/gopathwalk
+  - internal/module
+  - internal/semver
 - name: google.golang.org/appengine
   version: 54a98f90d1c46b7731eb8fb305d2a321c30ef610
   subpackages:
@@ -369,7 +377,7 @@ imports:
   - pkg/util
   - pkg/util/proto
 - name: sigs.k8s.io/controller-tools
-  version: 61258e1c31f7a84247fd608c0bda7274a50c2d67
+  version: 72ae52c08b9dd626cfb64ebef0fbf40ce667939b
   repo: https://github.com/openshift/kubernetes-sigs-controller-tools
   subpackages:
   - pkg/crd/generator
