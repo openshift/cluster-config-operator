@@ -9,8 +9,6 @@ spec:
     listKind: SecurityContextConstraintsList
     plural: securitycontextconstraints
     singular: securitycontextconstraints
-  subresources:
-    status: {}
   scope: Cluster
   versions:
   - name: v1

@@ -9,8 +9,6 @@ spec:
     listKind: RoleBindingRestrictionList
     plural: rolebindingrestrictions
     singular: rolebindingrestriction
-  subresources:
-    status: {}
   scope: Namespaced
   versions:
   - name: v1
