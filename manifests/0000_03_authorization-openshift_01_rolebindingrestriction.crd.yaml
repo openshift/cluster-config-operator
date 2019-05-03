@@ -11,7 +11,7 @@ spec:
     singular: rolebindingrestriction
   subresources:
     status: {}
-  scope: Cluster
+  scope: Namespaced
   versions:
   - name: v1
     served: true
@@ -45,12 +45,14 @@ spec:
                     whitelisted groups, the user is allowed to be bound to a role.
                   items:
                     type: string
+                  nullable: true
                   type: array
                 labels:
                   description: Selectors specifies a list of label selectors over
                     group labels.
                   items:
                     type: object
+                  nullable: true
                   type: array
               type: object
             serviceaccountrestriction:
@@ -89,12 +91,14 @@ spec:
                   description: Groups specifies a list of literal group names.
                   items:
                     type: string
+                  nullable: true
                   type: array
                 labels:
                   description: Selectors specifies a list of label selectors over
                     user labels.
                   items:
                     type: object
+                  nullable: true
                   type: array
                 users:
                   description: Users specifies a list of literal user names.
