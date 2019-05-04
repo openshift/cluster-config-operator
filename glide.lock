@@ -1,5 +1,5 @@
 hash: 17261839e40ff288eee2912959d1984b2ef3394dbfc54f40811f3be90b462a99
-updated: 2019-05-01T15:27:24.85900854-04:00
+updated: 2019-05-03T11:51:12.39050496-04:00
 imports:
 - name: github.com/Azure/go-ansiterm
   version: d6e3b3328b783f23731bc4d058875b0371ff8109
@@ -78,12 +78,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: 168fd4e3c55217ad0042c4ee1ec79e9ce40d5c21
+  version: e8b4038cdb379e8633cb09de2e4119f059890c1e
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: ec70bff287ffcf5b021c0c35a2dd943b14ac0b12
+  version: 30efb8b70b661872bd0fd9de4ae37f61815bf161
   subpackages:
   - cmd/crd-schema-gen/generator
   - pkg/assets
@@ -183,7 +183,7 @@ imports:
   subpackages:
   - rate
 - name: golang.org/x/tools
-  version: 23463209683dad3f2b9cc7f7c2663e1847c59017
+  version: 5cec639030af3a6ada2732d9bfa1d3731ed55106
   subpackages:
   - go/ast/astutil
   - go/gcexportdata
