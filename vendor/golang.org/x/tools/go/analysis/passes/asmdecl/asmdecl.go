@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package asmdecl defines an Analyzer that reports mismatches between
-// assembly files and Go declarations.
 package asmdecl
 
 import (
@@ -13,7 +11,6 @@ import (
 	"go/build"
 	"go/token"
 	"go/types"
-	"log"
 	"regexp"
 	"strconv"
 	"strings"
@@ -110,14 +107,7 @@ func init() {
 	for _, arch := range arches {
 		arch.sizes = types.SizesFor("gc", arch.name)
 		if arch.sizes == nil {
-			// TODO(adonovan): fix: now that asmdecl is not in the standard
-			// library we cannot assume types.SizesFor is consistent with arches.
-			// For now, assume 64-bit norms and print a warning.
-			// But this warning should really be deferred until we attempt to use
-			// arch, which is very unlikely. Better would be
-			// to defer size computation until we have Pass.TypesSizes.
-			arch.sizes = types.SizesFor("gc", "amd64")
-			log.Printf("unknown architecture %s", arch.name)
+			panic("missing SizesFor for gc/" + arch.name)
 		}
 		arch.intSize = int(arch.sizes.Sizeof(types.Typ[types.Int]))
 		arch.ptrSize = int(arch.sizes.Sizeof(types.Typ[types.UnsafePointer]))
@@ -244,17 +234,16 @@ Files:
 						}
 					}
 					if arch == "" {
-						log.Printf("%s: cannot determine architecture for assembly file", fname)
+						badf("%s: cannot determine architecture for assembly file")
 						continue Files
 					}
 				}
 				fnName = m[2]
-				if pkgPath := strings.TrimSpace(m[1]); pkgPath != "" {
-					// The assembler uses Unicode division slash within
-					// identifiers to represent the directory separator.
-					pkgPath = strings.Replace(pkgPath, "∕", "/", -1)
-					if pkgPath != pass.Pkg.Path() {
-						log.Printf("%s:%d: [%s] cannot check cross-package assembly function: %s is in package %s", fname, lineno, arch, fnName, pkgPath)
+				if pkgName := strings.TrimSpace(m[1]); pkgName != "" {
+					pathParts := strings.Split(pkgName, "∕")
+					pkgName = pathParts[len(pathParts)-1]
+					if pkgName != pass.Pkg.Path() {
+						badf("[%s] cannot check cross-package assembly function: %s is in package %s", arch, fnName, pkgName)
 						fn = nil
 						fnName = ""
 						continue
@@ -491,7 +480,7 @@ func appendComponentsRecursive(arch *asmArch, t types.Type, cc []component, suff
 		offsets := arch.sizes.Offsetsof(fields)
 		elemoff := int(offsets[1])
 		for i := 0; i < int(tu.Len()); i++ {
-			cc = appendComponentsRecursive(arch, elem, cc, suffix+"_"+strconv.Itoa(i), off+i*elemoff)
+			cc = appendComponentsRecursive(arch, elem, cc, suffix+"_"+strconv.Itoa(i), i*elemoff)
 		}
 	}
 
@@ -508,20 +497,10 @@ func asmParseDecl(pass *analysis.Pass, decl *ast.FuncDecl) map[string]*asmFunc {
 
 	// addParams adds asmVars for each of the parameters in list.
 	// isret indicates whether the list are the arguments or the return values.
-	// TODO(adonovan): simplify by passing (*types.Signature).{Params,Results}
-	// instead of list.
 	addParams := func(list []*ast.Field, isret bool) {
 		argnum := 0
 		for _, fld := range list {
 			t := pass.TypesInfo.Types[fld.Type].Type
-
-			// Work around https://golang.org/issue/28277.
-			if t == nil {
-				if ell, ok := fld.Type.(*ast.Ellipsis); ok {
-					t = types.NewSlice(pass.TypesInfo.Types[ell.Elt].Type)
-				}
-			}
-
 			align := int(arch.sizes.Alignof(t))
 			size := int(arch.sizes.Sizeof(t))
 			offset += -offset & (align - 1)

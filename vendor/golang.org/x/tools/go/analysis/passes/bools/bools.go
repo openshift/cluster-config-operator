@@ -2,8 +2,6 @@
 // Use of this source code is governed by a BSD-style
 // license that can be found in the LICENSE file.
 
-// Package bools defines an Analyzer that detects common mistakes
-// involving boolean operators.
 package bools
 
 import (
@@ -45,7 +43,7 @@ func run(pass *analysis.Pass) (interface{}, error) {
 
 		// TODO(adonovan): this reports n(n-1)/2 errors for an
 		// expression e||...||e of depth n. Fix.
-		// See https://golang.org/issue/28086.
+		// See https://github.com/golang/go/issues/28086.
 		comm := op.commutativeSets(pass.TypesInfo, e)
 		for _, exprs := range comm {
 			op.checkRedundant(pass, exprs)
