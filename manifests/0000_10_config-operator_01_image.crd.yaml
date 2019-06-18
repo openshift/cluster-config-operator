@@ -100,7 +100,7 @@ spec:
                   type: array
                 insecureRegistries:
                   description: InsecureRegistries are registries which do not have
-                    a valid SSL certificate or only support HTTP connections.
+                    a valid TLS certificates or only support HTTP connections.
                   items:
                     type: string
                   type: array
