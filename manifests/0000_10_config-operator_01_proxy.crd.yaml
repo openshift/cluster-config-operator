@@ -1,0 +1,71 @@
+apiVersion: apiextensions.k8s.io/v1beta1
+kind: CustomResourceDefinition
+metadata:
+  name: proxies.config.openshift.io
+spec:
+  group: config.openshift.io
+  scope: Cluster
+  versions:
+  - name: v1
+    served: true
+    storage: true
+  names:
+    kind: Proxy
+    listKind: ProxyList
+    plural: proxies
+    singular: proxy
+  subresources:
+    status: {}
+  validation:
+    openAPIV3Schema:
+      properties:
+        apiVersion:
+          description: 'APIVersion defines the versioned schema of this representation
+            of an object. Servers should convert recognized schemas to the latest
+            internal value, and may reject unrecognized values. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#resources'
+          type: string
+        kind:
+          description: 'Kind is a string value representing the REST resource this
+            object represents. Servers may infer this from the endpoint the client
+            submits requests to. Cannot be updated. In CamelCase. More info: https://git.k8s.io/community/contributors/devel/api-conventions.md#types-kinds'
+          type: string
+        metadata:
+          type: object
+        spec:
+          description: Spec holds user-settable values for the proxy configuration
+          properties:
+            httpProxy:
+              description: httpProxy is the URL of the proxy for HTTP requests.  Empty
+                means unset and will not result in an env var.
+              type: string
+            httpsProxy:
+              description: httpsProxy is the URL of the proxy for HTTPS requests.  Empty
+                means unset and will not result in an env var.
+              type: string
+            noProxy:
+              description: noProxy is a comma-separated list of hostnames and/or CIDRs
+                for which the proxy should not be used. Each name is matched as either
+                a domain which contains the host name as a suffix, or the host name
+                itself. For instance, example.com would match example.com, example.com:80,
+                and www.example.com. Wildcard(*) characters are not accepted, except
+                a single * character which matches all hosts and effectively disables
+                the proxy. Empty means unset and will not result in an env var.
+              type: string
+          type: object
+        status:
+          description: status holds observed values from the cluster. They may not
+            be overridden.
+          properties:
+            httpProxy:
+              description: httpProxy is the URL of the proxy for HTTP requests.
+              type: string
+            httpsProxy:
+              description: httpsProxy is the URL of the proxy for HTTPS requests.
+              type: string
+            noProxy:
+              description: noProxy is a comma-separated list of hostnames and/or CIDRs
+                for which the proxy should not be used.
+              type: string
+          type: object
+      required:
+      - spec
