@@ -1,16 +1,16 @@
 hash: 36339e51b17ceebec74c7f4ee3bfdf12ed6cd27a3e4699289f5cc888df9482af
-updated: 2019-06-17T15:27:59.327065883-04:00
+updated: 2019-06-27T17:16:27.02812403-04:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
   subpackages:
   - quantile
 - name: github.com/davecgh/go-spew
-  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
+  version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
   - spew
 - name: github.com/evanphx/json-patch
-  version: 026c730a0dcc5d11f93f1cf1cc65b01247ea7b6f
+  version: 5858425f75500d40c52783dce87d085a483ce135
 - name: github.com/ghodss/yaml
   version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
 - name: github.com/gobuffalo/envy
@@ -59,12 +59,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: 37678ff76af25c454dce37f78973d47d6ec23125
+  version: de5ca909c7322bb8d06fa5a9e5604491b373da52
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: e617f832835dbbef6cdab6f18930d051f91947da
+  version: 16a370625b52c7958783b8f74de58317236da6b4
   subpackages:
   - cmd/crd-schema-gen/generator
   - pkg/assets
@@ -79,9 +79,10 @@ imports:
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
 - name: github.com/prometheus/client_golang
-  version: e7e903064f5e9eb5da98208bae10b475d4db0f8c
+  version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
   - prometheus
+  - prometheus/internal
 - name: github.com/prometheus/client_model
   version: fa8ad6fec33561be4280a8f0514318c79d7f6cb6
   subpackages:
@@ -150,7 +151,6 @@ imports:
   subpackages:
   - go/ast/astutil
   - imports
-  - internal/fastwalk
 - name: google.golang.org/appengine
   version: b2f4a3cf3c67576a2ee09e1fe62656a5086ce880
   subpackages:
@@ -164,7 +164,7 @@ imports:
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/yaml.v2
-  version: 51d6538a90f86fe93ac480b35f37b2be17fef232
+  version: 5420a8b6744d3b0345ab293f6fcba19c978f1183
 - name: k8s.io/api
   version: 40a48860b5abbba9aa891b02b32da429b08d96a0
   subpackages:
@@ -331,7 +331,7 @@ imports:
   - parser
   - types
 - name: k8s.io/klog
-  version: e15309493592bfe9c98ae656cf2ee299f710146b
+  version: 8e90cee79f823779174776412c13478955131846
 - name: k8s.io/kube-openapi
   version: b3a7cee44a305be0a69e1b9ac03018307287e1b0
   subpackages:
