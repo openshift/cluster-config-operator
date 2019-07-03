@@ -1,5 +1,5 @@
 hash: 36339e51b17ceebec74c7f4ee3bfdf12ed6cd27a3e4699289f5cc888df9482af
-updated: 2019-06-27T17:16:27.02812403-04:00
+updated: 2019-07-04T12:33:04.053718697+02:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -12,7 +12,7 @@ imports:
 - name: github.com/evanphx/json-patch
   version: 5858425f75500d40c52783dce87d085a483ce135
 - name: github.com/ghodss/yaml
-  version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
+  version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gobuffalo/envy
   version: 043cb4b8af871b49563291e32c66bb84378a60ac
 - name: github.com/gogo/protobuf
@@ -45,9 +45,11 @@ imports:
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/joho/godotenv
-  version: 5c0e6c6ab1a0a9ef0a8822cba3a05d62f7dad941
+  version: 6d367c18edf6ca7fd004efd6863e4c5728fa858e
 - name: github.com/json-iterator/go
   version: ab8a2e0c74be9d3be70b3184d9acc634935ded82
+- name: github.com/kr/fs
+  version: 2788f0dbd16903de03cb8186e5c7d97b69ad387b
 - name: github.com/markbates/inflect
   version: d582c680dc4d29c2279628ae00e743005bfcd4fe
 - name: github.com/matttproud/golang_protobuf_extensions
@@ -59,12 +61,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: de5ca909c7322bb8d06fa5a9e5604491b373da52
+  version: 06fefbf8a8cfda80b930ea27e8772eb95280310b
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: 16a370625b52c7958783b8f74de58317236da6b4
+  version: f8abdcd57c468b7f49a91caa77212c12bd05fa9f
   subpackages:
   - cmd/crd-schema-gen/generator
   - pkg/assets
@@ -78,6 +80,8 @@ imports:
   - pkg/operator/staticpod/installerpod
 - name: github.com/pkg/errors
   version: 645ef00459ed84a119197bfb8d8205042c6df63d
+- name: github.com/pkg/sftp
+  version: 4d0e916071f68db74f8a73926335f809396d6b42
 - name: github.com/prometheus/client_golang
   version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
@@ -104,9 +108,10 @@ imports:
   - module
   - semver
 - name: github.com/spf13/afero
-  version: 588a75ec4f32903aa5e39a2619ba6a4631e28424
+  version: b28a7effac979219c2a2ed6205a4d70e4b1bcd02
   subpackages:
   - mem
+  - sftp
 - name: github.com/spf13/cobra
   version: c439c4fa093711d42e1b01acb1235b52004753c1
 - name: github.com/spf13/pflag
@@ -114,6 +119,13 @@ imports:
 - name: golang.org/x/crypto
   version: de0752318171da717af4ce24d0a2e8626afaeb11
   subpackages:
+  - curve25519
+  - ed25519
+  - ed25519/internal/edwards25519
+  - internal/chacha20
+  - internal/subtle
+  - poly1305
+  - ssh
   - ssh/terminal
 - name: golang.org/x/net
   version: 65e2d4e15006aab9813ff8769e768bbf4bb667a0
@@ -151,8 +163,9 @@ imports:
   subpackages:
   - go/ast/astutil
   - imports
+  - internal/fastwalk
 - name: google.golang.org/appengine
-  version: b2f4a3cf3c67576a2ee09e1fe62656a5086ce880
+  version: 12d5545dc1cfa6047a286d5e853841b6471f4c19
   subpackages:
   - internal
   - internal/base
@@ -331,7 +344,7 @@ imports:
   - parser
   - types
 - name: k8s.io/klog
-  version: 8e90cee79f823779174776412c13478955131846
+  version: 8139d8cb77af419532b33dfa7dd09fbc5f1d344f
 - name: k8s.io/kube-openapi
   version: b3a7cee44a305be0a69e1b9ac03018307287e1b0
   subpackages:
