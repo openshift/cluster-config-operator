@@ -1,7 +1,8 @@
 package: github.com/openshift/cluster-config-operator
 import:
 - package: github.com/openshift/library-go
-  version: master
+  version: create_add_update
+  repo: https://github.com/abhinavdahiya/library-go
 - package: k8s.io/apiextensions-apiserver
   version: kubernetes-1.14.0
 - package: sigs.k8s.io/controller-tools
