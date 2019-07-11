@@ -4,8 +4,5 @@ import:
   version: master
 - package: k8s.io/apiextensions-apiserver
   version: kubernetes-1.14.0
-- package: sigs.k8s.io/controller-tools
-  repo: https://github.com/openshift/kubernetes-sigs-controller-tools
-  version: origin-4.1-kubernetes-1.13.4
 - package: k8s.io/component-base
   version: release-1.14
