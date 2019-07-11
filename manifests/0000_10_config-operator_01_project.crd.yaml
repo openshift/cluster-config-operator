@@ -14,6 +14,8 @@ spec:
     listKind: ProjectList
     plural: projects
     singular: project
+  subresources:
+    status: {}
   validation:
     openAPIV3Schema:
       properties:
