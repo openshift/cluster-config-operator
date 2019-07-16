@@ -89,6 +89,28 @@ spec:
                         resources created by the cluster.
                       type: string
                   type: object
+                azure:
+                  description: Azure contains settings specific to the Azure infrastructure
+                    provider.
+                  properties:
+                    resourceGroupName:
+                      description: resourceGroupName is the Resource Group for new
+                        Azure resources created for the cluster.
+                      type: string
+                  type: object
+                gcp:
+                  description: GCP contains settings specific to the Google Cloud
+                    Platform infrastructure provider.
+                  properties:
+                    projectID:
+                      description: resourceGroupName is the Project ID for new GCP
+                        resources created for the cluster.
+                      type: string
+                    region:
+                      description: region holds the region for new GCP resources created
+                        for the cluster.
+                      type: string
+                  type: object
                 type:
                   description: type is the underlying infrastructure provider for
                     the cluster. This value controls whether infrastructure automation
@@ -96,9 +118,9 @@ spec:
                     creation and deletion, and other integrations are enabled. If
                     None, no infrastructure automation is enabled. Allowed values
                     are "AWS", "Azure", "BareMetal", "GCP", "Libvirt", "OpenStack",
-                    "VSphere", and "None". Individual components may not support all
-                    platforms, and must handle unrecognized platforms as None if they
-                    do not support that platform.
+                    "VSphere", "oVirt", and "None". Individual components may not
+                    support all platforms, and must handle unrecognized platforms
+                    as None if they do not support that platform.
                   type: string
               type: object
           type: object
