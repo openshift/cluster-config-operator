@@ -21,40 +21,28 @@ import (
 	dto "github.com/prometheus/client_model/go"
 )
 
-func TestGoCollectorGoroutines(t *testing.T) {
+func TestGoCollector(t *testing.T) {
 	var (
-		c               = NewGoCollector()
-		metricCh        = make(chan Metric)
-		waitCh          = make(chan struct{})
-		endGoroutineCh  = make(chan struct{})
-		endCollectionCh = make(chan struct{})
-		old             = -1
+		c      = NewGoCollector()
+		ch     = make(chan Metric)
+		waitc  = make(chan struct{})
+		closec = make(chan struct{})
+		old    = -1
 	)
-	defer func() {
-		close(endGoroutineCh)
-		// Drain the collect channel to prevent goroutine leak.
-		for {
-			select {
-			case <-metricCh:
-			case <-endCollectionCh:
-				return
-			}
-		}
-	}()
+	defer close(closec)
 
 	go func() {
-		c.Collect(metricCh)
+		c.Collect(ch)
 		go func(c <-chan struct{}) {
 			<-c
-		}(endGoroutineCh)
-		<-waitCh
-		c.Collect(metricCh)
-		close(endCollectionCh)
+		}(closec)
+		<-waitc
+		c.Collect(ch)
 	}()
 
 	for {
 		select {
-		case m := <-metricCh:
+		case m := <-ch:
 			// m can be Gauge or Counter,
 			// currently just test the go_goroutines Gauge
 			// and ignore others.
@@ -69,7 +57,7 @@ func TestGoCollectorGoroutines(t *testing.T) {
 
 			if old == -1 {
 				old = int(pb.GetGauge().GetValue())
-				close(waitCh)
+				close(waitc)
 				continue
 			}
 
@@ -77,47 +65,43 @@ func TestGoCollectorGoroutines(t *testing.T) {
 				// TODO: This is flaky in highly concurrent situations.
 				t.Errorf("want 1 new goroutine, got %d", diff)
 			}
+
+			// GoCollector performs three sends per call.
+			// On line 27 we need to receive three more sends
+			// to shut down cleanly.
+			<-ch
+			<-ch
+			<-ch
+			return
 		case <-time.After(1 * time.Second):
 			t.Fatalf("expected collect timed out")
 		}
-		break
 	}
 }
 
-func TestGoCollectorGC(t *testing.T) {
+func TestGCCollector(t *testing.T) {
 	var (
-		c               = NewGoCollector()
-		metricCh        = make(chan Metric)
-		waitCh          = make(chan struct{})
-		endCollectionCh = make(chan struct{})
-		oldGC           uint64
-		oldPause        float64
+		c        = NewGoCollector()
+		ch       = make(chan Metric)
+		waitc    = make(chan struct{})
+		closec   = make(chan struct{})
+		oldGC    uint64
+		oldPause float64
 	)
+	defer close(closec)
 
 	go func() {
-		c.Collect(metricCh)
+		c.Collect(ch)
 		// force GC
 		runtime.GC()
-		<-waitCh
-		c.Collect(metricCh)
-		close(endCollectionCh)
-	}()
-
-	defer func() {
-		// Drain the collect channel to prevent goroutine leak.
-		for {
-			select {
-			case <-metricCh:
-			case <-endCollectionCh:
-				return
-			}
-		}
+		<-waitc
+		c.Collect(ch)
 	}()
 
 	first := true
 	for {
 		select {
-		case metric := <-metricCh:
+		case metric := <-ch:
 			pb := &dto.Metric{}
 			metric.Write(pb)
 			if pb.GetSummary() == nil {
@@ -135,111 +119,18 @@ func TestGoCollectorGC(t *testing.T) {
 				first = false
 				oldGC = *pb.GetSummary().SampleCount
 				oldPause = *pb.GetSummary().SampleSum
-				close(waitCh)
+				close(waitc)
 				continue
 			}
-			if diff := *pb.GetSummary().SampleCount - oldGC; diff < 1 {
-				t.Errorf("want at least 1 new garbage collection run, got %d", diff)
+			if diff := *pb.GetSummary().SampleCount - oldGC; diff != 1 {
+				t.Errorf("want 1 new garbage collection run, got %d", diff)
 			}
 			if diff := *pb.GetSummary().SampleSum - oldPause; diff <= 0 {
-				t.Errorf("want an increase in pause time, got a change of %f", diff)
+				t.Errorf("want moar pause, got %f", diff)
 			}
+			return
 		case <-time.After(1 * time.Second):
 			t.Fatalf("expected collect timed out")
 		}
-		break
 	}
-}
-
-func TestGoCollectorMemStats(t *testing.T) {
-	var (
-		c   = NewGoCollector().(*goCollector)
-		got uint64
-	)
-
-	checkCollect := func(want uint64) {
-		metricCh := make(chan Metric)
-		endCh := make(chan struct{})
-
-		go func() {
-			c.Collect(metricCh)
-			close(endCh)
-		}()
-	Collect:
-		for {
-			select {
-			case metric := <-metricCh:
-				if metric.Desc().fqName != "go_memstats_alloc_bytes" {
-					continue Collect
-				}
-				pb := &dto.Metric{}
-				metric.Write(pb)
-				got = uint64(pb.GetGauge().GetValue())
-			case <-endCh:
-				break Collect
-			}
-		}
-		if want != got {
-			t.Errorf("unexpected value of go_memstats_alloc_bytes, want %d, got %d", want, got)
-		}
-	}
-
-	// Speed up the timing to make the test faster.
-	c.msMaxWait = 5 * time.Millisecond
-	c.msMaxAge = 50 * time.Millisecond
-
-	// Scenario 1: msRead responds slowly, no previous memstats available,
-	// msRead is executed anyway.
-	c.msRead = func(ms *runtime.MemStats) {
-		time.Sleep(20 * time.Millisecond)
-		ms.Alloc = 1
-	}
-	checkCollect(1)
-	// Now msLast is set.
-	c.msMtx.Lock()
-	if want, got := uint64(1), c.msLast.Alloc; want != got {
-		t.Errorf("unexpected of msLast.Alloc, want %d, got %d", want, got)
-	}
-	c.msMtx.Unlock()
-
-	// Scenario 2: msRead responds fast, previous memstats available, new
-	// value collected.
-	c.msRead = func(ms *runtime.MemStats) {
-		ms.Alloc = 2
-	}
-	checkCollect(2)
-	// msLast is set, too.
-	c.msMtx.Lock()
-	if want, got := uint64(2), c.msLast.Alloc; want != got {
-		t.Errorf("unexpected of msLast.Alloc, want %d, got %d", want, got)
-	}
-	c.msMtx.Unlock()
-
-	// Scenario 3: msRead responds slowly, previous memstats available, old
-	// value collected.
-	c.msRead = func(ms *runtime.MemStats) {
-		time.Sleep(20 * time.Millisecond)
-		ms.Alloc = 3
-	}
-	checkCollect(2)
-	// After waiting, new value is still set in msLast.
-	time.Sleep(80 * time.Millisecond)
-	c.msMtx.Lock()
-	if want, got := uint64(3), c.msLast.Alloc; want != got {
-		t.Errorf("unexpected of msLast.Alloc, want %d, got %d", want, got)
-	}
-	c.msMtx.Unlock()
-
-	// Scenario 4: msRead responds slowly, previous memstats is too old, new
-	// value collected.
-	c.msRead = func(ms *runtime.MemStats) {
-		time.Sleep(20 * time.Millisecond)
-		ms.Alloc = 4
-	}
-	checkCollect(4)
-	c.msMtx.Lock()
-	if want, got := uint64(4), c.msLast.Alloc; want != got {
-		t.Errorf("unexpected of msLast.Alloc, want %d, got %d", want, got)
-	}
-	c.msMtx.Unlock()
 }

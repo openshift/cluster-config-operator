@@ -1,5 +1,5 @@
-hash: 28fb3fffc9901b431a900ae94f086d91868b0e4cd56969a24e65533d07268e7d
-updated: 2019-07-16T16:28:13.447744036-04:00
+hash: 92e611c02f6cb96839111d51bf0abd0afc64e055694de00f27b5000ea00d6211
+updated: 2019-07-16T16:57:54.211510926-04:00
 imports:
 - name: github.com/beorn7/perks
   version: 4b2b341e8d7715fae06375aa633dbb6e91b3fb46
@@ -68,7 +68,7 @@ imports:
   - pkg/operator/resource/retry
   - pkg/operator/staticpod/installerpod
 - name: github.com/prometheus/client_golang
-  version: ff1d4e21c12e4c0b190a166d96507786c8f989d6
+  version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
   - prometheus
   - prometheus/internal
