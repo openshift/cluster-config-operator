@@ -43,6 +43,7 @@ update-codegen-crds: crd-schema-gen
 	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/quota/v1
 	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/authorization/v1
 	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/security/v1
+	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/operator/v1alpha1
 .PHONY: update-codegen-crds
 update-codegen: update-codegen-crds
 .PHONY: update-codegen
@@ -53,6 +54,7 @@ verify-codegen-crds: crd-schema-gen
 	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/quota/v1 --verify-only
 	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/authorization/v1 --verify-only
 	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/security/v1 --verify-only
+	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/operator/v1alpha1 --verify-only
 .PHONY: verify-codegen-crds
 verify-codegen: verify-codegen-crds
 .PHONY: verify-codegen
