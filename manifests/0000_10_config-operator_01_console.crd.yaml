@@ -18,8 +18,9 @@ spec:
     storage: true
   validation:
     openAPIV3Schema:
-      description: Console holds cluster-wide information about Console.  The canonical
-        name is `cluster`.
+      description: Console holds cluster-wide configuration for the web console, including
+        the logout URL, and reports the public URL of the console. The canonical name
+        is `cluster`.
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation

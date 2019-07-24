@@ -445,6 +445,28 @@ spec:
                       items:
                         type: string
                       type: array
+                    trustedCA:
+                      description: "trustedCA is a reference to a ConfigMap containing
+                        a CA certificate bundle used for client egress HTTPS connections.
+                        The certificate bundle must be from the CA that signed the
+                        proxy's certificate and be signed for everything. trustedCA
+                        should only be consumed by a proxy validator. The validator
+                        is responsible for reading ConfigMapNameReference, validating
+                        the certificate and copying \"ca-bundle.crt\" from data to
+                        a ConfigMap in the namespace of an operator configured for
+                        proxy. The namespace for this ConfigMap is \"openshift-config-managed\".
+                        Here is an example ConfigMap (in yaml): \n apiVersion: v1
+                        kind: ConfigMap metadata:  name: proxy-ca  namespace: openshift-config-managed
+                        \ data:    ca-bundle.crt: |      -----BEGIN CERTIFICATE-----
+                        \     Custom CA certificate bundle.      -----END CERTIFICATE-----"
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            config map
+                          type: string
+                      required:
+                      - name
+                      type: object
                   type: object
                 env:
                   description: Env is a set of default environment variables that
@@ -575,6 +597,28 @@ spec:
                       items:
                         type: string
                       type: array
+                    trustedCA:
+                      description: "trustedCA is a reference to a ConfigMap containing
+                        a CA certificate bundle used for client egress HTTPS connections.
+                        The certificate bundle must be from the CA that signed the
+                        proxy's certificate and be signed for everything. trustedCA
+                        should only be consumed by a proxy validator. The validator
+                        is responsible for reading ConfigMapNameReference, validating
+                        the certificate and copying \"ca-bundle.crt\" from data to
+                        a ConfigMap in the namespace of an operator configured for
+                        proxy. The namespace for this ConfigMap is \"openshift-config-managed\".
+                        Here is an example ConfigMap (in yaml): \n apiVersion: v1
+                        kind: ConfigMap metadata:  name: proxy-ca  namespace: openshift-config-managed
+                        \ data:    ca-bundle.crt: |      -----BEGIN CERTIFICATE-----
+                        \     Custom CA certificate bundle.      -----END CERTIFICATE-----"
+                      properties:
+                        name:
+                          description: name is the metadata.name of the referenced
+                            config map
+                          type: string
+                      required:
+                      - name
+                      type: object
                   type: object
                 imageLabels:
                   description: ImageLabels is a list of docker labels that are applied
