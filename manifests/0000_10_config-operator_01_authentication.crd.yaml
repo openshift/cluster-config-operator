@@ -460,8 +460,6 @@ spec:
                 - kubeConfig
                 type: object
               type: array
-          required:
-          - type
           type: object
         status:
           description: status holds observed values from the cluster. They may not

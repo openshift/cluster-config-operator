@@ -412,9 +412,10 @@ spec:
                 may be created for `cluster-api.openshift.example.com`."
               type: string
             privateZone:
-              description: privateZone is the location where all the DNS records that
-                are only available internally to the cluster exist. If this field
-                is nil, no private records should be created.
+              description: "privateZone is the location where all the DNS records
+                that are only available internally to the cluster exist. \n If this
+                field is nil, no private records should be created. \n Once set, this
+                field cannot be changed."
               properties:
                 id:
                   description: "id is the identifier that can be used to find the
@@ -434,9 +435,10 @@ spec:
                   type: object
               type: object
             publicZone:
-              description: publicZone is the location where all the DNS records that
-                are publicly accessible to the internet exist. If this field is nil,
-                no public records should be created.
+              description: "publicZone is the location where all the DNS records that
+                are publicly accessible to the internet exist. \n If this field is
+                nil, no public records should be created. \n Once set, this field
+                cannot be changed."
               properties:
                 id:
                   description: "id is the identifier that can be used to find the
