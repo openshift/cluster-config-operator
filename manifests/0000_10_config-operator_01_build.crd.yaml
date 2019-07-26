@@ -414,8 +414,6 @@ spec:
                   description: name is the metadata.name of the referenced config
                     map
                   type: string
-              required:
-              - name
               type: object
             buildDefaults:
               description: BuildDefaults controls the default information for Builds
@@ -464,8 +462,6 @@ spec:
                           description: name is the metadata.name of the referenced
                             config map
                           type: string
-                      required:
-                      - name
                       type: object
                   type: object
                 env:
@@ -616,8 +612,6 @@ spec:
                           description: name is the metadata.name of the referenced
                             config map
                           type: string
-                      required:
-                      - name
                       type: object
                   type: object
                 imageLabels:
@@ -633,8 +627,6 @@ spec:
                       value:
                         description: Value defines the literal value of the label.
                         type: string
-                    required:
-                    - name
                     type: object
                   type: array
                 resources:
@@ -674,8 +666,6 @@ spec:
                       value:
                         description: Value defines the literal value of the label.
                         type: string
-                    required:
-                    - name
                     type: object
                   type: array
                 nodeSelector:

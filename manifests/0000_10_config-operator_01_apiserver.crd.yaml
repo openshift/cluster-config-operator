@@ -430,8 +430,6 @@ spec:
                   description: name is the metadata.name of the referenced config
                     map
                   type: string
-              required:
-              - name
               type: object
             servingCerts:
               description: servingCert is the TLS cert info for serving secure traffic.
@@ -469,11 +467,7 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
-                        required:
-                        - name
                         type: object
-                    required:
-                    - servingCertificate
                     type: object
                   type: array
               type: object
