@@ -414,6 +414,8 @@ spec:
                   description: name is the metadata.name of the referenced config
                     map
                   type: string
+              required:
+              - name
               type: object
             allowedRegistriesForImport:
               description: AllowedRegistriesForImport limits the container image registries
@@ -438,6 +440,8 @@ spec:
                       (https) or insecure (http) By default (if not specified) the
                       registry is assumed as secure.
                     type: boolean
+                required:
+                - domainName
                 type: object
               type: array
             externalRegistryHostnames:

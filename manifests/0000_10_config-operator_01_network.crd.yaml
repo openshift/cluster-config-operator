@@ -416,6 +416,9 @@ spec:
                     description: The size (prefix) of block to allocate to each node.
                     format: int32
                     type: integer
+                required:
+                - cidr
+                - hostPrefix
                 type: object
               type: array
             externalIP:
@@ -463,6 +466,10 @@ spec:
               items:
                 type: string
               type: array
+          required:
+          - clusterNetwork
+          - networkType
+          - serviceNetwork
           type: object
         status:
           description: status holds observed values from the cluster. They may not
@@ -481,6 +488,9 @@ spec:
                     description: The size (prefix) of block to allocate to each node.
                     format: int32
                     type: integer
+                required:
+                - cidr
+                - hostPrefix
                 type: object
               type: array
             clusterNetworkMTU:

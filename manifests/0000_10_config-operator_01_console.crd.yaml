@@ -431,6 +431,8 @@ spec:
               description: The URL for the console. This will be derived from the
                 host for the route that is created for the console.
               type: string
+          required:
+          - consoleURL
           type: object
       required:
       - spec
