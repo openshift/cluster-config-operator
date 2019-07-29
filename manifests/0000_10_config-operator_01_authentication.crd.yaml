@@ -422,8 +422,6 @@ spec:
                   description: name is the metadata.name of the referenced config
                     map
                   type: string
-              required:
-              - name
               type: object
             type:
               description: type identifies the cluster managed, user facing authentication
@@ -453,11 +451,7 @@ spec:
                       name:
                         description: name is the metadata.name of the referenced secret
                         type: string
-                    required:
-                    - name
                     type: object
-                required:
-                - kubeConfig
                 type: object
               type: array
           type: object
@@ -483,11 +477,7 @@ spec:
                   description: name is the metadata.name of the referenced config
                     map
                   type: string
-              required:
-              - name
               type: object
-          required:
-          - integratedOAuthMetadata
           type: object
       required:
       - spec

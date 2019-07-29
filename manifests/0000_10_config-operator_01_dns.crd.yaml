@@ -457,8 +457,6 @@ spec:
                     using `Tags` as tag-filters, \n [1]: https://docs.aws.amazon.com/cli/latest/reference/resourcegroupstaggingapi/get-resources.html#options"
                   type: object
               type: object
-          required:
-          - baseDomain
           type: object
         status:
           description: status holds observed values from the cluster. They may not

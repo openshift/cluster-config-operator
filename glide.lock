@@ -1,16 +1,16 @@
-hash: 92e611c02f6cb96839111d51bf0abd0afc64e055694de00f27b5000ea00d6211
-updated: 2019-07-25T15:41:46.019514072-04:00
+hash: 8cbc07415073edaafbcb5ef6397f0734b9b15f7c72a8fdcfe870a21a7dfcf416
+updated: 2019-07-26T14:50:13.516407809-04:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
   subpackages:
   - quantile
 - name: github.com/davecgh/go-spew
-  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
+  version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
   - spew
 - name: github.com/ghodss/yaml
-  version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
+  version: c7ce16629ff4cd059ed96ed06419dd3856fd3577
 - name: github.com/gogo/protobuf
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
@@ -51,12 +51,13 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: b7d4eb0fa1e0c1e03f97c97c08d0ef1f025c0838
+  version: dfd248dde8875aa846eae88cfccf08e829314db1
+  repo: https://github.com/damemi/api.git
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: 523621232378681359817c52fe07670ce93b83b9
+  version: 3679c350479175dceb60cbdafe68f0d92280952f
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -77,7 +78,7 @@ imports:
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 13ba4ddd0caa9c28ca7b7bffe1dfa9ed8d5ef207
+  version: cfeb6f9992ffa54aaa4f2170ade4067ee478b250
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -297,7 +298,7 @@ imports:
   - cli/flag
   - logs
 - name: k8s.io/klog
-  version: 6a023d6d0e0954feabd46dc2d3a6a2c3c991fe1a
+  version: 8e90cee79f823779174776412c13478955131846
 - name: k8s.io/kube-openapi
   version: b3a7cee44a305be0a69e1b9ac03018307287e1b0
   subpackages:

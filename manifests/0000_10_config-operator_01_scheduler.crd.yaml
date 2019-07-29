@@ -441,8 +441,6 @@ spec:
                   description: name is the metadata.name of the referenced config
                     map
                   type: string
-              required:
-              - name
               type: object
           type: object
         status:

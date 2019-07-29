@@ -410,8 +410,6 @@ spec:
                 when the route''s host name is empty.  The generated host name will
                 follow this pattern: "<route-name>.<route-namespace>.<domain>".'
               type: string
-          required:
-          - domain
           type: object
         status:
           description: status holds observed values from the cluster. They may not
