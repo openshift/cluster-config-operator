@@ -472,8 +472,6 @@ spec:
                         required:
                         - name
                         type: object
-                    required:
-                    - servingCertificate
                     type: object
                   type: array
               type: object

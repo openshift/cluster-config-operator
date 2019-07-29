@@ -456,8 +456,6 @@ spec:
                     required:
                     - name
                     type: object
-                required:
-                - kubeConfig
                 type: object
               type: array
           type: object
@@ -486,8 +484,6 @@ spec:
               required:
               - name
               type: object
-          required:
-          - integratedOAuthMetadata
           type: object
       required:
       - spec

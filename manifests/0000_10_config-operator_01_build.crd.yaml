@@ -633,8 +633,6 @@ spec:
                       value:
                         description: Value defines the literal value of the label.
                         type: string
-                    required:
-                    - name
                     type: object
                   type: array
                 resources:
@@ -674,8 +672,6 @@ spec:
                       value:
                         description: Value defines the literal value of the label.
                         type: string
-                    required:
-                    - name
                     type: object
                   type: array
                 nodeSelector:

@@ -415,8 +415,6 @@ spec:
                   type: string
                 name:
                   type: string
-              required:
-              - name
               type: object
           type: object
         status:
@@ -459,8 +457,6 @@ spec:
                       description: region holds the default AWS region for new AWS
                         resources created by the cluster.
                       type: string
-                  required:
-                  - region
                   type: object
                 azure:
                   description: Azure contains settings specific to the Azure infrastructure
@@ -470,8 +466,6 @@ spec:
                       description: resourceGroupName is the Resource Group for new
                         Azure resources created for the cluster.
                       type: string
-                  required:
-                  - resourceGroupName
                   type: object
                 baremetal:
                   description: BareMetal contains settings specific to the BareMetal
@@ -512,9 +506,6 @@ spec:
                       description: region holds the region for new GCP resources created
                         for the cluster.
                       type: string
-                  required:
-                  - projectID
-                  - region
                   type: object
                 openstack:
                   description: OpenStack contains settings specific to the OpenStack
@@ -558,14 +549,7 @@ spec:
                     support all platforms, and must handle unrecognized platforms
                     as None if they do not support that platform.
                   type: string
-              required:
-              - type
               type: object
-          required:
-          - apiServerInternalURI
-          - apiServerURL
-          - etcdDiscoveryDomain
-          - infrastructureName
           type: object
       required:
       - spec

@@ -474,8 +474,6 @@ spec:
                       url:
                         description: url is the remote URL to connect to
                         type: string
-                    required:
-                    - url
                     type: object
                   github:
                     description: github enables user authentication using GitHub credentials
@@ -534,9 +532,6 @@ spec:
                         items:
                           type: string
                         type: array
-                    required:
-                    - clientID
-                    - clientSecret
                     type: object
                   gitlab:
                     description: gitlab enables user authentication using GitLab credentials
@@ -579,10 +574,6 @@ spec:
                       url:
                         description: url is the oauth server base URL
                         type: string
-                    required:
-                    - clientID
-                    - clientSecret
-                    - url
                     type: object
                   google:
                     description: google enables user authentication using Google credentials
@@ -608,9 +599,6 @@ spec:
                         description: hostedDomain is the optional Google App domain
                           (e.g. "mycompany.com") to restrict logins to
                         type: string
-                    required:
-                    - clientID
-                    - clientSecret
                     type: object
                   htpasswd:
                     description: htpasswd enables user authentication using an HTPasswd
@@ -632,8 +620,6 @@ spec:
                         required:
                         - name
                         type: object
-                    required:
-                    - fileData
                     type: object
                   keystone:
                     description: keystone enables user authentication using keystone
@@ -697,9 +683,6 @@ spec:
                       url:
                         description: url is the remote URL to connect to
                         type: string
-                    required:
-                    - domainName
-                    - url
                     type: object
                   ldap:
                     description: ldap enables user authentication using LDAP credentials
@@ -738,8 +721,6 @@ spec:
                             items:
                               type: string
                             type: array
-                        required:
-                        - id
                         type: object
                       bindDN:
                         description: bindDN is an optional DN to bind with during
@@ -791,10 +772,6 @@ spec:
                         description: 'url is an RFC 2255 URL which specifies the LDAP
                           search parameters to use. The syntax of the URL is: ldap://host:port/basedn?attribute?scope?filter'
                         type: string
-                    required:
-                    - attributes
-                    - insecure
-                    - url
                     type: object
                   mappingMethod:
                     description: mappingMethod determines how identities from this
@@ -888,11 +865,6 @@ spec:
                           as its Issuer Identifier. It must use the https scheme with
                           no query or fragment component.
                         type: string
-                    required:
-                    - claims
-                    - clientID
-                    - clientSecret
-                    - issuer
                     type: object
                   requestHeader:
                     description: requestHeader enables user authentication using request
@@ -966,22 +938,11 @@ spec:
                         items:
                           type: string
                         type: array
-                    required:
-                    - ca
-                    - challengeURL
-                    - emailHeaders
-                    - headers
-                    - loginURL
-                    - nameHeaders
-                    - preferredUsernameHeaders
                     type: object
                   type:
                     description: type identifies the identity provider type for this
                       entry.
                     type: string
-                required:
-                - name
-                - type
                 type: object
               type: array
             templates:
@@ -1057,17 +1018,12 @@ spec:
                     access tokens
                   format: int32
                   type: integer
-              required:
-              - accessTokenMaxAgeSeconds
               type: object
-          required:
-          - tokenConfig
           type: object
         status:
           description: OAuthStatus shows current known state of OAuth server in the
             cluster
           type: object
       required:
-      - metadata
       - spec
       type: object
