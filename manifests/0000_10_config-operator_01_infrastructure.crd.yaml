@@ -52,11 +52,16 @@ spec:
           description: status holds observed values from the cluster. They may not
             be overridden.
           properties:
+            apiServerInternalURI:
+              description: apiServerInternalURL is a valid URI with scheme(http/https),
+                address and port.  apiServerInternalURL can be used by components
+                like kubelets, to contact the Kubernetes API server using the infrastructure
+                provider rather than Kubernetes networking.
+              type: string
             apiServerURL:
-              description: apiServerURL is a valid URL with scheme(http/https), address
-                and port. apiServerURL can be used by components like kubelet on machines,
-                to contact the `apisever` using the infrastructure provider rather
-                than the kubernetes networking.
+              description: apiServerURL is a valid URI with scheme(http/https), address
+                and port.  apiServerURL can be used by components like the web console
+                to tell users where to find the Kubernetes API.
               type: string
             etcdDiscoveryDomain:
               description: 'etcdDiscoveryDomain is the domain used to fetch the SRV
@@ -68,16 +73,34 @@ spec:
                 max length 27 and must have only alphanumeric or hyphen characters.
               type: string
             platform:
-              description: platform is the underlying infrastructure provider for
-                the cluster. This value controls whether infrastructure automation
-                such as service load balancers, dynamic volume provisioning, machine
-                creation and deletion, and other integrations are enabled. If None,
-                no infrastructure automation is enabled. Allowed values are "AWS",
-                "Azure", "BareMetal", "GCP", "Libvirt", "OpenStack", "VSphere", and
-                "None". Individual components may not support all platforms, and must
-                handle unrecognized platforms as None if they do not support that
-                platform.
+              description: 'platform is the underlying infrastructure provider for
+                the cluster.  Deprecated: Use platformStatus.type instead.'
               type: string
+            platformStatus:
+              description: platformStatus holds status information specific to the
+                underlying infrastructure provider.
+              properties:
+                aws:
+                  description: AWS contains settings specific to the Amazon Web Services
+                    infrastructure provider.
+                  properties:
+                    region:
+                      description: region holds the default AWS region for new AWS
+                        resources created by the cluster.
+                      type: string
+                  type: object
+                type:
+                  description: type is the underlying infrastructure provider for
+                    the cluster. This value controls whether infrastructure automation
+                    such as service load balancers, dynamic volume provisioning, machine
+                    creation and deletion, and other integrations are enabled. If
+                    None, no infrastructure automation is enabled. Allowed values
+                    are "AWS", "Azure", "BareMetal", "GCP", "Libvirt", "OpenStack",
+                    "VSphere", and "None". Individual components may not support all
+                    platforms, and must handle unrecognized platforms as None if they
+                    do not support that platform.
+                  type: string
+              type: object
           type: object
       required:
       - spec
