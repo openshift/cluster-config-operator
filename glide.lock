@@ -1,5 +1,5 @@
 hash: 92e611c02f6cb96839111d51bf0abd0afc64e055694de00f27b5000ea00d6211
-updated: 2019-07-25T15:41:46.019514072-04:00
+updated: 2019-07-29T14:29:28.540536762-04:00
 imports:
 - name: github.com/beorn7/perks
   version: 3ac7bf7a47d159a033b107610db8a1b6575507a4
@@ -51,12 +51,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: b7d4eb0fa1e0c1e03f97c97c08d0ef1f025c0838
+  version: fbd0b90af4842eaeff52bfa8e45424696178b5ac
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: 523621232378681359817c52fe07670ce93b83b9
+  version: 387489859705725fb06d2ccf8b7885bf357cae20
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -126,7 +126,7 @@ imports:
   subpackages:
   - rate
 - name: google.golang.org/appengine
-  version: b2f4a3cf3c67576a2ee09e1fe62656a5086ce880
+  version: 54a98f90d1c46b7731eb8fb305d2a321c30ef610
   subpackages:
   - internal
   - internal/base
@@ -297,7 +297,7 @@ imports:
   - cli/flag
   - logs
 - name: k8s.io/klog
-  version: 6a023d6d0e0954feabd46dc2d3a6a2c3c991fe1a
+  version: e531227889390a39d9533dde61f590fe9f4b0035
 - name: k8s.io/kube-openapi
   version: b3a7cee44a305be0a69e1b9ac03018307287e1b0
   subpackages:
