@@ -8,6 +8,3 @@ import:
   version: 505eaef017263e299324067d40ca2c48f6a2cf50
 - package: github.com/prometheus/procfs
   version: 65c1f6f8f0fc1e2185eb9863a3bc751496404259
-- package: github.com/openshift/api
-  version: config-optional
-  repo: https://github.com/damemi/api.git

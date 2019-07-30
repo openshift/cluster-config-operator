@@ -434,6 +434,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               config map
                             type: string
+                        required:
+                        - name
                         type: object
                       tlsClientCert:
                         description: tlsClientCert is an optional reference to a secret
@@ -449,6 +451,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       tlsClientKey:
                         description: tlsClientKey is an optional reference to a secret
@@ -464,6 +468,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       url:
                         description: url is the remote URL to connect to
@@ -488,6 +494,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               config map
                             type: string
+                        required:
+                        - name
                         type: object
                       clientID:
                         description: clientID is the oauth client ID
@@ -503,6 +511,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       hostname:
                         description: hostname is the optional domain (e.g. "mycompany.com")
@@ -541,6 +551,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               config map
                             type: string
+                        required:
+                        - name
                         type: object
                       clientID:
                         description: clientID is the oauth client ID
@@ -556,6 +568,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       url:
                         description: url is the oauth server base URL
@@ -578,6 +592,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       hostedDomain:
                         description: hostedDomain is the optional Google App domain
@@ -601,6 +617,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                     type: object
                   keystone:
@@ -622,6 +640,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               config map
                             type: string
+                        required:
+                        - name
                         type: object
                       domainName:
                         description: domainName is required for keystone v3
@@ -640,6 +660,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       tlsClientKey:
                         description: tlsClientKey is an optional reference to a secret
@@ -655,6 +677,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       url:
                         description: url is the remote URL to connect to
@@ -714,6 +738,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       ca:
                         description: ca is an optional reference to a config map by
@@ -730,6 +756,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               config map
                             type: string
+                        required:
+                        - name
                         type: object
                       insecure:
                         description: 'insecure, if true, indicates the connection
@@ -774,6 +802,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               config map
                             type: string
+                        required:
+                        - name
                         type: object
                       claims:
                         description: claims mappings
@@ -815,6 +845,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               secret
                             type: string
+                        required:
+                        - name
                         type: object
                       extraAuthorizeParameters:
                         additionalProperties:
@@ -854,6 +886,8 @@ spec:
                             description: name is the metadata.name of the referenced
                               config map
                             type: string
+                        required:
+                        - name
                         type: object
                       challengeURL:
                         description: challengeURL is a URL to redirect unauthenticated
@@ -926,6 +960,8 @@ spec:
                     name:
                       description: name is the metadata.name of the referenced secret
                       type: string
+                  required:
+                  - name
                   type: object
                 login:
                   description: login is the name of a secret that specifies a go template
@@ -939,6 +975,8 @@ spec:
                     name:
                       description: name is the metadata.name of the referenced secret
                       type: string
+                  required:
+                  - name
                   type: object
                 providerSelection:
                   description: providerSelection is the name of a secret that specifies
@@ -953,6 +991,8 @@ spec:
                     name:
                       description: name is the metadata.name of the referenced secret
                       type: string
+                  required:
+                  - name
                   type: object
               type: object
             tokenConfig:
