@@ -469,9 +469,6 @@ spec:
                     type: object
                   nullable: true
                   type: array
-              required:
-              - groups
-              - labels
               type: object
             serviceaccountrestriction:
               description: ServiceAccountRestriction matches against service-account
@@ -500,14 +497,8 @@ spec:
                           of the RoleBindingRestriction in which the ServiceAccountReference
                           is embedded is used.
                         type: string
-                    required:
-                    - name
-                    - namespace
                     type: object
                   type: array
-              required:
-              - namespaces
-              - serviceaccounts
               type: object
             userrestriction:
               description: UserRestriction matches against user subjects.
@@ -576,17 +567,6 @@ spec:
                   items:
                     type: string
                   type: array
-              required:
-              - groups
-              - labels
-              - users
               type: object
-          required:
-          - grouprestriction
-          - serviceaccountrestriction
-          - userrestriction
           type: object
-      required:
-      - metadata
-      - spec
       type: object
