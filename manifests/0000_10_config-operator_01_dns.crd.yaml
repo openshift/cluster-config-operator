@@ -18,9 +18,8 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: DNS holds cluster-wide information about DNS.  The canonical name
-        is `cluster` TODO this object is an example of a possible grouping and is
-        subject to change or removal
+      description: DNS holds cluster-wide information about DNS. The canonical name
+        is `cluster`
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
@@ -409,7 +408,8 @@ spec:
               description: "baseDomain is the base domain of the cluster. All managed
                 DNS records will be sub-domains of this base. \n For example, given
                 the base domain `openshift.example.com`, an API server DNS record
-                may be created for `cluster-api.openshift.example.com`."
+                may be created for `cluster-api.openshift.example.com`. \n Once set,
+                this field cannot be changed."
               type: string
             privateZone:
               description: "privateZone is the location where all the DNS records
