@@ -18,8 +18,9 @@ spec:
     status: {}
   validation:
     openAPIV3Schema:
-      description: Scheduler holds cluster-wide information about Scheduler.  The
-        canonical name is `cluster`
+      description: Scheduler holds cluster-wide config information to run the Kubernetes
+        Scheduler and influence its placement decisions. The canonical name for this
+        config is `cluster`.
       properties:
         apiVersion:
           description: 'APIVersion defines the versioned schema of this representation
