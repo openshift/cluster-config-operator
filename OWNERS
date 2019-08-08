@@ -1,8 +1,9 @@
 reviewers:
   - deads2k
-  - sttts
   - mfojtik
+  - sttts
   - soltysh
 approvers:
   - deads2k
+  - mfojtik
   - sttts
