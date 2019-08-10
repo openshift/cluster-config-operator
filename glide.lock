@@ -1,12 +1,12 @@
 hash: 92e611c02f6cb96839111d51bf0abd0afc64e055694de00f27b5000ea00d6211
-updated: 2019-08-08T09:33:21.415000409-04:00
+updated: 2019-08-13T16:22:53.796333197-04:00
 imports:
 - name: github.com/beorn7/perks
   version: 37c8de3658fcb183f997c4e13e8337516ab753e6
   subpackages:
   - quantile
 - name: github.com/davecgh/go-spew
-  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
+  version: 782f4967f2dc4564575ca782fe2d04090b5faca8
   subpackages:
   - spew
 - name: github.com/ghodss/yaml
@@ -51,12 +51,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: b76189cc788c46038952dba8fbccd76b3eba866f
+  version: b5570061b31fed3b06c24077c534b1a1bf7ecf8b
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: a5507e7eb29c0ec68b73bd355cf5d248586fd776
+  version: 1eb1131507bff6d494f05b23c8ecf850836d7328
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -73,7 +73,7 @@ imports:
   - prometheus
   - prometheus/internal
 - name: github.com/prometheus/client_model
-  version: fd36f4220a901265f90734c3183c5f0c91daa0b8
+  version: 14fe0d1b01d4d5fc031dd4bec1823bd3ebbe8016
   subpackages:
   - go
 - name: github.com/prometheus/common
@@ -297,7 +297,7 @@ imports:
   - cli/flag
   - logs
 - name: k8s.io/klog
-  version: 3ca30a56d8a775276f9cdae009ba326fdc05af7f
+  version: 8e90cee79f823779174776412c13478955131846
 - name: k8s.io/kube-openapi
   version: b3a7cee44a305be0a69e1b9ac03018307287e1b0
   subpackages:
