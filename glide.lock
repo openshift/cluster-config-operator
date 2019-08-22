@@ -1,16 +1,18 @@
 hash: 92e611c02f6cb96839111d51bf0abd0afc64e055694de00f27b5000ea00d6211
-updated: 2019-08-13T16:22:53.796333197-04:00
+updated: 2019-08-22T15:06:24.660311-04:00
 imports:
 - name: github.com/beorn7/perks
   version: 37c8de3658fcb183f997c4e13e8337516ab753e6
   subpackages:
   - quantile
 - name: github.com/davecgh/go-spew
-  version: 782f4967f2dc4564575ca782fe2d04090b5faca8
+  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
   subpackages:
   - spew
 - name: github.com/ghodss/yaml
   version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
+- name: github.com/go-logr/logr
+  version: d63354a31b29a1af26833a7648428060001b5049
 - name: github.com/gogo/protobuf
   version: 342cbe0a04158f6dcb03ca0079991a51a4248c02
   subpackages:
@@ -51,12 +53,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: b5570061b31fed3b06c24077c534b1a1bf7ecf8b
+  version: 58aab2885e38fd7f4fd57f2615f5f9fe38039e22
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: 1eb1131507bff6d494f05b23c8ecf850836d7328
+  version: 97bb8b699c927fbdb7a80d48865d89acc3980d94
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -95,7 +97,7 @@ imports:
   subpackages:
   - ssh/terminal
 - name: golang.org/x/net
-  version: 65e2d4e15006aab9813ff8769e768bbf4bb667a0
+  version: cdfb69ac37fc6fa907650654115ebebb3aae2087
   subpackages:
   - context
   - http/httpguts
@@ -292,12 +294,12 @@ imports:
   - util/keyutil
   - util/retry
 - name: k8s.io/component-base
-  version: f0322db00a103489b85cb3835886741a3911636b
+  version: f3799749b6b739bf4bb6ef1c79e63081bf109f15
   subpackages:
   - cli/flag
   - logs
 - name: k8s.io/klog
-  version: 8e90cee79f823779174776412c13478955131846
+  version: cd60aa438f9c750641d5feacd2999e58df8af28f
 - name: k8s.io/kube-openapi
   version: b3a7cee44a305be0a69e1b9ac03018307287e1b0
   subpackages:
