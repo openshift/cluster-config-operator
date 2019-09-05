@@ -31,32 +31,19 @@ clean:
 	$(RM) ./cluster-config-operator
 .PHONY: clean
 
-CRD_SCHEMA_GEN_VERSION := v1.0.0
+CRD_SCHEMA_GEN_APIS := $(shell echo ./vendor/github.com/openshift/api/{authorization/v1,config/v1,quota/v1,security/v1,operator/v1alpha1})
+CRD_SCHEMA_GEN_VERSION := v0.2.1
+
 crd-schema-gen:
-	git clone -b $(CRD_SCHEMA_GEN_VERSION) --single-branch --depth 1 https://github.com/openshift/crd-schema-gen.git $(CRD_SCHEMA_GEN_GOPATH)/src/github.com/openshift/crd-schema-gen
-	GOPATH=$(CRD_SCHEMA_GEN_GOPATH) GOBIN=$(CRD_SCHEMA_GEN_GOPATH)/bin go install $(CRD_SCHEMA_GEN_GOPATH)/src/github.com/openshift/crd-schema-gen/cmd/crd-schema-gen
-.PHONY: crd-schema-gen
-
-update-codegen-crds: CRD_SCHEMA_GEN_GOPATH :=$(shell mktemp -d)
+	git clone -b $(CRD_SCHEMA_GEN_VERSION) --single-branch --depth 1 https://github.com/kubernetes-sigs/controller-tools.git $(CRD_SCHEMA_GEN_TEMP)
+	cd $(CRD_SCHEMA_GEN_TEMP); GO111MODULE=on go build ./cmd/controller-gen
+update-codegen-crds: CRD_SCHEMA_GEN_TEMP :=$(shell mktemp -d)
 update-codegen-crds: crd-schema-gen
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/config/v1
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/quota/v1
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/authorization/v1
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/security/v1
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/operator/v1alpha1
-.PHONY: update-codegen-crds
+	$(CRD_SCHEMA_GEN_TEMP)/controller-gen schemapatch:manifests=./manifests output:dir=./manifests paths="$(subst $() $(),;,$(CRD_SCHEMA_GEN_APIS))"
+verify-codegen-crds: update-codegen-crds
+	git diff -q manifests/ || { echo "Changed manifests: "; echo; git diff; false; }
+
 update-codegen: update-codegen-crds
-.PHONY: update-codegen
-
-verify-codegen-crds: CRD_SCHEMA_GEN_GOPATH :=$(shell mktemp -d)
-verify-codegen-crds: crd-schema-gen
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/config/v1 --verify-only
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/quota/v1 --verify-only
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/authorization/v1 --verify-only
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/security/v1 --verify-only
-	$(CRD_SCHEMA_GEN_GOPATH)/bin/crd-schema-gen --apis-dir vendor/github.com/openshift/api/operator/v1alpha1 --verify-only
-.PHONY: verify-codegen-crds
 verify-codegen: verify-codegen-crds
-.PHONY: verify-codegen
-
 verify: verify-codegen
+.PHONY: update-codegen-crds update-codegen verify-codegen-crds verify-codegen verify crd-schema-gen
