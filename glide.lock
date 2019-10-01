@@ -1,5 +1,5 @@
-hash: 86af3c5382e3a763ce837c02dd7b1118af90717a5bd51949f748de339a6da341
-updated: 2019-09-30T13:50:36.631828302-04:00
+hash: 9e0a3d4458afc2413e09446c7ec5943f2d66445a4f9c662e1e24fb6a9d1240e4
+updated: 2019-10-01T14:22:17.125248+02:00
 imports:
 - name: github.com/beorn7/perks
   version: 4b2b341e8d7715fae06375aa633dbb6e91b3fb46
@@ -51,7 +51,7 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: f63e5a750d92102c976926eb2d9c55d830d26977
+  version: d35a8e0fef2b28744b7034f0945a847f880f83ac
   subpackages:
   - config/v1
   - operator/v1
@@ -68,7 +68,7 @@ imports:
   - pkg/operator/resource/retry
   - pkg/operator/staticpod/installerpod
 - name: github.com/prometheus/client_golang
-  version: 2641b987480bca71fb39738eb8c8b0d577cb1d76
+  version: 505eaef017263e299324067d40ca2c48f6a2cf50
   subpackages:
   - prometheus
   - prometheus/internal
@@ -83,9 +83,9 @@ imports:
   - internal/bitbucket.org/ww/goautoneg
   - model
 - name: github.com/prometheus/procfs
-  version: 833678b5bb319f2d20a475cb165c6cc59c2cc77c
+  version: 65c1f6f8f0fc1e2185eb9863a3bc751496404259
   subpackages:
-  - internal/fs
+  - xfs
 - name: github.com/spf13/cobra
   version: 67fc4837d267bc9bfd6e47f77783fcc3dffc68de
 - name: github.com/spf13/pflag
@@ -298,7 +298,7 @@ imports:
   - cli/flag
   - logs
 - name: k8s.io/klog
-  version: 2ca9ad30301bf30a8a6e0fa2110db6b8df699a91
+  version: 3ca30a56d8a775276f9cdae009ba326fdc05af7f
 - name: k8s.io/kube-openapi
   version: 743ec37842bffe49dd4221d9026f30fb1d5adbc4
   subpackages:
