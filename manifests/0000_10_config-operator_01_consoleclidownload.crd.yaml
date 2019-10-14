@@ -71,17 +71,15 @@ spec:
                 details.
               type: array
               items:
-                description: Represents a standard link that could be generated in
-                  HTML
                 type: object
                 required:
                 - href
-                - text
                 properties:
                   href:
                     description: href is the absolute secure URL for the link (must
                       use https)
                     type: string
+                    pattern: ^https://([\w-]+.)+[\w-]+(/[\w- ./?%&=])?$
                   text:
                     description: text is the display text for the link
                     type: string

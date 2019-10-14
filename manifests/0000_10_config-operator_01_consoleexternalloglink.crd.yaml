@@ -69,10 +69,12 @@ spec:
                 UID of the resource which contains the logs               - e.g. `11111111-2222-3333-4444-555555555555`
                 - ${containerName} - name of the resource's container that contains
                 the logs - ${resourceNamespace} - namespace of the resource that contains
-                the logs - ${podLabels} - JSON representation of labels matching the
-                pod with the logs             - e.g. `{\"key1\":\"value1\",\"key2\":\"value2\"}`
+                the logs - ${resourceNamespaceUID} - namespace UID of the resource
+                that contains the logs - ${podLabels} - JSON representation of labels
+                matching the pod with the logs             - e.g. `{\"key1\":\"value1\",\"key2\":\"value2\"}`
                 \n e.g., https://example.com/logs?resourceName=${resourceName}&containerName=${containerName}&resourceNamespace=${resourceNamespace}&podLabels=${podLabels}"
               type: string
+              pattern: ^https://
             namespaceFilter:
               description: namespaceFilter is a regular expression used to restrict
                 a log link to a matching set of namespaces (e.g., `^openshift-`).

@@ -76,12 +76,14 @@ spec:
                   description: href is the absolute secure URL for the link (must
                     use https)
                   type: string
+                  pattern: ^https://([\w-]+.)+[\w-]+(/[\w- ./?%&=])?$
                 text:
                   description: text is the display text for the link
                   type: string
             location:
               description: location is the location of the notification in the console.
               type: string
+              pattern: ^(BannerTop|BannerBottom|BannerTopBottom)$
             text:
               description: text is the visible text of the notification.
               type: string
