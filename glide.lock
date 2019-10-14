@@ -1,16 +1,16 @@
 hash: 9e0a3d4458afc2413e09446c7ec5943f2d66445a4f9c662e1e24fb6a9d1240e4
-updated: 2019-10-01T14:22:17.125248+02:00
+updated: 2019-10-15T11:50:11.701651-04:00
 imports:
 - name: github.com/beorn7/perks
-  version: 4b2b341e8d7715fae06375aa633dbb6e91b3fb46
+  version: 3a771d992973f24aa725d07868b467d1ddfceafb
   subpackages:
   - quantile
 - name: github.com/davecgh/go-spew
-  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
+  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
   subpackages:
   - spew
 - name: github.com/ghodss/yaml
-  version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
+  version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gogo/protobuf
   version: 65acae22fc9d1fe290b33faa2bd64cdc20a463a0
   subpackages:
@@ -51,12 +51,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: d35a8e0fef2b28744b7034f0945a847f880f83ac
+  version: 538f3e8cc15a8fe444307fe0b30549ba05efccf2
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: c355e2019bb35b1ae2b060208fdad8b488c28838
+  version: e7604f697814119030413cce8e3638dcdef69c63
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -73,11 +73,11 @@ imports:
   - prometheus
   - prometheus/internal
 - name: github.com/prometheus/client_model
-  version: fd36f4220a901265f90734c3183c5f0c91daa0b8
+  version: 5c3871d89910bfb32f5fcab2aa4b9ec68e65a99f
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 17f5ca1748182ddf24fc33a5a7caaaf790a52fcc
+  version: 4724e9255275ce38f7179b2478abeae4e28c904f
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -293,7 +293,7 @@ imports:
   - util/keyutil
   - util/retry
 - name: k8s.io/component-base
-  version: 804254d5600483f35d94e1cab8b10d40310def3d
+  version: 547f6c5d70902c6683e93ad96f84adc6b943aedf
   subpackages:
   - cli/flag
   - logs
@@ -304,7 +304,7 @@ imports:
   subpackages:
   - pkg/util/proto
 - name: k8s.io/utils
-  version: 5008bf6f8cd62f4b52816cfa99163fedb053d0be
+  version: 581e00157fb1a0435d4fac54a52d1ca1e481d60e
   subpackages:
   - integer
   - pointer

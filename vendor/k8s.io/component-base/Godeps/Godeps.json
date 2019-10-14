@@ -51,16 +51,8 @@
 			"Rev": "5bd2802263f2"
 		},
 		{
-			"ImportPath": "github.com/alecthomas/template",
-			"Rev": "a0175ee3bccc"
-		},
-		{
-			"ImportPath": "github.com/alecthomas/units",
-			"Rev": "2efee857e7cf"
-		},
-		{
 			"ImportPath": "github.com/beorn7/perks",
-			"Rev": "v1.0.0"
+			"Rev": "3a771d992973"
 		},
 		{
 			"ImportPath": "github.com/blang/semver",
@@ -103,14 +95,6 @@
 			"Rev": "73d445a93680"
 		},
 		{
-			"ImportPath": "github.com/go-kit/kit",
-			"Rev": "v0.8.0"
-		},
-		{
-			"ImportPath": "github.com/go-logfmt/logfmt",
-			"Rev": "v0.3.0"
-		},
-		{
 			"ImportPath": "github.com/go-logr/logr",
 			"Rev": "v0.1.0"
 		},
@@ -129,10 +113,6 @@
 		{
 			"ImportPath": "github.com/go-openapi/swag",
 			"Rev": "1d0bd113de87"
-		},
-		{
-			"ImportPath": "github.com/go-stack/stack",
-			"Rev": "v1.8.0"
 		},
 		{
 			"ImportPath": "github.com/gogo/protobuf",
@@ -215,24 +195,12 @@
 			"Rev": "af01ea7f8024"
 		},
 		{
-			"ImportPath": "github.com/julienschmidt/httprouter",
-			"Rev": "v1.2.0"
-		},
-		{
 			"ImportPath": "github.com/kisielk/errcheck",
 			"Rev": "v1.2.0"
 		},
 		{
 			"ImportPath": "github.com/kisielk/gotool",
 			"Rev": "v1.0.0"
-		},
-		{
-			"ImportPath": "github.com/konsorten/go-windows-terminal-sequences",
-			"Rev": "v1.0.1"
-		},
-		{
-			"ImportPath": "github.com/kr/logfmt",
-			"Rev": "b84e30acd515"
 		},
 		{
 			"ImportPath": "github.com/kr/pretty",
@@ -267,10 +235,6 @@
 			"Rev": "a547fc61f48d"
 		},
 		{
-			"ImportPath": "github.com/mwitkow/go-conntrack",
-			"Rev": "cc309e4a2223"
-		},
-		{
 			"ImportPath": "github.com/mxk/go-flowrate",
 			"Rev": "cca7078d478f"
 		},
@@ -287,32 +251,24 @@
 			"Rev": "v2.0.1"
 		},
 		{
-			"ImportPath": "github.com/pkg/errors",
-			"Rev": "v0.8.0"
-		},
-		{
 			"ImportPath": "github.com/pmezard/go-difflib",
 			"Rev": "v1.0.0"
 		},
 		{
 			"ImportPath": "github.com/prometheus/client_golang",
-			"Rev": "v0.9.4"
+			"Rev": "v0.9.2"
 		},
 		{
 			"ImportPath": "github.com/prometheus/client_model",
-			"Rev": "fd36f4220a90"
+			"Rev": "5c3871d89910"
 		},
 		{
 			"ImportPath": "github.com/prometheus/common",
-			"Rev": "v0.4.1"
+			"Rev": "4724e9255275"
 		},
 		{
 			"ImportPath": "github.com/prometheus/procfs",
-			"Rev": "v0.0.2"
-		},
-		{
-			"ImportPath": "github.com/sirupsen/logrus",
-			"Rev": "v1.2.0"
+			"Rev": "1dc9a6cbc91a"
 		},
 		{
 			"ImportPath": "github.com/spf13/afero",
@@ -324,7 +280,7 @@
 		},
 		{
 			"ImportPath": "github.com/stretchr/objx",
-			"Rev": "v0.1.1"
+			"Rev": "v0.1.0"
 		},
 		{
 			"ImportPath": "github.com/stretchr/testify",
@@ -391,10 +347,6 @@
 			"Rev": "v1.19.0"
 		},
 		{
-			"ImportPath": "gopkg.in/alecthomas/kingpin.v2",
-			"Rev": "v2.2.6"
-		},
-		{
 			"ImportPath": "gopkg.in/check.v1",
 			"Rev": "788fd7840127"
 		},
@@ -420,15 +372,15 @@
 		},
 		{
 			"ImportPath": "k8s.io/api",
-			"Rev": "d58b53da08f5"
+			"Rev": "95b840bb6a1f"
 		},
 		{
 			"ImportPath": "k8s.io/apimachinery",
-			"Rev": "62598f38f24e"
+			"Rev": "27d36303b655"
 		},
 		{
 			"ImportPath": "k8s.io/client-go",
-			"Rev": "07054768d98d"
+			"Rev": "1fbdaa4c8d90"
 		},
 		{
 			"ImportPath": "k8s.io/gengo",
@@ -436,7 +388,7 @@
 		},
 		{
 			"ImportPath": "k8s.io/klog",
-			"Rev": "v1.0.0"
+			"Rev": "v0.4.0"
 		},
 		{
 			"ImportPath": "k8s.io/kube-openapi",
@@ -444,7 +396,7 @@
 		},
 		{
 			"ImportPath": "k8s.io/utils",
-			"Rev": "5008bf6f8cd6"
+			"Rev": "581e00157fb1"
 		},
 		{
 			"ImportPath": "sigs.k8s.io/structured-merge-diff",
