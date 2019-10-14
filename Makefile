@@ -36,6 +36,8 @@ clean:
 CRD_SCHEMA_GEN_APIS := $(shell echo ./vendor/github.com/openshift/api/{authorization/v1,config/v1,quota/v1,security/v1,operator/v1alpha1,console/v1})
 CRD_SCHEMA_GEN_VERSION :=v0.2.1
 
+$(call add-crd-gen,manifests,$(CRD_SCHEMA_GEN_APIS),./manifests,./manifests)
+
 update-codegen: update-codegen-crds
 .PHONY: update-codegen
 
