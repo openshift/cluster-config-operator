@@ -34,7 +34,7 @@ type KubeOpts struct {
 	Subsystem         string
 	Name              string
 	Help              string
-	ConstLabels       map[string]string
+	ConstLabels       prometheus.Labels
 	DeprecatedVersion string
 	deprecateOnce     sync.Once
 	annotateOnce      sync.Once
@@ -52,16 +52,6 @@ const (
 	// the deprecation policy outlined in by the control plane metrics stability KEP.
 	STABLE StabilityLevel = "STABLE"
 )
-
-// setDefaults takes 'ALPHA' in case of empty.
-func (sl *StabilityLevel) setDefaults() {
-	switch *sl {
-	case "":
-		*sl = ALPHA
-	default:
-		// no-op, since we have a StabilityLevel already
-	}
-}
 
 // CounterOpts is an alias for Opts. See there for doc comments.
 type CounterOpts KubeOpts
@@ -132,7 +122,7 @@ type HistogramOpts struct {
 	Subsystem         string
 	Name              string
 	Help              string
-	ConstLabels       map[string]string
+	ConstLabels       prometheus.Labels
 	Buckets           []float64
 	DeprecatedVersion string
 	deprecateOnce     sync.Once
@@ -178,7 +168,7 @@ type SummaryOpts struct {
 	Subsystem         string
 	Name              string
 	Help              string
-	ConstLabels       map[string]string
+	ConstLabels       prometheus.Labels
 	Objectives        map[float64]float64
 	MaxAge            time.Duration
 	AgeBuckets        uint32
