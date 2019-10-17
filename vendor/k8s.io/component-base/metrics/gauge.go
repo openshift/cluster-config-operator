@@ -34,8 +34,10 @@ type Gauge struct {
 // However, the object returned will not measure anything unless the collector is first
 // registered, since the metric is lazily instantiated.
 func NewGauge(opts *GaugeOpts) *Gauge {
-	opts.StabilityLevel.setDefaults()
-
+	// todo: handle defaulting better
+	if opts.StabilityLevel == "" {
+		opts.StabilityLevel = ALPHA
+	}
 	kc := &Gauge{
 		GaugeOpts:  opts,
 		lazyMetric: lazyMetric{},
@@ -84,8 +86,10 @@ type GaugeVec struct {
 // However, the object returned will not measure anything unless the collector is first
 // registered, since the metric is lazily instantiated.
 func NewGaugeVec(opts *GaugeOpts, labels []string) *GaugeVec {
-	opts.StabilityLevel.setDefaults()
-
+	// todo: handle defaulting better
+	if opts.StabilityLevel == "" {
+		opts.StabilityLevel = ALPHA
+	}
 	cv := &GaugeVec{
 		GaugeVec:       noopGaugeVec,
 		GaugeOpts:      opts,
@@ -138,7 +142,7 @@ func (v *GaugeVec) WithLabelValues(lvs ...string) GaugeMetric {
 // must match those of the VariableLabels in Desc). If that label map is
 // accessed for the first time, a new GaugeMetric is created IFF the gaugeVec has
 // been registered to a metrics registry.
-func (v *GaugeVec) With(labels map[string]string) GaugeMetric {
+func (v *GaugeVec) With(labels prometheus.Labels) GaugeMetric {
 	if !v.IsCreated() {
 		return noop // return no-op gauge
 	}
@@ -152,7 +156,7 @@ func (v *GaugeVec) With(labels map[string]string) GaugeMetric {
 // with those of the VariableLabels in Desc. However, such inconsistent Labels
 // can never match an actual metric, so the method will always return false in
 // that case.
-func (v *GaugeVec) Delete(labels map[string]string) bool {
+func (v *GaugeVec) Delete(labels prometheus.Labels) bool {
 	if !v.IsCreated() {
 		return false // since we haven't created the metric, we haven't deleted a metric with the passed in values
 	}
