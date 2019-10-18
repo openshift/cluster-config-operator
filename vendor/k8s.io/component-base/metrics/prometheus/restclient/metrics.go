@@ -20,6 +20,8 @@ import (
 	"net/url"
 	"time"
 
+	"github.com/prometheus/client_golang/prometheus"
+
 	"k8s.io/client-go/tools/metrics"
 	k8smetrics "k8s.io/component-base/metrics"
 	"k8s.io/component-base/metrics/legacyregistry"
@@ -32,7 +34,7 @@ var (
 		&k8smetrics.HistogramOpts{
 			Name:    "rest_client_request_duration_seconds",
 			Help:    "Request latency in seconds. Broken down by verb and URL.",
-			Buckets: k8smetrics.ExponentialBuckets(0.001, 2, 10),
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
 		},
 		[]string{"verb", "url"},
 	)
@@ -42,7 +44,7 @@ var (
 		&k8smetrics.HistogramOpts{
 			Name:    "rest_client_request_latency_seconds",
 			Help:    "(Deprecated) Request latency in seconds. Broken down by verb and URL.",
-			Buckets: k8smetrics.ExponentialBuckets(0.001, 2, 10),
+			Buckets: prometheus.ExponentialBuckets(0.001, 2, 10),
 		},
 		[]string{"verb", "url"},
 	)

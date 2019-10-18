@@ -6,7 +6,6 @@ include $(addprefix ./vendor/github.com/openshift/library-go/alpha-build-machine
 	golang.mk \
 	targets/openshift/deps.mk \
 	targets/openshift/images.mk \
-	targets/openshift/crd-schema-gen.mk \
 )
 
 IMAGE_REGISTRY?=registry.svc.ci.openshift.org
@@ -33,13 +32,3 @@ $(call add-bindata,v3.11.0,./bindata/v3.11.0/...,bindata,v311_00_assets,pkg/oper
 clean:
 	$(RM) ./cluster-config-operator
 .PHONY: clean
-
-# Set crd-schema-gen variables
-CRD_SCHEMA_GEN_APIS := $(shell echo ./vendor/github.com/openshift/api/{authorization/v1,config/v1,quota/v1,security/v1,operator/v1alpha1})
-CRD_SCHEMA_GEN_VERSION :=v0.2.1
-
-update-codegen: update-codegen-crds
-.PHONY: update-codegen
-
-verify-codegen: verify-codegen-crds
-.PHONY: verify-codegen
