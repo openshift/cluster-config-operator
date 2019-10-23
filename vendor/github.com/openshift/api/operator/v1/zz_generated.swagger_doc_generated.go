@@ -219,9 +219,8 @@ func (Etcd) SwaggerDoc() map[string]string {
 }
 
 var map_EtcdList = map[string]string{
-	"":         "KubeAPISOperatorConfigList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "KubeAPISOperatorConfigList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (EtcdList) SwaggerDoc() map[string]string {
@@ -333,9 +332,8 @@ func (KubeAPIServer) SwaggerDoc() map[string]string {
 }
 
 var map_KubeAPIServerList = map[string]string{
-	"":         "KubeAPIServerList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "KubeAPIServerList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (KubeAPIServerList) SwaggerDoc() map[string]string {
@@ -351,9 +349,8 @@ func (KubeControllerManager) SwaggerDoc() map[string]string {
 }
 
 var map_KubeControllerManagerList = map[string]string{
-	"":         "KubeControllerManagerList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "KubeControllerManagerList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (KubeControllerManagerList) SwaggerDoc() map[string]string {
@@ -369,9 +366,8 @@ func (KubeStorageVersionMigrator) SwaggerDoc() map[string]string {
 }
 
 var map_KubeStorageVersionMigratorList = map[string]string{
-	"":         "KubeStorageVersionMigratorList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "KubeStorageVersionMigratorList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (KubeStorageVersionMigratorList) SwaggerDoc() map[string]string {
@@ -409,6 +405,14 @@ var map_DefaultNetworkDefinition = map[string]string{
 
 func (DefaultNetworkDefinition) SwaggerDoc() map[string]string {
 	return map_DefaultNetworkDefinition
+}
+
+var map_HybridOverlayConfig = map[string]string{
+	"hybridClusterNetwork": "HybridClusterNetwork defines a network space given to nodes on an additional overlay network.",
+}
+
+func (HybridOverlayConfig) SwaggerDoc() map[string]string {
+	return map_HybridOverlayConfig
 }
 
 var map_IPAMConfig = map[string]string{
@@ -472,9 +476,10 @@ func (NetworkStatus) SwaggerDoc() map[string]string {
 }
 
 var map_OVNKubernetesConfig = map[string]string{
-	"":           "ovnKubernetesConfig contains the configuration parameters for networks using the ovn-kubernetes network project",
-	"mtu":        "mtu is the MTU to use for the tunnel interface. This must be 100 bytes smaller than the uplink mtu. Default is 1400",
-	"genevePort": "geneve port is the UDP port to be used by geneve encapulation. Default is 6081",
+	"":                    "ovnKubernetesConfig contains the configuration parameters for networks using the ovn-kubernetes network project",
+	"mtu":                 "mtu is the MTU to use for the tunnel interface. This must be 100 bytes smaller than the uplink mtu. Default is 1400",
+	"genevePort":          "geneve port is the UDP port to be used by geneve encapulation. Default is 6081",
+	"hybridOverlayConfig": "HybridOverlayConfig configures an additional overlay network for peers that are not using OVN.",
 }
 
 func (OVNKubernetesConfig) SwaggerDoc() map[string]string {
@@ -568,13 +573,20 @@ func (OpenShiftAPIServer) SwaggerDoc() map[string]string {
 }
 
 var map_OpenShiftAPIServerList = map[string]string{
-	"":         "OpenShiftAPIServerList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "OpenShiftAPIServerList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (OpenShiftAPIServerList) SwaggerDoc() map[string]string {
 	return map_OpenShiftAPIServerList
+}
+
+var map_OpenShiftAPIServerStatus = map[string]string{
+	"latestAvailableRevision": "latestAvailableRevision is the latest revision used as suffix of revisioned secrets like encryption-config. A new revision causes a new deployment of pods.",
+}
+
+func (OpenShiftAPIServerStatus) SwaggerDoc() map[string]string {
+	return map_OpenShiftAPIServerStatus
 }
 
 var map_OpenShiftControllerManager = map[string]string{
@@ -586,9 +598,8 @@ func (OpenShiftControllerManager) SwaggerDoc() map[string]string {
 }
 
 var map_OpenShiftControllerManagerList = map[string]string{
-	"":         "OpenShiftControllerManagerList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "OpenShiftControllerManagerList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (OpenShiftControllerManagerList) SwaggerDoc() map[string]string {
@@ -604,9 +615,8 @@ func (KubeScheduler) SwaggerDoc() map[string]string {
 }
 
 var map_KubeSchedulerList = map[string]string{
-	"":         "KubeSchedulerList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "KubeSchedulerList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (KubeSchedulerList) SwaggerDoc() map[string]string {
@@ -624,9 +634,8 @@ func (ServiceCA) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceCAList = map[string]string{
-	"":         "ServiceCAList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "ServiceCAList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (ServiceCAList) SwaggerDoc() map[string]string {
@@ -642,9 +651,8 @@ func (ServiceCatalogAPIServer) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceCatalogAPIServerList = map[string]string{
-	"":         "ServiceCatalogAPIServerList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "ServiceCatalogAPIServerList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (ServiceCatalogAPIServerList) SwaggerDoc() map[string]string {
@@ -660,9 +668,8 @@ func (ServiceCatalogControllerManager) SwaggerDoc() map[string]string {
 }
 
 var map_ServiceCatalogControllerManagerList = map[string]string{
-	"":         "ServiceCatalogControllerManagerList is a collection of items",
-	"metadata": "Standard object's metadata.",
-	"items":    "Items contains the items",
+	"":      "ServiceCatalogControllerManagerList is a collection of items",
+	"items": "Items contains the items",
 }
 
 func (ServiceCatalogControllerManagerList) SwaggerDoc() map[string]string {
