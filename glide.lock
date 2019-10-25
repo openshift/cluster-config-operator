@@ -1,16 +1,16 @@
 hash: 9e0a3d4458afc2413e09446c7ec5943f2d66445a4f9c662e1e24fb6a9d1240e4
-updated: 2019-10-23T11:00:22.829137-04:00
+updated: 2019-10-31T09:51:07.149985007+01:00
 imports:
 - name: github.com/beorn7/perks
-  version: 3a771d992973f24aa725d07868b467d1ddfceafb
+  version: 4b2b341e8d7715fae06375aa633dbb6e91b3fb46
   subpackages:
   - quantile
 - name: github.com/davecgh/go-spew
-  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
+  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
   subpackages:
   - spew
 - name: github.com/ghodss/yaml
-  version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
+  version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
 - name: github.com/gogo/protobuf
   version: 65acae22fc9d1fe290b33faa2bd64cdc20a463a0
   subpackages:
@@ -21,7 +21,7 @@ imports:
   subpackages:
   - lru
 - name: github.com/golang/protobuf
-  version: b5d812f8a3706043e23a9cd5babf2e5423744d30
+  version: 6c65a5562fc06764971b7c5d05c76c75e84bdbf7
   subpackages:
   - proto
   - ptypes
@@ -51,12 +51,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: 59d6ba013cb410cec0a7ee8c964232673cca099d
+  version: 11eee842dafd4698259c5de6b0746183ea6998f5
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: 10b6237962f7620771c89a6379dbdb3815b146c6
+  version: d6f3b526f0331fec5d792acc73258d6685492c38
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -73,11 +73,11 @@ imports:
   - prometheus
   - prometheus/internal
 - name: github.com/prometheus/client_model
-  version: 5c3871d89910bfb32f5fcab2aa4b9ec68e65a99f
+  version: fd36f4220a901265f90734c3183c5f0c91daa0b8
   subpackages:
   - go
 - name: github.com/prometheus/common
-  version: 4724e9255275ce38f7179b2478abeae4e28c904f
+  version: 17f5ca1748182ddf24fc33a5a7caaaf790a52fcc
   subpackages:
   - expfmt
   - internal/bitbucket.org/ww/goautoneg
@@ -136,7 +136,7 @@ imports:
 - name: gopkg.in/inf.v0
   version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
 - name: gopkg.in/yaml.v2
-  version: 51d6538a90f86fe93ac480b35f37b2be17fef232
+  version: f221b8435cfb71e54062f6c6e99e9ade30b124d5
 - name: k8s.io/api
   version: 95b840bb6a1f5f0462af804c8589396d294d4914
   subpackages:
@@ -293,7 +293,7 @@ imports:
   - util/keyutil
   - util/retry
 - name: k8s.io/component-base
-  version: 547f6c5d70902c6683e93ad96f84adc6b943aedf
+  version: 5e0e35147053b5b87e6d93e052060e1fa3f3e71a
   subpackages:
   - cli/flag
   - logs
@@ -304,7 +304,7 @@ imports:
   subpackages:
   - pkg/util/proto
 - name: k8s.io/utils
-  version: 581e00157fb1a0435d4fac54a52d1ca1e481d60e
+  version: 8d271d903fe4c290aa361acfb242cff7bcee96f1
   subpackages:
   - integer
   - pointer
