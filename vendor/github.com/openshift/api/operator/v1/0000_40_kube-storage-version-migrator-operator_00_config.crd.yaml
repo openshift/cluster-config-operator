@@ -1,24 +1,28 @@
 apiVersion: apiextensions.k8s.io/v1beta1
 kind: CustomResourceDefinition
 metadata:
-  name: servicecatalogcontrollermanagers.operator.openshift.io
+  creationTimestamp: null
+  name: kubestorageversionmigrators.operator.openshift.io
 spec:
+  group: operator.openshift.io
+  names:
+    kind: KubeStorageVersionMigrator
+    listKind: KubeStorageVersionMigratorList
+    plural: kubestorageversionmigrators
+    singular: kubestorageversionmigrator
   scope: Cluster
   preserveUnknownFields: false
-  group: operator.openshift.io
-  version: v1
-  names:
-    kind: ServiceCatalogControllerManager
-    plural: servicecatalogcontrollermanagers
-    singular: servicecatalogcontrollermanager
-    categories:
-    - coreoperators
   subresources:
     status: {}
-  validation:
-    openAPIV3Schema:
-      description: ServiceCatalogControllerManager provides information to configure
-        an operator to manage Service Catalog Controller Manager
+  version: v1
+  versions:
+  - name: v1
+    served: true
+    storage: true
+  "validation":
+    "openAPIV3Schema":
+      description: KubeStorageVersionMigrator provides information to configure an
+        operator to manage kube-storage-version-migrator.
       type: object
       required:
       - spec
@@ -133,3 +137,9 @@ spec:
             version:
               description: version is the level this availability applies to
               type: string
+status:
+  acceptedNames:
+    kind: ""
+    plural: ""
+  conditions: []
+  storedVersions: []
