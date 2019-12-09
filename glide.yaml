@@ -4,9 +4,9 @@ import:
   version: v0.4.0
 
 - package: github.com/openshift/api
-  version: master
+  version: release-4.3
 - package: github.com/openshift/library-go
-  version: master
+  version: release-4.3
 
 # pin packages where automatic resolution fails on Mac (due to Linux-only packages)
 - package: github.com/prometheus/client_golang
