@@ -5,5 +5,9 @@
 package dependencymagnet
 
 import (
+	_ "github.com/openshift/api/authorization/v1"
+	_ "github.com/openshift/api/operator/v1alpha1"
+	_ "github.com/openshift/api/quota/v1"
+	_ "github.com/openshift/api/security/v1"
 	_ "github.com/openshift/library-go/alpha-build-machinery"
 )
