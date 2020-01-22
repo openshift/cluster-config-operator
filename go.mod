@@ -3,44 +3,12 @@ module github.com/openshift/cluster-config-operator
 go 1.13
 
 require (
-	github.com/beorn7/perks v1.0.0
-	github.com/davecgh/go-spew v1.1.1
-	github.com/ghodss/yaml v0.0.0-20150909031657-73d445a93680
-	github.com/gogo/protobuf v1.2.2-0.20190723190241-65acae22fc9d
-	github.com/golang/groupcache v0.0.0-20160516000752-02826c3e7903
-	github.com/golang/protobuf v1.3.2
-	github.com/google/gofuzz v1.0.0
-	github.com/googleapis/gnostic v0.0.0-20170729233727-0c5108395e2d
-	github.com/imdario/mergo v0.3.5
-	github.com/inconshreveable/mousetrap v1.0.0
-	github.com/json-iterator/go v1.1.8
-	github.com/matttproud/golang_protobuf_extensions v1.0.1
-	github.com/modern-go/concurrent v0.0.0-20180306012644-bacd9c7ef1dd
-	github.com/modern-go/reflect2 v1.0.1
 	github.com/openshift/api v0.0.0-20200122114642-1108c9abdb99
 	github.com/openshift/library-go v0.0.0-20200122154921-7ed6868961c3
-	github.com/prometheus/client_golang v0.9.2
-	github.com/prometheus/client_model v0.0.0-20190129233127-fd36f4220a90
-	github.com/prometheus/common v0.4.1
-	github.com/prometheus/procfs v0.0.0-20170519190837-65c1f6f8f0fc
-	github.com/spf13/cobra v0.0.4
-	github.com/spf13/pflag v1.0.3
-	golang.org/x/crypto v0.0.0-20190820162420-60c769a6c586
-	golang.org/x/net v0.0.0-20191004110552-13f9640d40b9
-	golang.org/x/oauth2 v0.0.0-20190604053449-0f29369cfe45
-	golang.org/x/sys v0.0.0-20190813064441-fde4db37ae7a
-	golang.org/x/text v0.3.2
-	golang.org/x/time v0.0.0-20190308202827-9d24e82272b4
-	google.golang.org/appengine v1.5.0
-	gopkg.in/inf.v0 v0.9.1
-	gopkg.in/yaml.v2 v2.2.4
-	k8s.io/api v0.17.0
-	k8s.io/apiextensions-apiserver v0.17.0
+	github.com/prometheus/client_golang v1.1.0
+	github.com/spf13/cobra v0.0.5
+	github.com/spf13/pflag v1.0.5
 	k8s.io/apimachinery v0.17.3-beta.0
-	k8s.io/client-go v0.17.0
-	k8s.io/component-base v0.17.0
-	k8s.io/klog v0.4.0
-	k8s.io/kube-openapi v0.0.0-20191107075043-30be4d16710a
-	k8s.io/utils v0.0.0-20191114184206-e782cd3c129f
-	sigs.k8s.io/yaml v1.1.0
+	k8s.io/component-base v0.17.1
+	k8s.io/klog v1.0.0
 )
