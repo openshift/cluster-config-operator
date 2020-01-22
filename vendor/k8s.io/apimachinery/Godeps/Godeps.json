@@ -76,7 +76,7 @@
 		},
 		{
 			"ImportPath": "github.com/golang/protobuf",
-			"Rev": "v1.3.1"
+			"Rev": "v1.3.2"
 		},
 		{
 			"ImportPath": "github.com/google/go-cmp",
@@ -148,11 +148,11 @@
 		},
 		{
 			"ImportPath": "github.com/onsi/ginkgo",
-			"Rev": "v1.8.0"
+			"Rev": "v1.10.1"
 		},
 		{
 			"ImportPath": "github.com/onsi/gomega",
-			"Rev": "v1.5.0"
+			"Rev": "v1.7.0"
 		},
 		{
 			"ImportPath": "github.com/pmezard/go-difflib",
@@ -208,7 +208,7 @@
 		},
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
-			"Rev": "v2.2.2"
+			"Rev": "v2.2.4"
 		},
 		{
 			"ImportPath": "k8s.io/gengo",
@@ -216,7 +216,7 @@
 		},
 		{
 			"ImportPath": "k8s.io/klog",
-			"Rev": "v0.4.0"
+			"Rev": "v1.0.0"
 		},
 		{
 			"ImportPath": "k8s.io/kube-openapi",

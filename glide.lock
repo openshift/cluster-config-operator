@@ -1,5 +1,5 @@
-hash: 9e0a3d4458afc2413e09446c7ec5943f2d66445a4f9c662e1e24fb6a9d1240e4
-updated: 2019-10-31T09:51:07.149985007+01:00
+hash: 53cdd591f88a23376ee2cb9172275af2b53b9c1e65e1ff16b5f76315614aeba1
+updated: 2020-01-22T14:33:30.459748059-05:00
 imports:
 - name: github.com/beorn7/perks
   version: 4b2b341e8d7715fae06375aa633dbb6e91b3fb46
@@ -42,6 +42,8 @@ imports:
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/json-iterator/go
   version: 27518f6661eba504be5a7a9a9f6d9460d892ade3
+- name: github.com/jteeuwen/go-bindata
+  version: a0ff2567cfb70903282db057e799fd826784d41d
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -51,12 +53,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: 11eee842dafd4698259c5de6b0746183ea6998f5
+  version: 1108c9abdb99f4a64b30499812425da230acca94
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: d6f3b526f0331fec5d792acc73258d6685492c38
+  version: 7ed6868961c334c09dd023ed541e4d635ca93834
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -138,7 +140,7 @@ imports:
 - name: gopkg.in/yaml.v2
   version: f221b8435cfb71e54062f6c6e99e9ade30b124d5
 - name: k8s.io/api
-  version: 95b840bb6a1f5f0462af804c8589396d294d4914
+  version: 5524a3672fbb1d8e9528811576c859dbedffeed7
   subpackages:
   - admissionregistration/v1
   - admissionregistration/v1beta1
@@ -184,7 +186,7 @@ imports:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
 - name: k8s.io/apimachinery
-  version: 27d36303b6556f377b4f34e64705fa9024a12b0c
+  version: af6325b3a843fc0c4c448b1bd770ebab40e9acc4
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -226,7 +228,7 @@ imports:
   - third_party/forked/golang/json
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
-  version: 1fbdaa4c8d908275eee958429b1cafc2591a2c5d
+  version: 1a481fb1e32d196227ca218b3867a271192f9280
   subpackages:
   - discovery
   - kubernetes

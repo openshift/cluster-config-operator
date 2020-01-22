@@ -7,6 +7,8 @@ import:
   version: master
 - package: github.com/openshift/library-go
   version: master
+- package: github.com/jteeuwen/go-bindata
+  version: a0ff2567cfb70903282db057e799fd826784d41d
 
 # pin packages where automatic resolution fails on Mac (due to Linux-only packages)
 - package: github.com/prometheus/client_golang

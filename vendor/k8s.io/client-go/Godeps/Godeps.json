@@ -124,11 +124,11 @@
 		},
 		{
 			"ImportPath": "github.com/golang/protobuf",
-			"Rev": "v1.3.1"
+			"Rev": "v1.3.2"
 		},
 		{
 			"ImportPath": "github.com/google/btree",
-			"Rev": "4030bb1f1f0c"
+			"Rev": "v1.0.0"
 		},
 		{
 			"ImportPath": "github.com/google/go-cmp",
@@ -228,11 +228,11 @@
 		},
 		{
 			"ImportPath": "github.com/onsi/ginkgo",
-			"Rev": "v1.8.0"
+			"Rev": "v1.10.1"
 		},
 		{
 			"ImportPath": "github.com/onsi/gomega",
-			"Rev": "v1.5.0"
+			"Rev": "v1.7.0"
 		},
 		{
 			"ImportPath": "github.com/peterbourgon/diskv",
@@ -336,7 +336,7 @@
 		},
 		{
 			"ImportPath": "gopkg.in/yaml.v2",
-			"Rev": "v2.2.2"
+			"Rev": "v2.2.4"
 		},
 		{
 			"ImportPath": "honnef.co/go/tools",
@@ -344,11 +344,11 @@
 		},
 		{
 			"ImportPath": "k8s.io/api",
-			"Rev": "95b840bb6a1f"
+			"Rev": "5524a3672fbb"
 		},
 		{
 			"ImportPath": "k8s.io/apimachinery",
-			"Rev": "27d36303b655"
+			"Rev": "af6325b3a843"
 		},
 		{
 			"ImportPath": "k8s.io/gengo",
@@ -356,7 +356,7 @@
 		},
 		{
 			"ImportPath": "k8s.io/klog",
-			"Rev": "v0.4.0"
+			"Rev": "v1.0.0"
 		},
 		{
 			"ImportPath": "k8s.io/kube-openapi",
@@ -364,7 +364,7 @@
 		},
 		{
 			"ImportPath": "k8s.io/utils",
-			"Rev": "581e00157fb1"
+			"Rev": "8d271d903fe4"
 		},
 		{
 			"ImportPath": "sigs.k8s.io/structured-merge-diff",
