@@ -6,6 +6,7 @@ include $(addprefix ./vendor/github.com/openshift/library-go/alpha-build-machine
 	golang.mk \
 	targets/openshift/deps.mk \
 	targets/openshift/images.mk \
+	targets/openshift/bindata.mk \
 )
 
 IMAGE_REGISTRY?=registry.svc.ci.openshift.org
