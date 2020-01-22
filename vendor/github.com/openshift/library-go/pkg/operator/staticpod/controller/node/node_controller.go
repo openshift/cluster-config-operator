@@ -1,6 +1,7 @@
 package node
 
 import (
+	"context"
 	"fmt"
 	"strings"
 	"time"
@@ -110,7 +111,7 @@ func (c NodeController) sync() error {
 	for _, node := range nodes {
 		for _, con := range node.Status.Conditions {
 			if con.Type == coreapiv1.NodeReady && con.Status != coreapiv1.ConditionTrue {
-				notReadyNodes = append(notReadyNodes, node.Name)
+				notReadyNodes = append(notReadyNodes, fmt.Sprintf("node %q not ready since %s because %s (%s)", node.Name, con.LastTransitionTime, con.Reason, con.Message))
 			}
 		}
 	}
@@ -120,11 +121,11 @@ func (c NodeController) sync() error {
 	if len(notReadyNodes) > 0 {
 		newCondition.Status = operatorv1.ConditionTrue
 		newCondition.Reason = "MasterNodesReady"
-		newCondition.Message = fmt.Sprintf("The master node(s) %q not ready", strings.Join(notReadyNodes, ","))
+		newCondition.Message = fmt.Sprintf("The master nodes not ready: %s", strings.Join(notReadyNodes, ", "))
 	} else {
 		newCondition.Status = operatorv1.ConditionFalse
 		newCondition.Reason = "MasterNodesReady"
-		newCondition.Message = "All master node(s) are ready"
+		newCondition.Message = "All master nodes are ready"
 	}
 
 	oldStatus := &operatorv1.StaticPodOperatorStatus{}
@@ -155,23 +156,23 @@ func (c NodeController) sync() error {
 }
 
 // Run starts the kube-apiserver and blocks until stopCh is closed.
-func (c *NodeController) Run(workers int, stopCh <-chan struct{}) {
+func (c *NodeController) Run(ctx context.Context, workers int) {
 	defer utilruntime.HandleCrash()
 	defer c.queue.ShutDown()
 
 	klog.Infof("Starting NodeController")
 	defer klog.Infof("Shutting down NodeController")
-	if !cache.WaitForCacheSync(stopCh, c.cachesToSync...) {
+	if !cache.WaitForCacheSync(ctx.Done(), c.cachesToSync...) {
 		return
 	}
 
 	// doesn't matter what workers say, only start one.
-	go wait.Until(c.runWorker, time.Second, stopCh)
+	go wait.UntilWithContext(ctx, c.runWorker, time.Second)
 
-	<-stopCh
+	<-ctx.Done()
 }
 
-func (c *NodeController) runWorker() {
+func (c *NodeController) runWorker(ctx context.Context) {
 	for c.processNextWorkItem() {
 	}
 }

@@ -1,16 +1,16 @@
 hash: 9e0a3d4458afc2413e09446c7ec5943f2d66445a4f9c662e1e24fb6a9d1240e4
-updated: 2019-10-31T09:51:07.149985007+01:00
+updated: 2020-01-22T15:45:22.631676-05:00
 imports:
 - name: github.com/beorn7/perks
   version: 4b2b341e8d7715fae06375aa633dbb6e91b3fb46
   subpackages:
   - quantile
 - name: github.com/davecgh/go-spew
-  version: d8f796af33cc11cb798c1aaeb27a4ebc5099927d
+  version: 8991bc29aa16c548c550c7ff78260e27b9ab7c73
   subpackages:
   - spew
 - name: github.com/ghodss/yaml
-  version: 25d852aebe32c875e9c044af3eef9c7dc6bc777f
+  version: 73d445a93680fa1a78ae23a5839bad48f32ba1ee
 - name: github.com/gogo/protobuf
   version: 65acae22fc9d1fe290b33faa2bd64cdc20a463a0
   subpackages:
@@ -41,7 +41,7 @@ imports:
 - name: github.com/inconshreveable/mousetrap
   version: 76626ae9c91c4f2a10f34cad8ce83ea42c93bb75
 - name: github.com/json-iterator/go
-  version: 27518f6661eba504be5a7a9a9f6d9460d892ade3
+  version: 03217c3e97663914aec3faafde50d081f197a0a2
 - name: github.com/matttproud/golang_protobuf_extensions
   version: c12348ce28de40eed0136aa2b644d0ee0650e56c
   subpackages:
@@ -51,12 +51,12 @@ imports:
 - name: github.com/modern-go/reflect2
   version: 94122c33edd36123c84d5368cfb2b69df93a0ec8
 - name: github.com/openshift/api
-  version: 11eee842dafd4698259c5de6b0746183ea6998f5
+  version: 1108c9abdb99f4a64b30499812425da230acca94
   subpackages:
   - config/v1
   - operator/v1
 - name: github.com/openshift/library-go
-  version: d6f3b526f0331fec5d792acc73258d6685492c38
+  version: 7ed6868961c334c09dd023ed541e4d635ca93834
   subpackages:
   - pkg/assets
   - pkg/config/client
@@ -91,11 +91,11 @@ imports:
 - name: github.com/spf13/pflag
   version: 298182f68c66c05229eb03ac171abe6e309ee79a
 - name: golang.org/x/crypto
-  version: e84da0312774c21d64ee2317962ef669b27ffb41
+  version: 60c769a6c58655dab1b9adac0d58967dd517cfba
   subpackages:
   - ssh/terminal
 - name: golang.org/x/net
-  version: cdfb69ac37fc6fa907650654115ebebb3aae2087
+  version: 13f9640d40b9cc418fb53703dfbd177679788ceb
   subpackages:
   - context
   - context/ctxhttp
@@ -104,23 +104,23 @@ imports:
   - http2/hpack
   - idna
 - name: golang.org/x/oauth2
-  version: 9f3314589c9a9136388751d9adae6b0ed400978a
+  version: 0f29369cfe4552d0e4bcddc57cc75f4d7e672a33
   subpackages:
   - internal
 - name: golang.org/x/sys
-  version: 3b5209105503162ded1863c307ac66fec31120dd
+  version: fde4db37ae7ad8191b03d30d27f258b5291ae4e3
   subpackages:
   - unix
   - windows
 - name: golang.org/x/text
-  version: e6919f6577db79269a6443b9dc46d18f2238fb5d
+  version: 342b2e1fbaa52c93f31447ad2c6abc048c63e475
   subpackages:
   - secure/bidirule
   - transform
   - unicode/bidi
   - unicode/norm
 - name: golang.org/x/time
-  version: f51c12702a4d776e4c1fa9b0fabab841babae631
+  version: 9d24e82272b4f38b78bc8cff74fa936d31ccd8ef
   subpackages:
   - rate
 - name: google.golang.org/appengine
@@ -134,11 +134,11 @@ imports:
   - internal/urlfetch
   - urlfetch
 - name: gopkg.in/inf.v0
-  version: 3887ee99ecf07df5b447e9b00d9c0b2adaa9f3e4
+  version: d2d2541c53f18d2a059457998ce2876cc8e67cbf
 - name: gopkg.in/yaml.v2
   version: f221b8435cfb71e54062f6c6e99e9ade30b124d5
 - name: k8s.io/api
-  version: 95b840bb6a1f5f0462af804c8589396d294d4914
+  version: 4c9a86741a7ab3890dd9e0777e85d8eee48bf59c
   subpackages:
   - admissionregistration/v1
   - admissionregistration/v1beta1
@@ -161,8 +161,10 @@ imports:
   - coordination/v1beta1
   - core/v1
   - discovery/v1alpha1
+  - discovery/v1beta1
   - events/v1beta1
   - extensions/v1beta1
+  - flowcontrol/v1alpha1
   - networking/v1
   - networking/v1beta1
   - node/v1alpha1
@@ -179,12 +181,12 @@ imports:
   - storage/v1alpha1
   - storage/v1beta1
 - name: k8s.io/apiextensions-apiserver
-  version: 8f644eb6e783291c4b8cb8cb25a9983be1a74f5c
+  version: ea07e0496fdfc3befebe481bd6f850febc41cdae
   subpackages:
   - pkg/apis/apiextensions
   - pkg/apis/apiextensions/v1beta1
 - name: k8s.io/apimachinery
-  version: 27d36303b6556f377b4f34e64705fa9024a12b0c
+  version: 79c2a76c473a20cdc4ce59cae4b72529b5d9d16b
   subpackages:
   - pkg/api/equality
   - pkg/api/errors
@@ -226,7 +228,7 @@ imports:
   - third_party/forked/golang/json
   - third_party/forked/golang/reflect
 - name: k8s.io/client-go
-  version: 1fbdaa4c8d908275eee958429b1cafc2591a2c5d
+  version: c68b62b1efa14564a47d67c07f013dc3553937b9
   subpackages:
   - discovery
   - kubernetes
@@ -252,8 +254,10 @@ imports:
   - kubernetes/typed/coordination/v1beta1
   - kubernetes/typed/core/v1
   - kubernetes/typed/discovery/v1alpha1
+  - kubernetes/typed/discovery/v1beta1
   - kubernetes/typed/events/v1beta1
   - kubernetes/typed/extensions/v1beta1
+  - kubernetes/typed/flowcontrol/v1alpha1
   - kubernetes/typed/networking/v1
   - kubernetes/typed/networking/v1beta1
   - kubernetes/typed/node/v1alpha1
@@ -293,18 +297,18 @@ imports:
   - util/keyutil
   - util/retry
 - name: k8s.io/component-base
-  version: 5e0e35147053b5b87e6d93e052060e1fa3f3e71a
+  version: d28e171e54a29670f44b1cc6eed68fd609028f62
   subpackages:
   - cli/flag
   - logs
 - name: k8s.io/klog
   version: 3ca30a56d8a775276f9cdae009ba326fdc05af7f
 - name: k8s.io/kube-openapi
-  version: 743ec37842bffe49dd4221d9026f30fb1d5adbc4
+  version: 30be4d16710ac61bce31eb28a01054596fe6a9f1
   subpackages:
   - pkg/util/proto
 - name: k8s.io/utils
-  version: 8d271d903fe4c290aa361acfb242cff7bcee96f1
+  version: e782cd3c129fc98ee807f3c889c0f26eb7c9daf5
   subpackages:
   - integer
   - pointer

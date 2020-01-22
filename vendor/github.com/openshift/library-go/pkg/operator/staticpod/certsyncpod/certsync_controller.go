@@ -16,7 +16,7 @@ import (
 	"k8s.io/client-go/informers"
 	"k8s.io/client-go/kubernetes"
 	corev1interface "k8s.io/client-go/kubernetes/typed/core/v1"
-	"k8s.io/client-go/listers/core/v1"
+	v1 "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	"k8s.io/client-go/util/workqueue"
 	"k8s.io/klog"
@@ -102,14 +102,14 @@ func (c *CertSyncController) sync() error {
 
 			// remove missing content
 			if err := os.RemoveAll(getConfigMapDir(c.destinationDir, cm.Name)); err != nil {
-				c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed removing file for configmap: %s/%s: %v", configMap.Namespace, configMap.Name, err)
+				c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed removing file for configmap: %s/%s: %v", c.namespace, cm.Name, err)
 				errors = append(errors, err)
 			}
-			c.eventRecorder.Eventf("CertificateRemoved", "Removed file for configmap: %s/%s", configMap.Namespace, configMap.Name)
+			c.eventRecorder.Eventf("CertificateRemoved", "Removed file for configmap: %s/%s", c.namespace, cm.Name)
 			continue
 
 		case err != nil:
-			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting configmap: %s/%s: %v", configMap.Namespace, configMap.Name, err)
+			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting configmap: %s/%s: %v", c.namespace, cm.Name, err)
 			errors = append(errors, err)
 			continue
 		}
@@ -142,7 +142,7 @@ func (c *CertSyncController) sync() error {
 		configMap, err = c.configmapGetter.Get(configMap.Name, metav1.GetOptions{})
 		if err != nil {
 			// Even if the error is not exists we will act on it when caches catch up
-			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting configmap: %s/%s: %v", configMap.Namespace, configMap.Name, err)
+			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting configmap: %s/%s: %v", c.namespace, cm.Name, err)
 			errors = append(errors, err)
 			continue
 		}
@@ -197,16 +197,23 @@ func (c *CertSyncController) sync() error {
 				continue
 			}
 
-			// remove missing content
-			if err := os.RemoveAll(getSecretDir(c.destinationDir, s.Name)); err != nil {
-				c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed removing file for secret: %s/%s: %v", secret.Namespace, secret.Name, err)
-				errors = append(errors, err)
+			// check if the secret file exists, skip firing events if it does not
+			secretFile := getSecretDir(c.destinationDir, s.Name)
+			if _, err := os.Stat(secretFile); os.IsNotExist(err) {
+				continue
 			}
-			c.eventRecorder.Warningf("CertificateRemoved", "Removed file for secret: %s/%s", secret.Namespace, secret.Name, err)
+
+			// remove missing content
+			if err := os.RemoveAll(secretFile); err != nil {
+				c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed removing file for missing secret: %s/%s: %v", c.namespace, s.Name, err)
+				errors = append(errors, err)
+				continue
+			}
+			c.eventRecorder.Warningf("CertificateRemoved", "Removed file for missing secret: %s/%s", c.namespace, s.Name)
 			continue
 
 		case err != nil:
-			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting secret: %s/%s: %v", secret.Namespace, secret.Name, err)
+			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting secret: %s/%s: %v", c.namespace, s.Name, err)
 			errors = append(errors, err)
 			continue
 		}
@@ -239,7 +246,7 @@ func (c *CertSyncController) sync() error {
 		secret, err = c.secretGetter.Get(secret.Name, metav1.GetOptions{})
 		if err != nil {
 			// Even if the error is not exists we will act on it when caches catch up
-			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting secret: %s/%s: %v", secret.Namespace, secret.Name, err)
+			c.eventRecorder.Warningf("CertificateUpdateFailed", "Failed getting secret: %s/%s: %v", c.namespace, s.Name, err)
 			errors = append(errors, err)
 			continue
 		}

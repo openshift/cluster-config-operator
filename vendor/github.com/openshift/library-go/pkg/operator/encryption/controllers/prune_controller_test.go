@@ -54,12 +54,12 @@ func TestPruneController(t *testing.T) {
 		},
 
 		{
-			name:            "14 keys were migrated, 1 of them is used, 10 are kept, the 3 most recent are pruned",
+			name:            "15 keys were migrated, 2 of them are used, 10 are kept, the 3 most oldest are pruned",
 			targetNamespace: "kms",
 			targetGRs: []schema.GroupResource{
 				{Group: "", Resource: "secrets"},
 			},
-			initialSecrets: createMigratedEncryptionKeySecretsWithRndKey(t, 14, "kms", "secrets"),
+			initialSecrets: createMigratedEncryptionKeySecretsWithRndKey(t, 15, "kms", "secrets"),
 			expectedActions: []string{
 				"list:pods:kms",
 				"get:secrets:kms",
@@ -71,6 +71,7 @@ func TestPruneController(t *testing.T) {
 				"delete:secrets:openshift-config-managed",
 				"update:secrets:openshift-config-managed",
 				"delete:secrets:openshift-config-managed",
+				"create:events:kms",
 			},
 			validateFunc: func(ts *testing.T, actions []clientgotesting.Action, initialSecrets []*corev1.Secret) {
 				validateSecretsWerePruned(ts, actions, initialSecrets[:3])
@@ -143,7 +144,7 @@ func TestPruneController(t *testing.T) {
 			}
 
 			encryptionConfig := func() *corev1.Secret {
-				additionalReadKeys := state.KeysWithPotentiallyPersistedData(scenario.targetGRs, state.SortRecentFirst(initialKeys))
+				additionalReadKeys := state.KeysWithPotentiallyPersistedDataAndNextReadKey(scenario.targetGRs, state.SortRecentFirst(initialKeys))
 				var additionaConfigReadKeys []apiserverconfigv1.Key
 				for _, rk := range additionalReadKeys {
 					additionaConfigReadKeys = append(additionaConfigReadKeys, apiserverconfigv1.Key{
