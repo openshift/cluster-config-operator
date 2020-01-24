@@ -101,7 +101,6 @@ func (r *renderOpts) Run() error {
 		// TODO I don't think we have these
 		genericrenderoptions.Template{},
 		genericrenderoptions.Template{},
-		genericrenderoptions.Template{},
 
 		&renderConfig,
 		nil,
