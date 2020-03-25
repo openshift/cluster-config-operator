@@ -1,8 +1,8 @@
-FROM registry.svc.ci.openshift.org/openshift/release:golang-1.12 AS builder
+FROM registry.svc.ci.openshift.org/openshift/release:golang-1.13 AS builder
 WORKDIR /go/src/github.com/openshift/cluster-config-operator
 COPY . .
 ENV GO_PACKAGE github.com/openshift/cluster-config-operator
-RUN GODEBUG=tls13=1 go build -ldflags "-X $GO_PACKAGE/pkg/version.versionFromGit=$(git describe --long --tags --abbrev=7 --match 'v[0-9]*')" ./cmd/cluster-config-operator
+RUN make build --warn-undefined-variables
 
 FROM registry.svc.ci.openshift.org/ocp/4.2:base
 RUN mkdir -p /usr/share/bootkube/manifests/manifests
