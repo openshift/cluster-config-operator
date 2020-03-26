@@ -13,9 +13,9 @@ import (
 	utilflag "k8s.io/component-base/cli/flag"
 	"k8s.io/component-base/logs"
 
+	"github.com/openshift/cluster-config-operator/pkg/cmd/operator"
 	"github.com/openshift/cluster-config-operator/pkg/cmd/render"
 	"github.com/openshift/cluster-config-operator/pkg/version"
-	"github.com/openshift/library-go/pkg/operator/staticpod/installerpod"
 )
 
 func main() {
@@ -51,7 +51,7 @@ func NewOperatorCommand() *cobra.Command {
 	}
 
 	cmd.AddCommand(render.NewRenderCommand())
-	cmd.AddCommand(installerpod.NewInstaller())
+	cmd.AddCommand(operator.NewOperator())
 
 	return cmd
 }
