@@ -1,0 +1,55 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  namespace: openshift-config-operator
+  name: openshift-config-operator
+  labels:
+    app: openshift-config-operator
+  annotations:
+    exclude.release.openshift.io/internal-openshift-hosted: "true"
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: openshift-config-operator
+  template:
+    metadata:
+      name: openshift-config-operator
+      labels:
+        app: openshift-config-operator
+    spec:
+      serviceAccountName: openshift-config-operator
+      containers:
+      - name: openshift-config-operator
+        terminationMessagePolicy: FallbackToLogsOnError
+        image: quay.io/openshift/origin-cluster-config-operator:v4.0
+        imagePullPolicy: IfNotPresent
+        command: ["cluster-config-operator", "operator"]
+        resources:
+          requests:
+            memory: 50Mi
+            cpu: 10m
+        volumeMounts:
+        env:
+        - name: IMAGE
+          value: quay.io/openshift/origin-cluster-config-operator:v4.0
+        - name: OPERATOR_IMAGE_VERSION
+          value: "0.0.1-snapshot"
+        - name: OPERAND_IMAGE_VERSION
+          value: "0.0.1-snapshot"
+      nodeSelector:
+        node-role.kubernetes.io/master: ""
+      tolerations:
+      - key: "node-role.kubernetes.io/master"
+        operator: "Exists"
+        effect: "NoSchedule"
+      - key: "node.kubernetes.io/unreachable"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 120
+      - key: "node.kubernetes.io/not-ready"
+        operator: "Exists"
+        effect: "NoExecute"
+        tolerationSeconds: 120
