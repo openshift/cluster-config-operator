@@ -5,6 +5,7 @@ import (
 	"os"
 	"time"
 
+	"github.com/davecgh/go-spew/spew"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 
@@ -13,11 +14,13 @@ import (
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	configv1informers "github.com/openshift/client-go/config/informers/externalversions"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
+	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/genericoperatorclient"
+	"github.com/openshift/library-go/pkg/operator/loglevel"
 	"github.com/openshift/library-go/pkg/operator/status"
+	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
-	"github.com/openshift/library-go/pkg/operator/loglevel"
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
@@ -66,12 +69,39 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 
 	logLevelController := loglevel.NewClusterOperatorLoggingController(operatorClient, controllerContext.EventRecorder)
 
+	// As this operator does not manage any component/workload, report this operator as available and not progressing by default.
+	// TODO: Revisit this with full controller at some point.
+	operatorController := factory.New().ResyncEvery(10*time.Second).WithSync(func(ctx context.Context, controllerContext factory.SyncContext) error {
+		operatorStatus, updated, updateErr := v1helpers.UpdateStatus(operatorClient,
+			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+				Type:   "OperatorAvailable",
+				Status: operatorv1.ConditionTrue,
+				Reason: "AsExpected",
+			}),
+			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+				Type:   "OperatorProgressing",
+				Status: operatorv1.ConditionFalse,
+				Reason: "AsExpected",
+			}),
+			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+				Type:   "OperatorUpgradeable",
+				Status: operatorv1.ConditionTrue,
+				Reason: "AsExpected",
+			}),
+		)
+		if updated && operatorStatus != nil {
+			controllerContext.Recorder().Eventf("ConfigOperatorStatusChanged", "Operator conditions defaulted: %s", spew.Sprint(operatorStatus.Conditions))
+		}
+		return updateErr
+	}).ToController("ConfigOperatorController", controllerContext.EventRecorder)
+
 	go dynamicInformers.Start(ctx.Done())
 	go configInformers.Start(ctx.Done())
 
 	go infraController.Run(ctx, 1)
 	go logLevelController.Run(ctx, 1)
 	go statusController.Run(ctx, 1)
+	go operatorController.Run(ctx, 1)
 
 	<-ctx.Done()
 	return nil
