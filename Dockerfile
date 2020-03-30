@@ -19,5 +19,6 @@ COPY vendor/github.com/openshift/api/quota/v1/*.yaml /manifests
 COPY vendor/github.com/openshift/api/security/v1/*.yaml /manifests
 COPY vendor/github.com/openshift/api/authorization/v1/*.yaml /manifests
 COPY vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /manifests
+COPY vendor/github.com/openshift/api/operator/v1/0000_10_config-operator_*.yaml /manifests
 COPY empty-resources /manifests
 LABEL io.openshift.release.operator true

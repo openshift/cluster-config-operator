@@ -44,6 +44,6 @@ func (c AWSPlatformServiceLocationController) sync(ctx context.Context, syncCtx 
 		klog.Warningf("%w", err)
 		return nil
 	}
-	klog.Infof(spew.Sprintf("current state: %s", currentInfra.Status))
+	klog.Info(spew.Sprintf("current state: %s", currentInfra.Status))
 	return err
 }
