@@ -8,6 +8,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -21,15 +22,26 @@ import (
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
+	"github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
+	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
+	// This kube client use protobuf, do not use it for CR
+	kubeClient, err := kubernetes.NewForConfig(controllerContext.ProtoKubeConfig)
+	if err != nil {
+		return err
+	}
 	configClient, err := configv1client.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {
 		return err
 	}
 	configInformers := configv1informers.NewSharedInformerFactory(configClient, 10*time.Minute)
-
+	kubeInformersForNamespaces := v1helpers.NewKubeInformersForNamespaces(kubeClient,
+		"",
+		operatorclient.GlobalUserSpecifiedConfigNamespace,
+		operatorclient.GlobalMachineSpecifiedConfigNamespace,
+	)
 	operatorClient, dynamicInformers, err := genericoperatorclient.NewClusterScopedOperatorClient(controllerContext.KubeConfig, operatorv1.GroupVersion.WithResource("configs"))
 	if err != nil {
 		return err
@@ -39,6 +51,17 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		operatorClient,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().Infrastructures().Informer(),
+		controllerContext.EventRecorder,
+	)
+
+	kubeCloudConfigController := kube_cloud_config.NewController(
+		operatorClient,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().Infrastructures().Lister(),
+		configInformers.Config().V1().Infrastructures().Informer(),
+		v1helpers.CachedConfigMapGetter(kubeClient.CoreV1(), kubeInformersForNamespaces),
+		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalUserSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
+		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalMachineSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
 		controllerContext.EventRecorder,
 	)
 
@@ -97,8 +120,10 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 
 	go dynamicInformers.Start(ctx.Done())
 	go configInformers.Start(ctx.Done())
+	go kubeInformersForNamespaces.Start(ctx.Done())
 
 	go infraController.Run(ctx, 1)
+	go kubeCloudConfigController.Run(ctx, 1)
 	go logLevelController.Run(ctx, 1)
 	go statusController.Run(ctx, 1)
 	go operatorController.Run(ctx, 1)
