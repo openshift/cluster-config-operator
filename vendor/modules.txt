@@ -325,10 +325,17 @@ google.golang.org/grpc/serviceconfig
 google.golang.org/grpc/stats
 google.golang.org/grpc/status
 google.golang.org/grpc/tap
+# gopkg.in/gcfg.v1 v1.2.0
+gopkg.in/gcfg.v1
+gopkg.in/gcfg.v1/scanner
+gopkg.in/gcfg.v1/token
+gopkg.in/gcfg.v1/types
 # gopkg.in/inf.v0 v0.9.1
 gopkg.in/inf.v0
 # gopkg.in/natefinch/lumberjack.v2 v2.0.0
 gopkg.in/natefinch/lumberjack.v2
+# gopkg.in/warnings.v0 v0.1.1
+gopkg.in/warnings.v0
 # gopkg.in/yaml.v2 v2.2.8
 gopkg.in/yaml.v2
 # k8s.io/api v0.18.0
