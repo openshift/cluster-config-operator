@@ -18,5 +18,5 @@ spec:
     - openshift-config-operator
   selector:
     matchLabels:
-      app: config-operator
+      app: openshift-config-operator
 
