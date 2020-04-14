@@ -21,6 +21,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
+	"github.com/openshift/cluster-config-operator/pkg/operator/metrics"
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
@@ -94,6 +95,8 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		}
 		return updateErr
 	}).ToController("ConfigOperatorController", controllerContext.EventRecorder)
+
+	metrics.Register(configInformers)
 
 	go dynamicInformers.Start(ctx.Done())
 	go configInformers.Start(ctx.Done())

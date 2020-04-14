@@ -3,6 +3,7 @@ module github.com/openshift/cluster-config-operator
 go 1.13
 
 require (
+	github.com/blang/semver v3.5.0+incompatible
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
@@ -11,6 +12,7 @@ require (
 	github.com/openshift/build-machinery-go v0.0.0-20200211121458-5e3d6e570160
 	github.com/openshift/client-go v0.0.0-20200320150128-a906f3d8e723
 	github.com/openshift/library-go v0.0.0-20200326104512-4dc124c2ddb8
+	github.com/prometheus/client_golang v1.1.0
 	github.com/spf13/cobra v0.0.5
 	github.com/spf13/pflag v1.0.5
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
