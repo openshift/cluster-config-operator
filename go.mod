@@ -23,3 +23,5 @@ require (
 	k8s.io/component-base v0.18.0
 	k8s.io/klog v1.0.0
 )
+
+replace github.com/openshift/api => github.com/abhinavdahiya/api v0.0.0-20200416225439-1abccdab7e0d
