@@ -15,6 +15,9 @@ require (
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.4.0
 	golang.org/x/net v0.0.0-20200324143707-d3edc9973b7e // indirect
+	gopkg.in/gcfg.v1 v1.2.0
+	gopkg.in/warnings.v0 v0.1.1 // indirect
+	k8s.io/api v0.18.0
 	k8s.io/apimachinery v0.18.0
 	k8s.io/client-go v0.18.0
 	k8s.io/component-base v0.18.0
