@@ -38,6 +38,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	infraController := aws_platform_service_location.NewController(
 		operatorClient,
 		configClient.ConfigV1(),
+		configInformers.Config().V1().Infrastructures().Lister(),
 		configInformers.Config().V1().Infrastructures().Informer(),
 		controllerContext.EventRecorder,
 	)
