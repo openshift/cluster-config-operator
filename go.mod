@@ -7,7 +7,7 @@ require (
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32 // indirect
 	github.com/json-iterator/go v1.1.9 // indirect
 	github.com/jteeuwen/go-bindata v3.0.8-0.20151023091102-a0ff2567cfb7+incompatible
-	github.com/openshift/api v0.0.0-20200413201024-c6e8c9b6eb9a
+	github.com/openshift/api v0.0.0-20200417173520-2ef3f20bd355
 	github.com/openshift/build-machinery-go v0.0.0-20200211121458-5e3d6e570160
 	github.com/openshift/client-go v0.0.0-20200326155132-2a6cd50aedd0
 	github.com/openshift/library-go v0.0.0-20200414135834-ccc4bb27d032
