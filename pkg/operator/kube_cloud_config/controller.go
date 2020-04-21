@@ -134,6 +134,19 @@ func (c KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.Syn
 }
 
 // asIsTransformer implements cloudConfigTransformer and copies the input ConfigMap as-is to the output ConfigMap.
-func asIsTransformer(input *corev1.ConfigMap, _ string, _ *configv1.Infrastructure) (*corev1.ConfigMap, error) {
-	return input.DeepCopy(), nil
+// this ensure that the input cloud conf is stored at `targetConfigKey` for the output.
+func asIsTransformer(input *corev1.ConfigMap, sourceKey string, _ *configv1.Infrastructure) (*corev1.ConfigMap, error) {
+	output := input.DeepCopy()
+	output.Namespace = operatorclient.GlobalMachineSpecifiedConfigNamespace
+	output.Name = targetConfigName
+	delete(output.Data, sourceKey)
+	delete(output.BinaryData, sourceKey)
+
+	if vd, ok := input.Data[sourceKey]; ok {
+		output.Data[targetConfigKey] = vd // store the config to same as input
+	} else if vbd, ok := input.BinaryData[sourceKey]; ok {
+		output.BinaryData[targetConfigKey] = vbd // store the config to same as input
+	}
+
+	return output, nil
 }

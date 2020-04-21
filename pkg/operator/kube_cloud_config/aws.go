@@ -37,6 +37,8 @@ func awsTransformer(input *corev1.ConfigMap, key string, infra *configv1.Infrast
 	output := input.DeepCopy()
 	output.Namespace = operatorclient.GlobalMachineSpecifiedConfigNamespace
 	output.Name = targetConfigName
+	delete(output.Data, key)
+	delete(output.BinaryData, key)
 
 	inCfgRaw := &bytes.Buffer{}
 	if v, ok := input.Data[key]; ok {
@@ -68,14 +70,14 @@ func awsTransformer(input *corev1.ConfigMap, key string, infra *configv1.Infrast
 	}
 
 	if _, ok := input.Data[key]; ok {
-		output.Data[key] = inCfgRaw.String() // store the config to same as input
+		output.Data[targetConfigKey] = inCfgRaw.String() // store the config to same as input
 	} else if _, ok := input.BinaryData[key]; ok {
-		output.BinaryData[key] = inCfgRaw.Bytes() // store the config to same as input
+		output.BinaryData[targetConfigKey] = inCfgRaw.Bytes() // store the config to same as input
 	} else {
 		if output.Data == nil {
 			output.Data = map[string]string{}
 		}
-		output.Data[key] = inCfgRaw.String() // store the new config to input key
+		output.Data[targetConfigKey] = inCfgRaw.String() // store the new config to input key
 	}
 
 	return output, nil

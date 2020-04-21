@@ -104,7 +104,7 @@ func Test_awsTransformer(t *testing.T) {
 		err:      `invalid platform, expected to be AWS`,
 	}, {
 		name:       "non empty config map, non aws infra",
-		inputcm:    &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `{"resource-group": "test-rg"}`}},
+		inputcm:    &corev1.ConfigMap{Data: map[string]string{"config": `{"resource-group": "test-rg"}`}},
 		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{Platform: configv1.AzurePlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AzurePlatformType, Azure: &configv1.AzurePlatformStatus{ResourceGroupName: "test-rg"}}}},
 
 		outputcm: nil,
@@ -125,7 +125,7 @@ func Test_awsTransformer(t *testing.T) {
 		err:      ``,
 	}, {
 		name: "non empty config map, aws infra",
-		inputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 `}},
@@ -151,7 +151,7 @@ SubnetID = subnet-test
 		err: ``,
 	}, {
 		name: "non empty config map, aws infra with service endpoints",
-		inputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 `}},
@@ -189,7 +189,7 @@ SubnetID = subnet-test
 		err: ``,
 	}, {
 		name: "non empty config map, aws infra with service endpoints",
-		inputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 `}},
@@ -221,7 +221,7 @@ SubnetID = subnet-test
 		err:      `status\.platformStatus\.aws\.region: Required value: region is required to be set for AWS platform`,
 	}, {
 		name: "non empty config map, aws infra with service endpoints, no region",
-		inputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 `}},
@@ -231,7 +231,7 @@ SubnetID = subnet-test
 		err:      `status\.platformStatus\.aws\.region: Required value: region is required to be set for AWS platform`,
 	}, {
 		name: "non empty config map, aws infra with service endpoints",
-		inputcm: &corev1.ConfigMap{BinaryData: map[string][]byte{"cloud.conf": []byte(`[Global]
+		inputcm: &corev1.ConfigMap{BinaryData: map[string][]byte{"config": []byte(`[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 `)}},
@@ -254,7 +254,7 @@ SubnetID = subnet-test
 			"cloud.ca": `-----BUNDLE-----
 -----END BUNDLE----
 `,
-			"cloud.conf": `[Global]
+			"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 `}},
@@ -278,7 +278,7 @@ SubnetID = subnet-test
 	}, {
 		name: "non empty config map, aws infra with service endpoints",
 		inputcm: &corev1.ConfigMap{
-			Data: map[string]string{"cloud.conf": `[Global]
+			Data: map[string]string{"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 `},
@@ -306,7 +306,7 @@ SubnetID = subnet-test
 		err: ``,
 	}, {
 		name: "non empty config map, aws infra with service endpoints, conflict",
-		inputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 
@@ -322,7 +322,7 @@ SubnetID = subnet-test
 		err:      `invalid user provided cloud.conf: user provided cloud.conf and infrastructure object both include service overrides`,
 	}, {
 		name: "non empty config map, aws infra with service endpoints, conflict",
-		inputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
 VPC = vpc-test
 SubnetID = subnet-test
 
@@ -340,7 +340,7 @@ SubnetID = subnet-test
 
 	for _, test := range cases {
 		t.Run(test.name, func(t *testing.T) {
-			outputcm, err := awsTransformer(test.inputcm, "cloud.conf", test.inputinfra)
+			outputcm, err := awsTransformer(test.inputcm, "config", test.inputinfra)
 			if test.err == "" {
 				assert.NoError(t, err)
 				outputcm.ObjectMeta = metav1.ObjectMeta{}
