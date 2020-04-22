@@ -90,6 +90,7 @@ func (c KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.Syn
 	}
 
 	sourceCloudConfigMap := currentInfra.Spec.CloudConfig.Name
+	sourceCloudConfigKey := currentInfra.Spec.CloudConfig.Key
 
 	source := &corev1.ConfigMap{}
 	if len(sourceCloudConfigMap) > 0 {
@@ -106,7 +107,7 @@ func (c KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.Syn
 		cloudConfigTransformerFn = asIsTransformer
 	}
 
-	target, err := cloudConfigTransformerFn(source, targetConfigKey, currentInfra)
+	target, err := cloudConfigTransformerFn(source, sourceCloudConfigKey, currentInfra)
 	if err != nil {
 		return err
 	}
