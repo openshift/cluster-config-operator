@@ -23,6 +23,7 @@ import (
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
 	"github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
+	"github.com/openshift/cluster-config-operator/pkg/operator/migration_aws_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
 )
 
@@ -41,6 +42,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		"",
 		operatorclient.GlobalUserSpecifiedConfigNamespace,
 		operatorclient.GlobalMachineSpecifiedConfigNamespace,
+		"kube-system",
 	)
 	operatorClient, dynamicInformers, err := genericoperatorclient.NewClusterScopedOperatorClient(controllerContext.KubeConfig, operatorv1.GroupVersion.WithResource("configs"))
 	if err != nil {
@@ -63,6 +65,16 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		v1helpers.CachedConfigMapGetter(kubeClient.CoreV1(), kubeInformersForNamespaces),
 		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalUserSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
 		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalMachineSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
+		controllerContext.EventRecorder,
+	)
+
+	migrationAWSStatusController := migration_aws_status.NewController(
+		operatorClient,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().Infrastructures().Lister(),
+		configInformers.Config().V1().Infrastructures().Informer(),
+		v1helpers.CachedConfigMapGetter(kubeClient.CoreV1(), kubeInformersForNamespaces),
+		kubeInformersForNamespaces.InformersFor("kube-system").Core().V1().ConfigMaps().Informer(),
 		controllerContext.EventRecorder,
 	)
 
@@ -128,6 +140,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go logLevelController.Run(ctx, 1)
 	go statusController.Run(ctx, 1)
 	go operatorController.Run(ctx, 1)
+	go migrationAWSStatusController.Run(ctx, 1)
 
 	<-ctx.Done()
 	return nil
