@@ -97,16 +97,6 @@ func Test_sync(t *testing.T) {
 		err        string
 		actions    []ktesting.Action
 	}{{
-		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{PlatformStatus: &configv1.PlatformStatus{Type: configv1.AzurePlatformType}}},
-		inputdata:  `{"somekey": "somevalue"}`,
-
-		outputdata: map[string]string{"cloud.conf": `{"somekey": "somevalue"}`},
-		actions: []ktesting.Action{
-			ktesting.NewGetAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config", "cluster-config-v1"),
-			ktesting.NewGetAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", "kube-cloud-config"),
-			ktesting.NewUpdateAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", nil),
-		},
-	}, {
 		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{PlatformStatus: &configv1.PlatformStatus{Type: configv1.GCPPlatformType}}},
 		inputdata: `[global]
 somekey = somevalue`,
@@ -178,6 +168,34 @@ SubnetID = subnet-test
 			ktesting.NewGetAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", "kube-cloud-config"),
 			ktesting.NewUpdateAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", nil),
 		},
+	}, {
+		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{PlatformStatus: &configv1.PlatformStatus{Type: configv1.AzurePlatformType, Azure: &configv1.AzurePlatformStatus{}}}},
+		inputdata:  `{"resourceGroup":"test-rg"}`,
+
+		outputdata: map[string]string{"cloud.conf": `{
+	"cloud": "AzurePublicCloud",
+	"resourceGroup": "test-rg"
+}
+`},
+		actions: []ktesting.Action{
+			ktesting.NewGetAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config", "cluster-config-v1"),
+			ktesting.NewGetAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", "kube-cloud-config"),
+			ktesting.NewUpdateAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", nil),
+		},
+	}, {
+		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{PlatformStatus: &configv1.PlatformStatus{Type: configv1.AzurePlatformType, Azure: &configv1.AzurePlatformStatus{CloudName: configv1.AzureUSGovernmentCloud}}}},
+		inputdata:  `{"resourceGroup":"test-rg"}`,
+
+		outputdata: map[string]string{"cloud.conf": `{
+	"cloud": "AzureUSGovernmentCloud",
+	"resourceGroup": "test-rg"
+}
+`},
+		actions: []ktesting.Action{
+			ktesting.NewGetAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config", "cluster-config-v1"),
+			ktesting.NewGetAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", "kube-cloud-config"),
+			ktesting.NewUpdateAction(schema.GroupVersionResource{Resource: "configmaps"}, "openshift-config-managed", nil),
+		},
 	}}
 	for _, test := range cases {
 		t.Run("", func(t *testing.T) {
@@ -200,7 +218,8 @@ SubnetID = subnet-test
 				infraLister:     configv1listers.NewInfrastructureLister(indexerInfra),
 				configMapClient: fake.CoreV1(),
 				cloudConfigTransformers: map[configv1.PlatformType]cloudConfigTransformer{
-					configv1.AWSPlatformType: awsTransformer,
+					configv1.AWSPlatformType:   awsTransformer,
+					configv1.AzurePlatformType: azureTransformer,
 				},
 			}
 
