@@ -118,7 +118,9 @@ func (c KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.Syn
 		if err != nil && !errors.IsNotFound(err) {
 			return err
 		}
-		syncCtx.Recorder().Eventf("KubeCloudConfigController", "%s/%s ConfigMap was deleted as no longer required", operatorclient.GlobalMachineSpecifiedConfigNamespace, targetCloudConfigMap)
+		if err == nil {
+			syncCtx.Recorder().Eventf("KubeCloudConfigController", "%s/%s ConfigMap was deleted as no longer required", operatorclient.GlobalMachineSpecifiedConfigNamespace, targetCloudConfigMap)
+		}
 	} else { // apply the target
 		target.Name = targetCloudConfigMap
 		target.Namespace = operatorclient.GlobalMachineSpecifiedConfigNamespace
