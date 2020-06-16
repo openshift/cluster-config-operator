@@ -1,4 +1,4 @@
-package kube_cloud_config
+package kubecloudconfig
 
 import (
 	"context"
@@ -49,13 +49,10 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 	openshiftConfigConfigMapInformer cache.SharedIndexInformer, openshiftConfigManagedConfigMapInformer cache.SharedIndexInformer,
 	recorder events.Recorder) factory.Controller {
 	c := &KubeCloudConfigController{
-		infraClient:     infraClient.Infrastructures(),
-		infraLister:     infraLister,
-		configMapClient: configMapClient,
-		cloudConfigTransformers: map[configv1.PlatformType]cloudConfigTransformer{
-			configv1.AWSPlatformType:   awsTransformer,
-			configv1.AzurePlatformType: azureTransformer,
-		},
+		infraClient:             infraClient.Infrastructures(),
+		infraLister:             infraLister,
+		configMapClient:         configMapClient,
+		cloudConfigTransformers: cloudConfigTransformers(),
 	}
 	return factory.New().
 		WithInformers(
@@ -153,4 +150,13 @@ func asIsTransformer(input *corev1.ConfigMap, sourceKey string, _ *configv1.Infr
 	}
 
 	return output, nil
+}
+
+// cloudConfigTransformers returns all configured cloud transformers
+func cloudConfigTransformers() map[configv1.PlatformType]cloudConfigTransformer {
+	cloudConfigTransformers := map[configv1.PlatformType]cloudConfigTransformer{
+		configv1.AWSPlatformType:   awsTransformer,
+		configv1.AzurePlatformType: azureTransformer,
+	}
+	return cloudConfigTransformers
 }

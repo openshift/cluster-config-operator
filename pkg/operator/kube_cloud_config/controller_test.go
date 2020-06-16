@@ -1,4 +1,4 @@
-package kube_cloud_config
+package kubecloudconfig
 
 import (
 	"context"
@@ -214,13 +214,10 @@ SubnetID = subnet-test
 			fakeConfig := configfakeclient.NewSimpleClientset(test.inputinfra)
 
 			ctrl := KubeCloudConfigController{
-				infraClient:     fakeConfig.ConfigV1().Infrastructures(),
-				infraLister:     configv1listers.NewInfrastructureLister(indexerInfra),
-				configMapClient: fake.CoreV1(),
-				cloudConfigTransformers: map[configv1.PlatformType]cloudConfigTransformer{
-					configv1.AWSPlatformType:   awsTransformer,
-					configv1.AzurePlatformType: azureTransformer,
-				},
+				infraClient:             fakeConfig.ConfigV1().Infrastructures(),
+				infraLister:             configv1listers.NewInfrastructureLister(indexerInfra),
+				configMapClient:         fake.CoreV1(),
+				cloudConfigTransformers: cloudConfigTransformers(),
 			}
 
 			err := ctrl.sync(context.TODO(),
