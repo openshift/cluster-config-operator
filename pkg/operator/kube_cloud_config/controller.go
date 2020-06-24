@@ -53,7 +53,8 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 		infraLister:     infraLister,
 		configMapClient: configMapClient,
 		cloudConfigTransformers: map[configv1.PlatformType]cloudConfigTransformer{
-			configv1.AWSPlatformType: awsTransformer,
+			configv1.AWSPlatformType:   awsTransformer,
+			configv1.AzurePlatformType: azureTransformer,
 		},
 	}
 	return factory.New().
