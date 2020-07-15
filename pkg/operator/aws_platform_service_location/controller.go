@@ -75,24 +75,33 @@ func (c AWSPlatformServiceLocationController) sync(ctx context.Context, syncCtx 
 		return field.Invalid(field.NewPath("spec", "platformSpec", "type"), currentInfra.Spec.PlatformSpec.Type, fmt.Sprint("non AWS platform type set in specification"))
 	}
 
-	if currentInfra.Spec.PlatformSpec.AWS == nil ||
-		len(currentInfra.Spec.PlatformSpec.AWS.ServiceEndpoints) == 0 {
-		return nil // nothing to do here
+	var services []configv1.AWSServiceEndpoint
+	if currentInfra.Spec.PlatformSpec.AWS != nil {
+		services = append(services, currentInfra.Spec.PlatformSpec.AWS.ServiceEndpoints...)
 	}
 
-	services := currentInfra.Spec.PlatformSpec.AWS.ServiceEndpoints
 	if err := validateServiceEndpoints(services); err != nil {
 		syncCtx.Recorder().Warningf("AWSPlatformServiceLocationController", "Invalid spec.platformSpec.aws.serviceEndpoints provided for infrastructures.%s/cluster", configv1.GroupName)
 		return err
 	}
-
 	sort.Slice(services, func(i, j int) bool {
 		return services[i].Name < services[j].Name
 	})
-	if equality.Semantic.DeepEqual(currentInfra.Status.PlatformStatus.AWS.ServiceEndpoints, services) {
+
+	var existingServices []configv1.AWSServiceEndpoint
+	if currentInfra.Status.PlatformStatus != nil && currentInfra.Status.PlatformStatus.AWS != nil {
+		existingServices = append(existingServices, currentInfra.Status.PlatformStatus.AWS.ServiceEndpoints...)
+	}
+	if equality.Semantic.DeepEqual(existingServices, services) {
 		return nil // nothing to do now
 	}
 
+	if currentInfra.Status.PlatformStatus == nil {
+		currentInfra.Status.PlatformStatus = &configv1.PlatformStatus{}
+	}
+	if currentInfra.Status.PlatformStatus.AWS == nil {
+		currentInfra.Status.PlatformStatus.AWS = &configv1.AWSPlatformStatus{}
+	}
 	currentInfra.Status.PlatformStatus.AWS.ServiceEndpoints = services
 	_, err = c.infraClient.UpdateStatus(ctx, currentInfra, metav1.UpdateOptions{})
 	return err

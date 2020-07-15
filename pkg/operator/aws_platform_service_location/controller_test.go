@@ -143,6 +143,30 @@ func Test_sync(t *testing.T) {
 		expectedActions:  0,
 		expectedServices: []configv1.AWSServiceEndpoint{{Name: "ec2", URL: "https://ec2.local"}, {Name: "s3", URL: "https://s3.local"}},
 		expectedErr:      `^spec\.platformSpec\.aws\.serviceEndpoints\[2\]\.name: Invalid value: "ec2": duplicate service endpoint not allowed for ec2, service endpoint already defined at spec\.platformSpec\.aws\.serviceEndpoints\[0\]$`,
+	}, {
+		obj: modifier(validEndpoints, func(i *configv1.Infrastructure) {
+			i.Status.PlatformStatus.AWS.ServiceEndpoints = []configv1.AWSServiceEndpoint{{Name: "ec2", URL: "https://ec2.local"}}
+			i.Spec.PlatformSpec.AWS.ServiceEndpoints = nil
+		}),
+		expectedActions:  1,
+		expectedServices: nil,
+		expectedErr:      ``,
+	}, {
+		obj: modifier(validEndpoints, func(i *configv1.Infrastructure) {
+			i.Status.PlatformStatus.AWS.ServiceEndpoints = []configv1.AWSServiceEndpoint{{Name: "ec2", URL: "https://ec2.local"}}
+			i.Spec.PlatformSpec.AWS.ServiceEndpoints = []configv1.AWSServiceEndpoint{}
+		}),
+		expectedActions:  1,
+		expectedServices: nil,
+		expectedErr:      ``,
+	}, {
+		obj: modifier(validEndpoints, func(i *configv1.Infrastructure) {
+			i.Status.PlatformStatus.AWS.ServiceEndpoints = []configv1.AWSServiceEndpoint{{Name: "ec2", URL: "https://ec2.local"}}
+			i.Spec.PlatformSpec.AWS = nil
+		}),
+		expectedActions:  1,
+		expectedServices: nil,
+		expectedErr:      ``,
 	}}
 	for _, tc := range cases {
 		t.Run("test_sync", func(t *testing.T) {
