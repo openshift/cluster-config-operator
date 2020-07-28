@@ -57,7 +57,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		controllerContext.EventRecorder,
 	)
 
-	kubeCloudConfigController := kube_cloud_config.NewController(
+	kubeCloudConfigController := kubecloudconfig.NewController(
 		operatorClient,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().Infrastructures().Lister(),

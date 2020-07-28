@@ -1,4 +1,4 @@
-package kube_cloud_config
+package kubecloudconfig
 
 import (
 	"testing"
