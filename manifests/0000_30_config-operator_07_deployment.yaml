@@ -31,6 +31,8 @@ spec:
         terminationMessagePolicy: FallbackToLogsOnError
         image: quay.io/openshift/origin-cluster-config-operator:v4.0
         imagePullPolicy: IfNotPresent
+        securityContext:
+          runAsUser: 0
         command: ["cluster-config-operator", "operator"]
         ports:
           - containerPort: 8443
