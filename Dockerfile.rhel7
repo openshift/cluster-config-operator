@@ -1,10 +1,10 @@
-FROM registry.svc.ci.openshift.org/ocp/builder:golang-1.13 AS builder
+FROM registry.svc.ci.openshift.org/ocp/builder:rhel-8-golang-openshift-4.6 AS builder
 WORKDIR /go/src/github.com/openshift/cluster-config-operator
 COPY . .
 ENV GO_PACKAGE github.com/openshift/cluster-config-operator
 RUN make build --warn-undefined-variables
 
-FROM registry.svc.ci.openshift.org/ocp/4.2:base
+FROM registry.svc.ci.openshift.org/ocp/4.6:base
 RUN mkdir -p /usr/share/bootkube/manifests/manifests
 RUN mkdir -p /usr/share/bootkube/manifests/bootstrap-manifests
 COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/config/v1/*_config-operator_*.yaml /usr/share/bootkube/manifests/manifests
