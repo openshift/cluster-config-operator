@@ -4,7 +4,6 @@ import (
 	"context"
 	"time"
 
-	configv1 "github.com/openshift/api/config/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	"github.com/openshift/library-go/pkg/controller/factory"
@@ -42,7 +41,6 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 func (c Controller) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	obj, err := c.apiserverLister.Get("cluster")
 	if errors.IsNotFound(err) {
-		syncCtx.Recorder().Warningf("SecureAccessTokenAnnotationController", "Required apiservers.%s/cluster not found", configv1.GroupName)
 		return nil
 	}
 	if err != nil {
