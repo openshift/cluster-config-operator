@@ -25,6 +25,7 @@ import (
 	"github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_aws_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
+	"github.com/openshift/cluster-config-operator/pkg/operator/secureaccesstoken"
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
@@ -105,6 +106,14 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 
 	logLevelController := loglevel.NewClusterOperatorLoggingController(operatorClient, controllerContext.EventRecorder)
 
+	secureAccessTokenAnnotationController := secureaccesstoken.NewController(
+		operatorClient,
+		configClient.ConfigV1().APIServers(),
+		configInformers.Config().V1().APIServers().Lister(),
+		configInformers.Config().V1().APIServers().Informer(),
+		controllerContext.EventRecorder,
+	)
+
 	// As this operator does not manage any component/workload, report this operator as available and not progressing by default.
 	// TODO: Revisit this with full controller at some point.
 	operatorController := factory.New().ResyncEvery(10*time.Second).WithSync(func(ctx context.Context, controllerContext factory.SyncContext) error {
@@ -141,6 +150,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go statusController.Run(ctx, 1)
 	go operatorController.Run(ctx, 1)
 	go migrationAWSStatusController.Run(ctx, 1)
+	go secureAccessTokenAnnotationController.Run(ctx, 1)
 
 	<-ctx.Done()
 	return nil

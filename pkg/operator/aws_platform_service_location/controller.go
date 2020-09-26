@@ -13,6 +13,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/validation/field"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/klog"
 
 	configv1 "github.com/openshift/api/config/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
@@ -51,7 +52,7 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 func (c AWSPlatformServiceLocationController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	obj, err := c.infraLister.Get("cluster")
 	if errors.IsNotFound(err) {
-		syncCtx.Recorder().Warningf("AWSPlatformServiceLocationController", "Required infrastructures.%s/cluster not found", configv1.GroupName)
+		klog.Warningf("AWSPlatformServiceLocationController requires infrastructures.%s/cluster, but it wasn't not found", configv1.GroupName)
 		return nil
 	}
 	if err != nil {
@@ -64,7 +65,7 @@ func (c AWSPlatformServiceLocationController) sync(ctx context.Context, syncCtx 
 		platformName = pstatus.Type
 	}
 	if len(platformName) == 0 {
-		syncCtx.Recorder().Warningf("AWSPlatformServiceLocationController", "Falling back to deprecated status.platform because infrastructures.%s/cluster status.platformStatus.type is empty", configv1.GroupName)
+		klog.Warningf("AWSPlatformServiceLocationController is falling back to deprecated status.platform because infrastructures.%s/cluster status.platformStatus.type is empty", configv1.GroupName)
 		platformName = currentInfra.Status.Platform
 	}
 	if platformName != configv1.AWSPlatformType {
@@ -82,7 +83,6 @@ func (c AWSPlatformServiceLocationController) sync(ctx context.Context, syncCtx 
 
 	services := currentInfra.Spec.PlatformSpec.AWS.ServiceEndpoints
 	if err := validateServiceEndpoints(services); err != nil {
-		syncCtx.Recorder().Warningf("AWSPlatformServiceLocationController", "Invalid spec.platformSpec.aws.serviceEndpoints provided for infrastructures.%s/cluster", configv1.GroupName)
 		return err
 	}
 
