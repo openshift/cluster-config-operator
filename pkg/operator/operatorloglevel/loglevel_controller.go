@@ -122,6 +122,11 @@ func (c *operatorLogLevelNormalizer) sync(ctx context.Context, syncCtx factory.S
 			Version:  "v1",
 			Resource: "clustercsidrivers",
 		},
+		{
+			Group:    "operator.openshift.io",
+			Version:  "v1",
+			Resource: "servicecas",
+		},
 	}
 
 	for _, gvr := range gvrs {
