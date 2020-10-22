@@ -8,3 +8,4 @@ approvers:
   - mfojtik
   - sttts
   - soltysh
+component: config-operator
