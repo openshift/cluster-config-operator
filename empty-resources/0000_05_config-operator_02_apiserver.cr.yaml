@@ -3,7 +3,8 @@ kind: APIServer
 metadata:
   name: cluster
   annotations:
-    release.openshift.io/create-only: "true"
+    include.release.openshift.io/self-managed-high-availability: "true"
     # this flag is not set for a cluster coming from 4.5 via upgrade. Hence, 4.5 clusters will keep supporting non-sha256 tokens.
     oauth-apiserver.openshift.io/secure-token-storage: "true"
+    release.openshift.io/create-only: "true"
 spec: {}
