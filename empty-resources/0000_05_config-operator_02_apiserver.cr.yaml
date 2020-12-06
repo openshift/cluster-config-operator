@@ -7,4 +7,5 @@ metadata:
     # this flag is not set for a cluster coming from 4.5 via upgrade. Hence, 4.5 clusters will keep supporting non-sha256 tokens.
     oauth-apiserver.openshift.io/secure-token-storage: "true"
     release.openshift.io/create-only: "true"
+    include.release.openshift.io/single-node-production-edge: "true"
 spec: {}

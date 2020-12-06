@@ -4,6 +4,7 @@ metadata:
   annotations:
     include.release.openshift.io/self-managed-high-availability: "true"
     openshift.io/node-selector: ""
+    include.release.openshift.io/single-node-production-edge: "true"
   name: openshift-config
   labels:
     openshift.io/run-level: "0"
