@@ -1,4 +1,4 @@
-package migration_aws_status
+package migration_platform_status
 
 import (
 	"context"
@@ -27,12 +27,15 @@ func Test_sync(t *testing.T) {
 		actions      int
 	}{{
 		inputstatus:  configv1.InfrastructureStatus{Platform: configv1.AzurePlatformType},
-		outputstatus: configv1.InfrastructureStatus{Platform: configv1.AzurePlatformType},
-		actions:      0,
+		outputstatus: configv1.InfrastructureStatus{Platform: configv1.AzurePlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AzurePlatformType}},
+		actions:      1,
 	}, {
 		inputstatus:  configv1.InfrastructureStatus{Platform: configv1.PlatformType("random")},
-		outputstatus: configv1.InfrastructureStatus{Platform: configv1.PlatformType("random")},
-		actions:      0,
+		outputstatus: configv1.InfrastructureStatus{Platform: configv1.PlatformType("random"), PlatformStatus: &configv1.PlatformStatus{Type: "random"}},
+		actions:      1,
+	}, {
+		inputstatus: configv1.InfrastructureStatus{Platform: configv1.PlatformType("oldType"), PlatformStatus: &configv1.PlatformStatus{Type: "newType"}},
+		err:         `^Mis-match between status\.platform \(oldType\) and status\.platformStatus\.type \(newType\) in infrastructures\.config\.openshift\.io/cluster$`,
 	}, {
 		inputstatus:  configv1.InfrastructureStatus{Platform: configv1.AzurePlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AzurePlatformType}},
 		outputstatus: configv1.InfrastructureStatus{Platform: configv1.AzurePlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AzurePlatformType}},
@@ -179,14 +182,14 @@ sshKey: REDACTED`,
 			cm := &corev1.ConfigMap{ObjectMeta: metav1.ObjectMeta{Name: "cluster-config-v1", Namespace: "kube-system"}, Data: test.inputdata}
 			fake := fake.NewSimpleClientset(cm)
 
-			ctrl := MigrationAWSStatusController{
+			ctrl := MigrationPlatformStatusController{
 				infraClient:     fakeConfig.ConfigV1().Infrastructures(),
 				infraLister:     configv1listers.NewInfrastructureLister(indexerInfra),
 				configMapClient: fake.CoreV1(),
 			}
 
 			err := ctrl.sync(context.TODO(),
-				factory.NewSyncContext("MigrationAWSStatusController", events.NewInMemoryRecorder("MigrationAWSStatusController")))
+				factory.NewSyncContext("MigrationPlatformStatusController", events.NewInMemoryRecorder("MigrationPlatformStatusController")))
 			if test.err == "" {
 				assert.NoError(t, err)
 				assert.Equal(t, test.actions, len(fakeConfig.Actions()))
@@ -196,7 +199,7 @@ sshKey: REDACTED`,
 					got.Status = obj.Status
 				}
 				assert.EqualValues(t, test.outputstatus, got.Status)
-			} else {
+			} else if assert.Error(t, err) {
 				assert.Regexp(t, test.err, err.Error())
 			}
 		})
