@@ -359,8 +359,8 @@ github.com/opencontainers/image-spec v1.0.1/go.mod h1:BtxoFyWECRxE4U/7sNtV5W15zM
 github.com/opencontainers/runc v0.0.0-20191031171055-b133feaeeb2e/go.mod h1:qT5XzbpPznkRYVz/mWwUaVBUv2rmF59PVA73FjuZG0U=
 github.com/openshift/api v0.0.0-20200827090112-c05698d102cf h1:s/d912Y7MW7bD/6XNL0gMe6lC0zPiDjq5w8u0OyCSpc=
 github.com/openshift/api v0.0.0-20200827090112-c05698d102cf/go.mod h1:M3xexPhgM8DISzzRpuFUy+jfPjQPIcs9yqEYj17mXV8=
-github.com/openshift/api v0.0.0-20201204152819-09f84eef6831 h1:IRWNPtluPwawfvm+gFGadiYsAGOMkH994tyvmrJ8GZg=
-github.com/openshift/api v0.0.0-20201204152819-09f84eef6831/go.mod h1:RDvBcRQMGLa3aNuDuejVBbTEQj/2i14NXdpOLqbNBvM=
+github.com/openshift/api v0.0.0-20201208083914-00b94418cb39 h1:M4r+CXxhg9yn9XqI9DyvN2o2LHy7ZS8z9tz1yj5IvPU=
+github.com/openshift/api v0.0.0-20201208083914-00b94418cb39/go.mod h1:RDvBcRQMGLa3aNuDuejVBbTEQj/2i14NXdpOLqbNBvM=
 github.com/openshift/build-machinery-go v0.0.0-20200819073603-48aa266c95f7 h1:mOq7Mg1Q9d7nIDxe1SJ6pluMBQsbVxa6olyAGmfYWTg=
 github.com/openshift/build-machinery-go v0.0.0-20200819073603-48aa266c95f7/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/openshift/build-machinery-go v0.0.0-20200917070002-f171684f77ab h1:lBrojddP6C9C2p67EMs2vcdpC8eF+H0DDom+fgI2IF0=
