@@ -4,23 +4,38 @@ COPY . .
 ENV GO_PACKAGE github.com/openshift/cluster-config-operator
 RUN make build --warn-undefined-variables
 
+# copier copies all manifests from builder (openshift/api) and from the operator image
+FROM registry.ci.openshift.org/ocp/4.8:base AS copier
+RUN mkdir -p /crd-manifests && mkdir -p /bootkube-manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/config/v1/*_config-operator_*.yaml /bootkube-manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/quota/v1/*.yaml /bootkube-manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/security/v1/*.yaml /bootkube-manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/securityinternal/v1/*.yaml /bootkube-manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/authorization/v1/*.yaml /bootkube-manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /bootkube-manifests
+COPY vendor/github.com/openshift/api/config/v1/*_config-operator_*.yaml /crd-manifests
+COPY vendor/github.com/openshift/api/quota/v1/*.yaml /crd-manifests
+COPY vendor/github.com/openshift/api/security/v1/*.yaml /crd-manifests
+COPY vendor/github.com/openshift/api/securityinternal/v1/*.yaml /crd-manifests
+COPY vendor/github.com/openshift/api/authorization/v1/*.yaml /crd-manifests
+COPY vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /crd-manifests
+COPY vendor/github.com/openshift/api/operator/v1/0000_10_config-operator_*.yaml /crd-manifests
+
+# labeler label all CRD manifests using openshift.io/installed-by=cluster-config-operator
+FROM registry.ci.openshift.org/ocp/4.8:cli AS labeler
+ENV KUBERNETES_MASTER=localhost
+RUN mkdir -p /bootkube-manifests-labeled && mkdir -p /crd-manifests-labeled
+COPY --from=copier bootkube-manifests /bootkube-manifests
+RUN cd /bootkube-manifests && find -type f -name '*.yaml' -exec bash -c 'oc label -o yaml --local -f {} openshift.io/installed-by=cluster-config-operator > /bootkube-manifests-labeled/{}' \;
+COPY --from=copier crd-manifests /crd-manifests
+RUN cd /crd-manifests && find -type f -name '*.yaml' -exec bash -c 'oc label -o yaml --local -f {} openshift.io/installed-by=cluster-config-operator > /crd-manifests-labeled/{}' \;
+
 FROM registry.ci.openshift.org/ocp/4.8:base
-RUN mkdir -p /usr/share/bootkube/manifests/manifests
-RUN mkdir -p /usr/share/bootkube/manifests/bootstrap-manifests
-COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/config/v1/*_config-operator_*.yaml /usr/share/bootkube/manifests/manifests
-COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/quota/v1/*.yaml /usr/share/bootkube/manifests/manifests
-COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/security/v1/*.yaml /usr/share/bootkube/manifests/manifests
-COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/securityinternal/v1/*.yaml /usr/share/bootkube/manifests/manifests
-COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/authorization/v1/*.yaml /usr/share/bootkube/manifests/manifests
-COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /usr/share/bootkube/manifests/manifests
-COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/cluster-config-operator /usr/bin/
+# copy this operator manifests first together with empty resources
 COPY manifests /manifests
-COPY vendor/github.com/openshift/api/config/v1/*_config-operator_*.yaml /manifests
-COPY vendor/github.com/openshift/api/quota/v1/*.yaml /manifests
-COPY vendor/github.com/openshift/api/security/v1/*.yaml /manifests
-COPY vendor/github.com/openshift/api/securityinternal/v1/*.yaml /manifests
-COPY vendor/github.com/openshift/api/authorization/v1/*.yaml /manifests
-COPY vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /manifests
-COPY vendor/github.com/openshift/api/operator/v1/0000_10_config-operator_*.yaml /manifests
 COPY empty-resources /manifests
+COPY --from=labeler bootkube-manifests-labeled /usr/share/bootkube/manifests/manifests
+COPY --from=labeler crd-manifests-labeled /manifests
+
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/cluster-config-operator /usr/bin/
 LABEL io.openshift.release.operator true
