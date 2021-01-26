@@ -19,12 +19,13 @@ import (
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/genericoperatorclient"
 	"github.com/openshift/library-go/pkg/operator/loglevel"
+	"github.com/openshift/library-go/pkg/operator/staleconditions"
 	"github.com/openshift/library-go/pkg/operator/status"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
 	"github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
-	"github.com/openshift/cluster-config-operator/pkg/operator/migration_aws_status"
+	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorloglevel"
 )
@@ -77,7 +78,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		controllerContext.EventRecorder,
 	)
 
-	migrationAWSStatusController := migration_aws_status.NewController(
+	migrationPlatformStatusController := migration_platform_status.NewController(
 		operatorClient,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().Infrastructures().Lister(),
@@ -140,6 +141,15 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		return updateErr
 	}).ToController("ConfigOperatorController", controllerContext.EventRecorder)
 
+	// The MigrationAWSStatus controller has been renamed to MigrationPlatformStatus. Consequently, the
+	// MigrationAWSStatusControllerDegraded conditions has been replaced with the
+	// MigrationPlatformStatusControllerDegraded condition. The old condition is stale and should be removed.
+	staleConditionsController := staleconditions.NewRemoveStaleConditionsController(
+		[]string{"MigrationAWSStatusControllerDegraded"},
+		operatorClient,
+		controllerContext.EventRecorder,
+	)
+
 	go dynamicInformers.Start(ctx.Done())
 	go configInformers.Start(ctx.Done())
 	go kubeInformersForNamespaces.Start(ctx.Done())
@@ -149,8 +159,9 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go logLevelController.Run(ctx, 1)
 	go statusController.Run(ctx, 1)
 	go operatorController.Run(ctx, 1)
-	go migrationAWSStatusController.Run(ctx, 1)
+	go migrationPlatformStatusController.Run(ctx, 1)
 	go logLevelNormalizer.Run(ctx, 1)
+	go staleConditionsController.Run(ctx, 1)
 
 	<-ctx.Done()
 	return nil
