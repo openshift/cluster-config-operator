@@ -23,6 +23,7 @@ spec:
         app: openshift-config-operator
     spec:
       serviceAccountName: openshift-config-operator
+      priorityClassName: "system-cluster-critical"
       volumes:
       - name: serving-cert
         secret:
