@@ -6,7 +6,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/ghodss/yaml v1.0.1-0.20190212211648-25d852aebe32 // indirect
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
-	github.com/openshift/api v0.0.0-20210208192252-670ac3fc997c
+	github.com/openshift/api v0.0.0-20210315130343-ff0ef568c9ca
 	github.com/openshift/build-machinery-go v0.0.0-20210202172015-e79b2a6f0d96
 	github.com/openshift/client-go v0.0.0-20210112165513-ebc401615f47
 	github.com/openshift/library-go v0.0.0-20210127081712-a4f002827e42
