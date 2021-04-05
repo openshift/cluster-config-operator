@@ -22,3 +22,5 @@ require (
 	k8s.io/klog v1.0.0
 	sigs.k8s.io/yaml v1.2.0
 )
+
+replace github.com/openshift/api => github.com/patrickdillon/api v0.0.0-20210310201738-f2cf6172ab11
