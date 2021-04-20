@@ -20,7 +20,7 @@ spec:
     metadata:
       name: openshift-config-operator
       annotations:
-        workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+        target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
       labels:
         app: openshift-config-operator
     spec:
