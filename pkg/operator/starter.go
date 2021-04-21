@@ -24,6 +24,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
+	"github.com/openshift/cluster-config-operator/pkg/operator/aws_resource_tags"
 	"github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
@@ -85,6 +86,14 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		configInformers.Config().V1().Infrastructures().Informer(),
 		v1helpers.CachedConfigMapGetter(kubeClient.CoreV1(), kubeInformersForNamespaces),
 		kubeInformersForNamespaces.InformersFor("kube-system").Core().V1().ConfigMaps().Informer(),
+		controllerContext.EventRecorder,
+	)
+
+	awsResourceTagsController := aws_resource_tags.NewController(
+		operatorClient,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().Infrastructures().Lister(),
+		configInformers.Config().V1().Infrastructures().Informer(),
 		controllerContext.EventRecorder,
 	)
 
@@ -160,6 +169,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go statusController.Run(ctx, 1)
 	go operatorController.Run(ctx, 1)
 	go migrationPlatformStatusController.Run(ctx, 1)
+	go awsResourceTagsController.Run(ctx, 1)
 	go logLevelNormalizer.Run(ctx, 1)
 	go staleConditionsController.Run(ctx, 1)
 
