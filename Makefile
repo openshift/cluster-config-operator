@@ -19,6 +19,8 @@ IMAGE_REGISTRY?=registry.svc.ci.openshift.org
 # It will generate target "image-$(1)" for builing the image an binding it as a prerequisite to target "images".
 $(call build-image,ocp-cluster-config-operator,$(IMAGE_REGISTRY)/ocp/4.2:cluster-config-operator,./Dockerfile.rhel7,.)
 
+$(call verify-golang-versions,Dockerfile.rhel7)
+
 clean:
 	$(RM) ./cluster-config-operator
 .PHONY: clean
