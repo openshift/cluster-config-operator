@@ -8,7 +8,6 @@ import (
 	"github.com/davecgh/go-spew/spew"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -24,10 +23,9 @@ import (
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
-	"github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
+	kubecloudconfig "github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
-	"github.com/openshift/cluster-config-operator/pkg/operator/operatorloglevel"
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
@@ -39,10 +37,6 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	configClient, err := configv1client.NewForConfig(controllerContext.KubeConfig)
 	if err != nil {
 		return err
-	}
-	dynamicClient, err := dynamic.NewForConfig(controllerContext.KubeConfig)
-	if err != nil {
-		return nil
 	}
 
 	configInformers := configv1informers.NewSharedInformerFactory(configClient, 10*time.Minute)
@@ -64,8 +58,6 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		configInformers.Config().V1().Infrastructures().Informer(),
 		controllerContext.EventRecorder,
 	)
-
-	logLevelNormalizer := operatorloglevel.NewLogLevelNormalizer(dynamicClient, operatorClient, controllerContext.EventRecorder)
 
 	kubeCloudConfigController := kubecloudconfig.NewController(
 		operatorClient,
@@ -160,7 +152,6 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go statusController.Run(ctx, 1)
 	go operatorController.Run(ctx, 1)
 	go migrationPlatformStatusController.Run(ctx, 1)
-	go logLevelNormalizer.Run(ctx, 1)
 	go staleConditionsController.Run(ctx, 1)
 
 	<-ctx.Done()
