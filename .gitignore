@@ -12,5 +12,5 @@
 *.out
 
 _output/
-
+.idea
 cluster-config-operator
