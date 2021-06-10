@@ -7,5 +7,4 @@ metadata:
     include.release.openshift.io/single-node-developer: "true"
 preemptionPolicy: PreemptLowerPriority
 value: 1000000000
-globalDefault: false
 description: "This priority class should be used for user facing OpenShift workload pods only."
