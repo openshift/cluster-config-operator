@@ -122,7 +122,7 @@ func (c KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.Syn
 	} else { // apply the target
 		target.Name = targetCloudConfigMap
 		target.Namespace = operatorclient.GlobalMachineSpecifiedConfigNamespace
-		_, updated, err := resourceapply.ApplyConfigMap(c.configMapClient, syncCtx.Recorder(), target)
+		_, updated, err := resourceapply.ApplyConfigMap(ctx, c.configMapClient, syncCtx.Recorder(), target)
 		if err != nil {
 			return err
 		}
