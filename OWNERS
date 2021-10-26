@@ -3,9 +3,11 @@ reviewers:
   - mfojtik
   - sttts
   - soltysh
+  - tkashem
 approvers:
   - deads2k
   - mfojtik
   - sttts
   - soltysh
+  - tkashem
 component: config-operator
