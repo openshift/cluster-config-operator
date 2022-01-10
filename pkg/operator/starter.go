@@ -110,7 +110,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	// As this operator does not manage any component/workload, report this operator as available and not progressing by default.
 	// TODO: Revisit this with full controller at some point.
 	operatorController := factory.New().ResyncEvery(10*time.Second).WithSync(func(ctx context.Context, controllerContext factory.SyncContext) error {
-		operatorStatus, updated, updateErr := v1helpers.UpdateStatus(operatorClient,
+		operatorStatus, updated, updateErr := v1helpers.UpdateStatus(ctx, operatorClient,
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:   "OperatorAvailable",
 				Status: operatorv1.ConditionTrue,
