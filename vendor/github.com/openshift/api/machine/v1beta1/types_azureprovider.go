@@ -282,7 +282,25 @@ type DataDisk struct {
 	// +optional
 	// +kubebuilder:validation:Enum=None;ReadOnly;ReadWrite
 	CachingType CachingTypeOption `json:"cachingType,omitempty"`
+	// DeletionPolicy specifies the data disk deletion policy upon Machine deletion.
+	// Possible values are "Delete","Detach".
+	// When "Delete" is used the data disk is deleted when the Machine is deleted.
+	// When "Detach" is used the data disk is detached from the Machine and retained when the Machine is deleted.
+	// +kubebuilder:validation:Enum=Delete;Detach
+	// +kubebuilder:validation:Required
+	DeletionPolicy DiskDeletionPolicyType `json:"deletionPolicy"`
 }
+
+// DiskDeletionPolicyType defines the possible values for DeletionPolicy.
+type DiskDeletionPolicyType string
+
+// These are the valid DiskDeletionPolicyType values.
+const (
+	// DiskDeletionPolicyTypeDelete means the DiskDeletionPolicyType is "Delete".
+	DiskDeletionPolicyTypeDelete DiskDeletionPolicyType = "Delete"
+	// DiskDeletionPolicyTypeDetach means the DiskDeletionPolicyType is "Detach".
+	DiskDeletionPolicyTypeDetach DiskDeletionPolicyType = "Detach"
+)
 
 // CachingTypeOption defines the different values for a CachingType.
 type CachingTypeOption string
@@ -389,8 +407,8 @@ type AzureUltraSSDCapabilityState string
 
 // These are the valid AzureUltraSSDCapabilityState states.
 const (
-	// "AzureUltraSSDCapabilityTrue" means the Azure UltraSSDCapability is Enabled
-	AzureUltraSSDCapabilityTrue AzureUltraSSDCapabilityState = "Enabled"
-	// "AzureUltraSSDCapabilityFalse" means the Azure UltraSSDCapability is Disabled
-	AzureUltraSSDCapabilityFalse AzureUltraSSDCapabilityState = "Disabled"
+	// "AzureUltraSSDCapabilityEnabled" means the Azure UltraSSDCapability is Enabled
+	AzureUltraSSDCapabilityEnabled AzureUltraSSDCapabilityState = "Enabled"
+	// "AzureUltraSSDCapabilityDisabled" means the Azure UltraSSDCapability is Disabled
+	AzureUltraSSDCapabilityDisabled AzureUltraSSDCapabilityState = "Disabled"
 )
