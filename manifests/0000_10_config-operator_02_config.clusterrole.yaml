@@ -28,6 +28,7 @@ rules:
   - projects
   - proxies
   - schedulers
+  - nodes
   verbs:
   - get
   - list

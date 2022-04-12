@@ -7,7 +7,7 @@ require (
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
 	github.com/openshift/api v0.0.0-20220411210816-c3bb724c282a
 	github.com/openshift/build-machinery-go v0.0.0-20211213093930-7e33a7eb4ce3
-	github.com/openshift/client-go v0.0.0-20220316161609-20d926360175
+	github.com/openshift/client-go v0.0.0-20220411091747-c100636b0bc0
 	github.com/openshift/library-go v0.0.0-20211220195323-eca2c467c492
 	github.com/spf13/cobra v1.2.1
 	github.com/spf13/pflag v1.0.5
