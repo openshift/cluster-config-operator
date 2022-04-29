@@ -24,6 +24,11 @@ spec:
       labels:
         app: openshift-config-operator
     spec:
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 65534
+        seccompProfile:
+          type: RuntimeDefault
       serviceAccountName: openshift-config-operator
       priorityClassName: "system-cluster-critical"
       volumes:
@@ -33,6 +38,10 @@ spec:
           optional: true
       containers:
       - name: openshift-config-operator
+        securityContext:
+          allowPrivilegeEscalation: false
+          capabilities:
+            drop: ["ALL"]
         terminationMessagePolicy: FallbackToLogsOnError
         image: quay.io/openshift/origin-cluster-config-operator:v4.0
         imagePullPolicy: IfNotPresent
