@@ -26,6 +26,7 @@ import (
 	kubecloudconfig "github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
+	"github.com/openshift/cluster-config-operator/pkg/operator/powervs_platform_custom_service"
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
@@ -52,6 +53,14 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	}
 
 	infraController := aws_platform_service_location.NewController(
+		operatorClient,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().Infrastructures().Lister(),
+		configInformers.Config().V1().Infrastructures().Informer(),
+		controllerContext.EventRecorder,
+	)
+
+	powervsCustomServiceController := powervs_platform_custom_service.NewController(
 		operatorClient,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().Infrastructures().Lister(),
@@ -147,6 +156,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go kubeInformersForNamespaces.Start(ctx.Done())
 
 	go infraController.Run(ctx, 1)
+	go powervsCustomServiceController.Run(ctx, 1)
 	go kubeCloudConfigController.Run(ctx, 1)
 	go logLevelController.Run(ctx, 1)
 	go statusController.Run(ctx, 1)
