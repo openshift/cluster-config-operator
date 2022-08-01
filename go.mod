@@ -110,3 +110,5 @@ require (
 	sigs.k8s.io/kube-storage-version-migrator v0.0.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.1 // indirect
 )
+
+replace github.com/openshift/api => github.com/creydr/openshift-api v0.0.0-20220801071853-a2df920b4a44
