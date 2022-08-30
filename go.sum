@@ -492,8 +492,8 @@ github.com/onsi/gomega v1.7.1/go.mod h1:XdKZgCCFLUoM/7CFJVPcG8C1xQ1AJ0vpAezJrB7J
 github.com/onsi/gomega v1.10.1 h1:o0+MgICZLuZ7xjH7Vx6zS/zcu93/BEp1VwkIW1mEXCE=
 github.com/onsi/gomega v1.10.1/go.mod h1:iN09h71vgCQne3DLsj+A5owkum+a2tYe+TOCB1ybHNo=
 github.com/openshift/api v0.0.0-20220819133013-d8b9c3791a1a/go.mod h1:6lal7JeRpbdE/h4S12xH1ZRKMmrcyNQHnSKJ3akGXNc=
-github.com/openshift/api v0.0.0-20220824134416-0f86a223d4bc h1:eyekUQsj1K7hBrcxGfH4rMqolBlorS+4waaEWqVUC7o=
-github.com/openshift/api v0.0.0-20220824134416-0f86a223d4bc/go.mod h1:6lal7JeRpbdE/h4S12xH1ZRKMmrcyNQHnSKJ3akGXNc=
+github.com/openshift/api v0.0.0-20220825161013-fc30c3941796 h1:weNl7okY4jG3rhD/xiHMmOQvxmCdJ6x/6fTGn2od8qs=
+github.com/openshift/api v0.0.0-20220825161013-fc30c3941796/go.mod h1:6lal7JeRpbdE/h4S12xH1ZRKMmrcyNQHnSKJ3akGXNc=
 github.com/openshift/build-machinery-go v0.0.0-20211213093930-7e33a7eb4ce3 h1:65oBhJYHzYK5VL0gF1eiYY37lLzyLZ47b9y5Kib1nf8=
 github.com/openshift/build-machinery-go v0.0.0-20211213093930-7e33a7eb4ce3/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/openshift/client-go v0.0.0-20220819185518-59c7387c324b h1:leC+4Ry3StrERpMH1IotuhoPwts3Y86dWO2ra40Pp80=
