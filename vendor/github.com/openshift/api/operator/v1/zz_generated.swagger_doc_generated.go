@@ -300,15 +300,15 @@ func (DeveloperConsoleCatalogCustomization) SwaggerDoc() map[string]string {
 	return map_DeveloperConsoleCatalogCustomization
 }
 
-var map_DeveloperConsoleCatalogTypesState = map[string]string{
-	"":         "DeveloperConsoleCatalogTypesState defines the state of the sub-catalog types.",
+var map_DeveloperConsoleCatalogTypes = map[string]string{
+	"":         "DeveloperConsoleCatalogTypes defines the state of the sub-catalog types.",
 	"state":    "state defines if a list of catalog types should be enabled or disabled.",
 	"enabled":  "enabled is a list of developer catalog types (sub-catalogs IDs) that will be shown to users. Types (sub-catalogs) are added via console plugins, the available types (sub-catalog IDs) are available in the console on the cluster configuration page, or when editing the YAML in the console. Example: \"Devfile\", \"HelmChart\", \"BuilderImage\" If the list is non-empty, a new type will not be shown to the user until it is added to list. If the list is empty the complete developer catalog will be shown.",
 	"disabled": "disabled is a list of developer catalog types (sub-catalogs IDs) that are not shown to users. Types (sub-catalogs) are added via console plugins, the available types (sub-catalog IDs) are available in the console on the cluster configuration page, or when editing the YAML in the console. Example: \"Devfile\", \"HelmChart\", \"BuilderImage\" If the list is empty or all the available sub-catalog types are added, then the complete developer catalog should be hidden.",
 }
 
-func (DeveloperConsoleCatalogTypesState) SwaggerDoc() map[string]string {
-	return map_DeveloperConsoleCatalogTypesState
+func (DeveloperConsoleCatalogTypes) SwaggerDoc() map[string]string {
+	return map_DeveloperConsoleCatalogTypes
 }
 
 var map_Perspective = map[string]string{
@@ -468,8 +468,8 @@ func (DNS) SwaggerDoc() map[string]string {
 
 var map_DNSCache = map[string]string{
 	"":            "DNSCache defines the fields for configuring DNS caching.",
-	"positiveTTL": "positiveTTL is optional and specifies the amount of time that a positive response should be cached.\n\nIf configured, it must be a value of 1s (1 second) or greater up to a theoretical maximum of several years. If not configured, the value will be 0 (zero) and OpenShift will use a default value of 900 seconds unless noted otherwise in the respective Corefile for your version of OpenShift. The default value of 900 seconds is subject to change. This field expects an unsigned duration string of decimal numbers, each with optional fraction and a unit suffix, e.g. \"100s\", \"1m30s\". Valid time units are \"s\", \"m\", and \"h\".",
-	"negativeTTL": "negativeTTL is optional and specifies the amount of time that a negative response should be cached.\n\nIf configured, it must be a value of 1s (1 second) or greater up to a theoretical maximum of several years. If not configured, the value will be 0 (zero) and OpenShift will use a default value of 30 seconds unless noted otherwise in the respective Corefile for your version of OpenShift. The default value of 30 seconds is subject to change. This field expects an unsigned duration string of decimal numbers, each with optional fraction and a unit suffix, e.g. \"100s\", \"1m30s\". Valid time units are \"s\", \"m\", and \"h\".",
+	"positiveTTL": "positiveTTL is optional and specifies the amount of time that a positive response should be cached.\n\nIf configured, it must be a value of 1s (1 second) or greater up to a theoretical maximum of several years. This field expects an unsigned duration string of decimal numbers, each with optional fraction and a unit suffix, e.g. \"100s\", \"1m30s\", \"12h30m10s\". Values that are fractions of a second are rounded down to the nearest second. If the configured value is less than 1s, the default value will be used. If not configured, the value will be 0s and OpenShift will use a default value of 900 seconds unless noted otherwise in the respective Corefile for your version of OpenShift. The default value of 900 seconds is subject to change.",
+	"negativeTTL": "negativeTTL is optional and specifies the amount of time that a negative response should be cached.\n\nIf configured, it must be a value of 1s (1 second) or greater up to a theoretical maximum of several years. This field expects an unsigned duration string of decimal numbers, each with optional fraction and a unit suffix, e.g. \"100s\", \"1m30s\", \"12h30m10s\". Values that are fractions of a second are rounded down to the nearest second. If the configured value is less than 1s, the default value will be used. If not configured, the value will be 0s and OpenShift will use a default value of 30 seconds unless noted otherwise in the respective Corefile for your version of OpenShift. The default value of 30 seconds is subject to change.",
 }
 
 func (DNSCache) SwaggerDoc() map[string]string {
