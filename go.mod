@@ -7,8 +7,8 @@ require (
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
 	github.com/openshift/api v0.0.0-20220927015011-24ee13c10f3b
 	github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
-	github.com/openshift/client-go v0.0.0-20220819185518-59c7387c324b
-	github.com/openshift/library-go v0.0.0-20220808125832-84c00ba9649a
+	github.com/openshift/client-go v0.0.0-20220831193253-4950ae70c8ea
+	github.com/openshift/library-go v0.0.0-20221111030555-73ed40c0a938
 	github.com/spf13/cobra v1.4.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.7.0
@@ -83,7 +83,7 @@ require (
 	go.uber.org/atomic v1.7.0 // indirect
 	go.uber.org/multierr v1.6.0 // indirect
 	go.uber.org/zap v1.19.0 // indirect
-	golang.org/x/crypto v0.0.0-20220315160706-3147a52a75dd // indirect
+	golang.org/x/crypto v0.0.0-20220331220935-ae2d96664a29 // indirect
 	golang.org/x/net v0.0.0-20220722155237-a158d28d115b // indirect
 	golang.org/x/oauth2 v0.0.0-20220411215720-9780585627b5 // indirect
 	golang.org/x/sync v0.0.0-20220722155255-886fb9371eb4 // indirect
@@ -100,9 +100,9 @@ require (
 	gopkg.in/warnings.v0 v0.1.1 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
-	k8s.io/apiextensions-apiserver v0.24.0 // indirect
+	k8s.io/apiextensions-apiserver v0.25.0 // indirect
 	k8s.io/apiserver v0.25.0 // indirect
-	k8s.io/kube-aggregator v0.24.0 // indirect
+	k8s.io/kube-aggregator v0.25.0 // indirect
 	k8s.io/kube-openapi v0.0.0-20220803162953-67bda5d908f1 // indirect
 	k8s.io/utils v0.0.0-20220728103510-ee6ede2d64ed // indirect
 	sigs.k8s.io/apiserver-network-proxy/konnectivity-client v0.0.32 // indirect
