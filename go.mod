@@ -110,3 +110,6 @@ require (
 	sigs.k8s.io/kube-storage-version-migrator v0.0.4 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.2.3 // indirect
 )
+
+// Use BGP config from https://github.com/openshift/api/pull/1321
+replace github.com/openshift/api => github.com/shiftstack/api v0.0.0-20221214020534-aa181038a087
