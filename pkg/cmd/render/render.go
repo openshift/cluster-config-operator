@@ -3,6 +3,9 @@ package render
 import (
 	"fmt"
 	"io/ioutil"
+	"os"
+
+	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
@@ -24,13 +27,17 @@ type renderOpts struct {
 	clusterInfrastructureInputFile string
 	cloudProviderConfigInputFile   string
 	cloudProviderConfigOutputFile  string
+	// this file will be both input AND output
+	featureGateManifestFile string
+	payloadVersion          string
 }
 
 // NewRenderCommand creates a render command.
 func NewRenderCommand() *cobra.Command {
 	renderOpts := renderOpts{
-		generic:  *genericrenderoptions.NewGenericOptions(),
-		manifest: *genericrenderoptions.NewManifestOptions("config", "openshift/origin-cluster-config-operator:latest"),
+		generic:        *genericrenderoptions.NewGenericOptions(),
+		manifest:       *genericrenderoptions.NewManifestOptions("config", "openshift/origin-cluster-config-operator:latest"),
+		payloadVersion: "0.0.1-snapshot",
 	}
 	cmd := &cobra.Command{
 		Use:   "render",
@@ -67,6 +74,9 @@ func (r *renderOpts) AddFlags(fs *pflag.FlagSet) {
 
 	// This is the generated kube cloud config
 	fs.StringVar(&r.cloudProviderConfigOutputFile, "cloud-provider-config-output-file", r.cloudProviderConfigOutputFile, "Output path for the generated cloud provider config file.")
+
+	fs.StringVar(&r.featureGateManifestFile, "featuregate-manifest", r.featureGateManifestFile, "Path for the FeatureGate.config.openshift.io that will be modified with completed status for use in other bootstrapping steps.")
+	fs.StringVar(&r.payloadVersion, "payload-version", r.payloadVersion, "Version that will eventually be placed into ClusterOperator.status.  This normally comes from the CVO set via env var: OPERATOR_IMAGE_VERSION.")
 
 }
 
@@ -120,6 +130,25 @@ func (r *renderOpts) Run() error {
 			return err
 		}
 		// TODO I'm thinking we parse this into a map and reference it that way
+	}
+
+	if len(r.featureGateManifestFile) > 0 {
+		featureGateBytes, err := os.ReadFile(r.featureGateManifestFile)
+		if err != nil {
+			return err
+		}
+
+		featureGates := ReadFeatureGateV1OrDie(featureGateBytes)
+		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.payloadVersion)
+		if err != nil {
+			return err
+		}
+		featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
+
+		featureGateOutBytes := WriteFeatureGateV1OrDie(featureGates)
+		if err := os.WriteFile(r.featureGateManifestFile, []byte(featureGateOutBytes), 0644); err != nil {
+			return err
+		}
 	}
 
 	if err := r.manifest.ApplyTo(&renderConfig.ManifestConfig); err != nil {

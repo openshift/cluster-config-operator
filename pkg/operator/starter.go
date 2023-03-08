@@ -5,6 +5,8 @@ import (
 	"os"
 	"time"
 
+	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
+
 	"github.com/davecgh/go-spew/spew"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -29,6 +31,8 @@ import (
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
+	operatorVersion := os.Getenv("OPERATOR_IMAGE_VERSION")
+
 	// This kube client use protobuf, do not use it for CR
 	kubeClient, err := kubernetes.NewForConfig(controllerContext.ProtoKubeConfig)
 	if err != nil {
@@ -50,6 +54,31 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	if err != nil {
 		return err
 	}
+
+	// don't change any versions until we sync
+	versionRecorder := status.NewVersionGetter()
+	clusterOperator, err := configClient.ConfigV1().ClusterOperators().Get(ctx, "config-operator", metav1.GetOptions{})
+	if err != nil && !errors.IsNotFound(err) {
+		return err
+	}
+	for _, version := range clusterOperator.Status.Versions {
+		versionRecorder.SetVersion(version.Name, version.Version)
+	}
+	// this prevents marking the feature-gates as upgraded during the upgrade that brings the new operand name into the version array.
+	if _, ok := versionRecorder.GetVersions()[featuregates.FeatureVersionName]; !ok {
+		versionRecorder.SetVersion(featuregates.FeatureVersionName, "")
+	}
+	versionRecorder.SetVersion("operator", operatorVersion)
+
+	featureGateController := featuregates.NewFeatureGateController(
+		operatorClient,
+		operatorVersion,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().FeatureGates(),
+		configInformers.Config().V1().ClusterVersions(),
+		versionRecorder,
+		controllerContext.EventRecorder,
+	)
 
 	infraController := aws_platform_service_location.NewController(
 		operatorClient,
@@ -79,17 +108,6 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		kubeInformersForNamespaces.InformersFor("kube-system").Core().V1().ConfigMaps().Informer(),
 		controllerContext.EventRecorder,
 	)
-
-	// don't change any versions until we sync
-	versionRecorder := status.NewVersionGetter()
-	clusterOperator, err := configClient.ConfigV1().ClusterOperators().Get(ctx, "config-operator", metav1.GetOptions{})
-	if err != nil && !errors.IsNotFound(err) {
-		return err
-	}
-	for _, version := range clusterOperator.Status.Versions {
-		versionRecorder.SetVersion(version.Name, version.Version)
-	}
-	versionRecorder.SetVersion("operator", os.Getenv("OPERATOR_IMAGE_VERSION"))
 
 	statusController := status.NewClusterOperatorStatusController(
 		"config-operator",
@@ -153,6 +171,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go operatorController.Run(ctx, 1)
 	go migrationPlatformStatusController.Run(ctx, 1)
 	go staleConditionsController.Run(ctx, 1)
+	go featureGateController.Run(ctx, 1)
 
 	<-ctx.Done()
 	return nil
