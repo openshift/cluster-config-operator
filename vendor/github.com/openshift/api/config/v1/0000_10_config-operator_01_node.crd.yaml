@@ -43,6 +43,9 @@ spec:
                     - v1
                     - v2
                     - ""
+                enablePodEvents:
+                  description: EnablePodEvents determines whether to enable the evented pleg feature to send the container events from the CRI-O through gRPC to the Kubelet
+                  type: boolean
                 workerLatencyProfile:
                   description: WorkerLatencyProfile determins the how fast the kubelet is updating the status and corresponding reaction of the cluster
                   type: string
