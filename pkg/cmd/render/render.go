@@ -164,6 +164,25 @@ func (r *renderOpts) Run() error {
 		return err
 	}
 
+	featureGateFiles := renderConfig.ListManifestOfType(configv1.GroupVersion.WithKind("FeatureGate"))
+	for _, featureGateFile := range featureGateFiles {
+		featureGatesObj, err := featureGateFile.GetDecodedObj()
+		if err != nil {
+			return err
+		}
+		featureGates := featureGatesObj.(*configv1.FeatureGate)
+		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.payloadVersion)
+		if err != nil {
+			return err
+		}
+		featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
+
+		featureGateOutBytes := WriteFeatureGateV1OrDie(featureGates)
+		if err := os.WriteFile(featureGateFile.OriginalFilename, []byte(featureGateOutBytes), 0644); err != nil {
+			return err
+		}
+	}
+
 	if err := genericrender.WriteFiles(&r.generic, &renderConfig.FileConfig, renderConfig); err != nil {
 		return err
 	}
