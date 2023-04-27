@@ -161,10 +161,10 @@ func featuresGatesFromFeatureSets(featureSetMap map[configv1.FeatureSet]*configv
 	return toFeatureGateNames(featureSet.Enabled), toFeatureGateNames(featureSet.Disabled), nil
 }
 
-func toFeatureGateNames(in []string) []configv1.FeatureGateName {
+func toFeatureGateNames(in []configv1.FeatureGateDescription) []configv1.FeatureGateName {
 	out := []configv1.FeatureGateName{}
 	for _, curr := range in {
-		out = append(out, configv1.FeatureGateName(curr))
+		out = append(out, curr.FeatureGateAttributes.Name)
 	}
 
 	return out

@@ -42,21 +42,21 @@ func (f *testFeatureGateBuilder) withFeatureSet(featureSet configv1.FeatureSet) 
 	return f
 }
 
-func (f *testFeatureGateBuilder) customEnabled(enabled ...string) *testFeatureGateBuilder {
+func (f *testFeatureGateBuilder) customEnabled(enabled ...configv1.FeatureGateName) *testFeatureGateBuilder {
 	f.featureSet = configv1.CustomNoUpgrade
 	f.customFeatures.Enabled = enabled
 
 	return f
 }
 
-func (f *testFeatureGateBuilder) customDisabled(disabled ...string) *testFeatureGateBuilder {
+func (f *testFeatureGateBuilder) customDisabled(disabled ...configv1.FeatureGateName) *testFeatureGateBuilder {
 	f.featureSet = configv1.CustomNoUpgrade
 	f.customFeatures.Disabled = disabled
 
 	return f
 }
 
-func (f *testFeatureGateBuilder) statusEnabled(version string, enabled ...string) *testFeatureGateBuilder {
+func (f *testFeatureGateBuilder) statusEnabled(version string, enabled ...configv1.FeatureGateName) *testFeatureGateBuilder {
 	for i, val := range f.statusVersionToFeatures {
 		if val.version == version {
 			f.statusVersionToFeatures[i].features.Enabled = enabled
@@ -73,7 +73,7 @@ func (f *testFeatureGateBuilder) statusEnabled(version string, enabled ...string
 	return f
 }
 
-func (f *testFeatureGateBuilder) statusDisabled(version string, disabled ...string) *testFeatureGateBuilder {
+func (f *testFeatureGateBuilder) statusDisabled(version string, disabled ...configv1.FeatureGateName) *testFeatureGateBuilder {
 	for i, val := range f.statusVersionToFeatures {
 		if val.version == version {
 			f.statusVersionToFeatures[i].features.Disabled = disabled
@@ -101,8 +101,8 @@ func (f *testFeatureGateBuilder) toFeatureGate() *configv1.FeatureGate {
 	}
 	if f.featureSet == configv1.CustomNoUpgrade {
 		ret.Spec.FeatureGateSelection.CustomNoUpgrade = &configv1.CustomFeatureGates{
-			Enabled:  toFeatureGateNames(f.customFeatures.Enabled),
-			Disabled: toFeatureGateNames(f.customFeatures.Disabled),
+			Enabled:  f.customFeatures.Enabled,
+			Disabled: f.customFeatures.Disabled,
 		}
 	}
 
@@ -111,10 +111,10 @@ func (f *testFeatureGateBuilder) toFeatureGate() *configv1.FeatureGate {
 			Version: features.version,
 		}
 		for _, curr := range features.features.Enabled {
-			details.Enabled = append(details.Enabled, configv1.FeatureGateAttributes{Name: configv1.FeatureGateName(curr)})
+			details.Enabled = append(details.Enabled, configv1.FeatureGateAttributes{Name: curr})
 		}
 		for _, curr := range features.features.Disabled {
-			details.Disabled = append(details.Disabled, configv1.FeatureGateAttributes{Name: configv1.FeatureGateName(curr)})
+			details.Disabled = append(details.Disabled, configv1.FeatureGateAttributes{Name: curr})
 		}
 		ret.Status.FeatureGates = append(ret.Status.FeatureGates, details)
 	}
@@ -124,27 +124,59 @@ func (f *testFeatureGateBuilder) toFeatureGate() *configv1.FeatureGate {
 
 var testingFeatureSets = map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled{
 	configv1.Default: {
-		Enabled: []string{
-			"Five",
-			"Six",
+		Enabled: []configv1.FeatureGateDescription{
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "Five",
+				},
+			},
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "Six",
+				},
+			},
 		},
-		Disabled: []string{
-			"Eggplant",
-			"FoieGras",
+		Disabled: []configv1.FeatureGateDescription{
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "Eggplant",
+				},
+			},
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "FoieGras",
+				},
+			},
 		},
 	},
 	configv1.CustomNoUpgrade: {
-		Enabled:  []string{},
-		Disabled: []string{},
+		Enabled:  []configv1.FeatureGateDescription{},
+		Disabled: []configv1.FeatureGateDescription{},
 	},
 	configv1.TechPreviewNoUpgrade: {
-		Enabled: []string{
-			"One",
-			"Two",
+		Enabled: []configv1.FeatureGateDescription{
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "One",
+				},
+			},
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "Two",
+				},
+			},
 		},
-		Disabled: []string{
-			"Apple",
-			"Banana",
+		Disabled: []configv1.FeatureGateDescription{
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "Apple",
+				},
+			},
+			{
+				FeatureGateAttributes: configv1.FeatureGateAttributes{
+					Name: "Banana",
+				},
+			},
 		},
 	},
 }
