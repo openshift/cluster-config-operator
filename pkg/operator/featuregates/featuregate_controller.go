@@ -4,6 +4,7 @@ import (
 	"context"
 	"fmt"
 	"reflect"
+	"sort"
 	"strings"
 	"time"
 
@@ -145,20 +146,22 @@ func (c FeatureGateController) sync(ctx context.Context, syncCtx factory.SyncCon
 	return nil
 }
 
-func featuresGatesFromFeatureSets(featureSetMap map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
+func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
 	if featureGates.Spec.FeatureSet == configv1.CustomNoUpgrade {
 		if featureGates.Spec.FeatureGateSelection.CustomNoUpgrade != nil {
-			return featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Enabled, featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Disabled, nil
+			completeEnabled, completeDisabled := completeFeatureGates(knownFeatureSets, featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Enabled, featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Disabled)
+			return completeEnabled, completeDisabled, nil
 		}
 		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, nil
 	}
 
-	featureSet, ok := featureSetMap[featureGates.Spec.FeatureSet]
+	featureSet, ok := knownFeatureSets[featureGates.Spec.FeatureSet]
 	if !ok {
 		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, fmt.Errorf(".spec.featureSet %q not found", featureSet)
 	}
 
-	return toFeatureGateNames(featureSet.Enabled), toFeatureGateNames(featureSet.Disabled), nil
+	completeEnabled, completeDisabled := completeFeatureGates(knownFeatureSets, toFeatureGateNames(featureSet.Enabled), toFeatureGateNames(featureSet.Disabled))
+	return completeEnabled, completeDisabled, nil
 }
 
 func toFeatureGateNames(in []configv1.FeatureGateDescription) []configv1.FeatureGateName {
@@ -168,6 +171,26 @@ func toFeatureGateNames(in []configv1.FeatureGateDescription) []configv1.Feature
 	}
 
 	return out
+}
+
+// completeFeatureGates identifies every known feature and ensures that is explicitly on or explicitly off
+func completeFeatureGates(knownFeatureSets map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, enabled, disabled []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName) {
+	specificallyEnabledFeatureGates := sets.New[configv1.FeatureGateName]()
+	specificallyEnabledFeatureGates.Insert(enabled...)
+
+	knownFeatureGates := sets.New[configv1.FeatureGateName]()
+	knownFeatureGates.Insert(enabled...)
+	knownFeatureGates.Insert(disabled...)
+	for _, known := range knownFeatureSets {
+		for _, curr := range known.Disabled {
+			knownFeatureGates.Insert(curr.FeatureGateAttributes.Name)
+		}
+		for _, curr := range known.Enabled {
+			knownFeatureGates.Insert(curr.FeatureGateAttributes.Name)
+		}
+	}
+
+	return enabled, knownFeatureGates.Difference(specificallyEnabledFeatureGates).UnsortedList()
 }
 
 func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate, currentVersion string) (*configv1.FeatureGateDetails, error) {
@@ -189,5 +212,20 @@ func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*c
 		})
 	}
 
+	// sort for stability
+	sort.Sort(byName(currentDetails.Enabled))
+	sort.Sort(byName(currentDetails.Disabled))
+
 	return &currentDetails, nil
+}
+
+type byName []configv1.FeatureGateAttributes
+
+func (a byName) Len() int      { return len(a) }
+func (a byName) Swap(i, j int) { a[i], a[j] = a[j], a[i] }
+func (a byName) Less(i, j int) bool {
+	if strings.Compare(string(a[i].Name), string(a[j].Name)) < 0 {
+		return true
+	}
+	return false
 }

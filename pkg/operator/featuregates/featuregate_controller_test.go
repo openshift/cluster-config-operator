@@ -221,7 +221,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 				expected := featureGateBuilder().
 					withFeatureSet(configv1.TechPreviewNoUpgrade).
 					statusEnabled("current-version", "One", "Two").
-					statusDisabled("current-version", "Apple", "Banana").
+					statusDisabled("current-version",
+						"Apple",    // specific
+						"Banana",   // specific
+						"Eggplant", // known
+						"Five",     // known
+						"FoieGras", // known
+						"Six",      // known
+					).
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
 					t.Fatal(spew.Sdump(actual))
@@ -234,7 +241,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 			firstFeatureGate: featureGateBuilder().
 				withFeatureSet(configv1.TechPreviewNoUpgrade).
 				statusEnabled("current-version", "One", "Two").
-				statusDisabled("current-version", "Apple", "Banana").
+				statusDisabled("current-version",
+					"Apple",    // specific
+					"Banana",   // specific
+					"Eggplant", // known
+					"Five",     // known
+					"FoieGras", // known
+					"Six",      // known
+				).
 				toFeatureGate(),
 			fields: fields{
 				processVersion: "current-version",
@@ -271,7 +285,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 				expected := featureGateBuilder().
 					withFeatureSet(configv1.Default).
 					statusEnabled("current-version", "Five", "Six").
-					statusDisabled("current-version", "Eggplant", "FoieGras").
+					statusDisabled("current-version",
+						"Apple",    // known
+						"Banana",   // known
+						"Eggplant", // specific
+						"FoieGras", // specific
+						"One",      // known
+						"Two",      // known
+					).
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
 					t.Fatal(spew.Sdump(actual))
@@ -304,6 +325,18 @@ func TestFeatureGateController_sync(t *testing.T) {
 					customDisabled("Kale", "Lettuce").
 					statusEnabled("current-version", "Eleven", "Twelve").
 					statusDisabled("current-version", "Kale", "Lettuce").
+					statusDisabled("current-version",
+						"Apple",    // known
+						"Banana",   // known
+						"Eggplant", // known
+						"Five",     // known
+						"FoieGras", // known
+						"Kale",     // specific
+						"Lettuce",  // specific
+						"One",      // known
+						"Six",      // known
+						"Two",      // known
+					).
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
 					t.Fatal(spew.Sdump(actual))
@@ -333,7 +366,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 				expected := featureGateBuilder().
 					withFeatureSet(configv1.TechPreviewNoUpgrade).
 					statusEnabled("current-version", "One", "Two").
-					statusDisabled("current-version", "Apple", "Banana").
+					statusDisabled("current-version",
+						"Apple",    // specific
+						"Banana",   // specific
+						"Eggplant", // known
+						"Five",     // known
+						"FoieGras", // known
+						"Six",      // known
+					).
 					statusEnabled("prior-version", "Fifteen", "Sixteen").
 					statusDisabled("prior-version", "Olive", "Potato").
 					toFeatureGate()
@@ -349,7 +389,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 			firstFeatureGate: featureGateBuilder().
 				withFeatureSet(configv1.TechPreviewNoUpgrade).
 				statusEnabled("current-version", "One", "Two").
-				statusDisabled("current-version", "Apple", "Banana").
+				statusDisabled("current-version",
+					"Apple",    // specific
+					"Banana",   // specific
+					"Eggplant", // known
+					"Five",     // known
+					"FoieGras", // known
+					"Six",      // known
+				).
 				statusEnabled("prior-version", "Fifteen", "Sixteen").
 				statusDisabled("prior-version", "Olive", "Potato"). // nearly left an 'e' here ;)
 				toFeatureGate(),
@@ -390,7 +437,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 				expected := featureGateBuilder().
 					withFeatureSet(configv1.Default).
 					statusEnabled("current-version", "Five", "Six").
-					statusDisabled("current-version", "Eggplant", "FoieGras").
+					statusDisabled("current-version",
+						"Apple",    // known
+						"Banana",   // known
+						"Eggplant", // specific
+						"FoieGras", // specific
+						"One",      // known
+						"Two",      // known
+					).
 					statusEnabled("prior-version", "Fifteen", "Sixteen").
 					statusDisabled("prior-version", "Olive", "Potato"). // nearly left an 'e' here ;)
 					toFeatureGate()
@@ -425,8 +479,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 				expected := featureGateBuilder().
 					withFeatureSet(configv1.Default).
 					statusEnabled("current-version", "Five", "Six").
-					statusDisabled("current-version", "Eggplant", "FoieGras").
-					toFeatureGate()
+					statusDisabled("current-version",
+						"Apple",    // known
+						"Banana",   // known
+						"Eggplant", // specific
+						"FoieGras", // specific
+						"One",      // known
+						"Two",      // known
+					).toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
 					t.Fatal(spew.Sdump(actual))
 				}
@@ -457,7 +517,14 @@ func TestFeatureGateController_sync(t *testing.T) {
 				expected := featureGateBuilder().
 					withFeatureSet(configv1.TechPreviewNoUpgrade).
 					statusEnabled("current-version", "One", "Two").
-					statusDisabled("current-version", "Apple", "Banana").
+					statusDisabled("current-version",
+						"Apple",    // specific
+						"Banana",   // specific
+						"Eggplant", // known
+						"Five",     // known
+						"FoieGras", // known
+						"Six",      // known
+					).
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
 					t.Fatal(spew.Sdump(actual))
