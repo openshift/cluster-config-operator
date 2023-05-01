@@ -9,6 +9,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/klog/v2"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -29,16 +30,16 @@ type renderOpts struct {
 	cloudProviderConfigOutputFile  string
 	// this file will be both input AND output
 	featureGateManifestFile string
-	payloadVersion          string
 }
 
 // NewRenderCommand creates a render command.
 func NewRenderCommand() *cobra.Command {
 	renderOpts := renderOpts{
-		generic:        *genericrenderoptions.NewGenericOptions(),
-		manifest:       *genericrenderoptions.NewManifestOptions("config", "openshift/origin-cluster-config-operator:latest"),
-		payloadVersion: "0.0.1-snapshot",
+		generic:  *genericrenderoptions.NewGenericOptions(),
+		manifest: *genericrenderoptions.NewManifestOptions("config", "openshift/origin-cluster-config-operator:latest"),
 	}
+	renderOpts.generic.PayloadVersion = "0.0.1-snapshot"
+
 	cmd := &cobra.Command{
 		Use:   "render",
 		Short: "Render kubernetes API server bootstrap manifests, secrets and configMaps",
@@ -76,7 +77,6 @@ func (r *renderOpts) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&r.cloudProviderConfigOutputFile, "cloud-provider-config-output-file", r.cloudProviderConfigOutputFile, "Output path for the generated cloud provider config file.")
 
 	fs.StringVar(&r.featureGateManifestFile, "featuregate-manifest", r.featureGateManifestFile, "Path for the FeatureGate.config.openshift.io that will be modified with completed status for use in other bootstrapping steps.")
-	fs.StringVar(&r.payloadVersion, "payload-version", r.payloadVersion, "Version that will eventually be placed into ClusterOperator.status.  This normally comes from the CVO set via env var: OPERATOR_IMAGE_VERSION.")
 
 }
 
@@ -139,7 +139,7 @@ func (r *renderOpts) Run() error {
 		}
 
 		featureGates := ReadFeatureGateV1OrDie(featureGateBytes)
-		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.payloadVersion)
+		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.generic.PayloadVersion)
 		if err != nil {
 			return err
 		}
@@ -164,22 +164,25 @@ func (r *renderOpts) Run() error {
 		return err
 	}
 
-	featureGateFiles := renderConfig.ListManifestOfType(configv1.GroupVersion.WithKind("FeatureGate"))
+	featureGateFiles, err := featureGateManifests(r.generic)
+	if err != nil {
+		return fmt.Errorf("problem with featuregate manifests: %w", err)
+	}
 	for _, featureGateFile := range featureGateFiles {
 		featureGatesObj, err := featureGateFile.GetDecodedObj()
 		if err != nil {
-			return err
+			return fmt.Errorf("error decoding FeatureGate: %w", err)
 		}
 		featureGates := featureGatesObj.(*configv1.FeatureGate)
-		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.payloadVersion)
+		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.generic.PayloadVersion)
 		if err != nil {
-			return err
+			return fmt.Errorf("error determining FeatureGates: %w", err)
 		}
 		featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
 
 		featureGateOutBytes := WriteFeatureGateV1OrDie(featureGates)
 		if err := os.WriteFile(featureGateFile.OriginalFilename, []byte(featureGateOutBytes), 0644); err != nil {
-			return err
+			return fmt.Errorf("error writing FeatureGate manifest: %w", err)
 		}
 	}
 
@@ -198,4 +201,48 @@ func (r *renderOpts) Run() error {
 	}
 
 	return nil
+}
+
+func featureGateManifests(o genericrenderoptions.GenericOptions) (genericrenderoptions.RenderedManifests, error) {
+	if len(o.RenderedManifestInputFilenames) == 0 {
+		return nil, fmt.Errorf("cannot return FeatureGate without rendered manifests")
+	}
+
+	inputManifest, err := o.ReadInputManifests()
+	if err != nil {
+		return nil, fmt.Errorf("error reading input manifests: %w", err)
+	}
+	featureGates := inputManifest.ListManifestOfType(configv1.GroupVersion.WithKind("FeatureGate"))
+	if len(featureGates) == 0 {
+		return nil, fmt.Errorf("no FeatureGates found in manfest dir: %v", o.RenderedManifestInputFilenames)
+	}
+
+	ret := genericrenderoptions.RenderedManifests{}
+
+	var prev *genericrenderoptions.RenderedManifest
+	var featureGate *configv1.FeatureGate
+	for i := range featureGates {
+		curr := featureGates[i]
+		ret = append(ret, curr)
+
+		decodedObj, err := curr.GetDecodedObj()
+		if err != nil {
+			return nil, fmt.Errorf("decoding failure for %q: %w", curr.OriginalFilename, err)
+		}
+		currFeatureGate, ok := decodedObj.(*configv1.FeatureGate)
+		if !ok {
+			return nil, fmt.Errorf("wrong obj type for %q: %T: %v", curr.OriginalFilename, decodedObj, curr.Content)
+		}
+		if featureGate == nil {
+			prev = &curr
+			featureGate = currFeatureGate
+			continue
+		}
+
+		if !equality.Semantic.DeepEqual(featureGate, currFeatureGate) {
+			return nil, fmt.Errorf("FeatureGate manifests disagree: %q and %q, with \n%v\n%v ", prev.OriginalFilename, curr.OriginalFilename, prev.Content, curr.Content)
+		}
+	}
+
+	return ret, nil
 }
