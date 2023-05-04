@@ -4,10 +4,12 @@ reviewers:
   - sttts
   - soltysh
   - tkashem
+  - JoelSpeed
 approvers:
   - deads2k
   - mfojtik
   - sttts
   - soltysh
   - tkashem
+  - JoelSpeed
 component: config-operator
