@@ -1,6 +1,6 @@
 module github.com/openshift/cluster-config-operator
 
-go 1.19
+go 1.20
 
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
@@ -8,7 +8,7 @@ require (
 	github.com/openshift/api v0.0.0-20230503133300-8bbcb7ca7183
 	github.com/openshift/build-machinery-go v0.0.0-20220913142420-e25cf57ea46d
 	github.com/openshift/client-go v0.0.0-20230503144108-75015d2347cb
-	github.com/openshift/library-go v0.0.0-20230503125631-c31a6e7b87d4
+	github.com/openshift/library-go v0.0.0-20230515175430-c002cf381131
 	github.com/spf13/cobra v1.6.0
 	github.com/spf13/pflag v1.0.5
 	github.com/stretchr/testify v1.8.1
@@ -20,8 +20,6 @@ require (
 	k8s.io/klog/v2 v2.90.1
 	sigs.k8s.io/yaml v1.3.0
 )
-
-replace github.com/openshift/library-go => github.com/JoelSpeed/library-go v0.0.0-20230515104801-449a71a9a153
 
 require (
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
