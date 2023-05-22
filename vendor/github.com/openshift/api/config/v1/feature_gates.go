@@ -182,4 +182,24 @@ var (
 		ResponsiblePerson:   "abutcher",
 		OwningProduct:       ocpSpecific,
 	}
+
+	FeatureGateMaxUnavailableStatefulSet = FeatureGateName("MaxUnavailableStatefulSet")
+	maxUnavailableStatefulSet            = FeatureGateDescription{
+		FeatureGateAttributes: FeatureGateAttributes{
+			Name: FeatureGateMaxUnavailableStatefulSet,
+		},
+		OwningJiraComponent: "apps",
+		ResponsiblePerson:   "atiratree",
+		OwningProduct:       kubernetes,
+	}
+
+	FeatureGatePrivateHostedZoneAWS = FeatureGateName("PrivateHostedZoneAWS")
+	privateHostedZoneAWS            = FeatureGateDescription{
+		FeatureGateAttributes: FeatureGateAttributes{
+			Name: FeatureGatePrivateHostedZoneAWS,
+		},
+		OwningJiraComponent: "Routing",
+		ResponsiblePerson:   "miciah",
+		OwningProduct:       ocpSpecific,
+	}
 )
