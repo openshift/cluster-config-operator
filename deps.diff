@@ -1,0 +1,15 @@
+diff --no-dereference -N -r current/vendor/github.com/openshift/api/config/v1/feature_gates.go updated/vendor/github.com/openshift/api/config/v1/feature_gates.go
+245,254d244
+< 
+< 	FeatureGateCloudDualStackNodeIPs = FeatureGateName("CloudDualStackNodeIPs")
+< 	cloudDualStackNodeIPs            = FeatureGateDescription{
+< 		FeatureGateAttributes: FeatureGateAttributes{
+< 			Name: FeatureGateCloudDualStackNodeIPs,
+< 		},
+< 		OwningJiraComponent: "machine-config-operator/platform-baremetal",
+< 		ResponsiblePerson:   "mkowalsk",
+< 		OwningProduct:       kubernetes,
+< 	}
+diff --no-dereference -N -r current/vendor/github.com/openshift/api/config/v1/types_feature.go updated/vendor/github.com/openshift/api/config/v1/types_feature.go
+195d194
+< 		cloudDualStackNodeIPs,
