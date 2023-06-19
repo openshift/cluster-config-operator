@@ -27,8 +27,6 @@ type renderOpts struct {
 	clusterInfrastructureInputFile string
 	cloudProviderConfigInputFile   string
 	cloudProviderConfigOutputFile  string
-	// this file will be both input AND output
-	featureGateManifestFile string
 }
 
 // NewRenderCommand creates a render command.
@@ -74,8 +72,6 @@ func (r *renderOpts) AddFlags(fs *pflag.FlagSet) {
 
 	// This is the generated kube cloud config
 	fs.StringVar(&r.cloudProviderConfigOutputFile, "cloud-provider-config-output-file", r.cloudProviderConfigOutputFile, "Output path for the generated cloud provider config file.")
-
-	fs.StringVar(&r.featureGateManifestFile, "featuregate-manifest", r.featureGateManifestFile, "Path for the FeatureGate.config.openshift.io that will be modified with completed status for use in other bootstrapping steps.")
 
 }
 
@@ -129,25 +125,6 @@ func (r *renderOpts) Run() error {
 			return err
 		}
 		// TODO I'm thinking we parse this into a map and reference it that way
-	}
-
-	if len(r.featureGateManifestFile) > 0 {
-		featureGateBytes, err := os.ReadFile(r.featureGateManifestFile)
-		if err != nil {
-			return err
-		}
-
-		featureGates := ReadFeatureGateV1OrDie(featureGateBytes)
-		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.generic.PayloadVersion)
-		if err != nil {
-			return err
-		}
-		featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
-
-		featureGateOutBytes := WriteFeatureGateV1OrDie(featureGates)
-		if err := os.WriteFile(r.featureGateManifestFile, []byte(featureGateOutBytes), 0644); err != nil {
-			return err
-		}
 	}
 
 	if err := r.manifest.ApplyTo(&renderConfig.ManifestConfig); err != nil {
