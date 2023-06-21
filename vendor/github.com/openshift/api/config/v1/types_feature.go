@@ -172,7 +172,6 @@ var FeatureSets = map[FeatureSet]*FeatureGateEnabledDisabled{
 		with(nodeSwap).
 		with(machineAPIProviderOpenStack).
 		with(insightsConfigAPI).
-		with(matchLabelKeysInPodTopologySpread).
 		with(retroactiveDefaultStorageClass).
 		with(pdbUnhealthyPodEvictionPolicy).
 		with(dynamicResourceAllocation).
@@ -185,6 +184,7 @@ var FeatureSets = map[FeatureSet]*FeatureGateEnabledDisabled{
 		with(privateHostedZoneAWS).
 		with(sigstoreImageVerification).
 		with(gcpLabelsTags).
+		with(vSphereStaticIPs).
 		toFeatures(defaultFeatures),
 	LatencySensitive: newDefaultFeatures().
 		toFeatures(defaultFeatures),
