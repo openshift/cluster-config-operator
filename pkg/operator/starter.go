@@ -11,6 +11,7 @@ import (
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	configv1informers "github.com/openshift/client-go/config/informers/externalversions"
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
+	"github.com/openshift/cluster-config-operator/pkg/operator/featureupgradablecontroller"
 	kubecloudconfig "github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
@@ -55,6 +56,12 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 		operatorClient,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().FeatureGates(),
+		controllerContext.EventRecorder,
+	)
+
+	featureUpgradeableController := featureupgradablecontroller.NewFeatureUpgradeableController(
+		operatorClient,
+		configInformers,
 		controllerContext.EventRecorder,
 	)
 
@@ -161,6 +168,7 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go migrationPlatformStatusController.Run(ctx, 1)
 	go staleConditionsController.Run(ctx, 1)
 	go latencySensitiveRemover.Run(ctx, 1)
+	go featureUpgradeableController.Run(ctx, 1)
 
 	<-ctx.Done()
 	return nil
