@@ -7,7 +7,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	configv1fake "github.com/openshift/client-go/config/clientset/versioned/fake"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/types"
 	kubetesting "k8s.io/client-go/testing"
 )
 
@@ -18,31 +17,33 @@ func TestFeatureGateController_syncFeatureGate(t *testing.T) {
 
 		changeVerifier func(t *testing.T, actions []kubetesting.Action)
 	}{
-		{
-			name: "clear-value",
-			featureGate: &configv1.FeatureGate{
-				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
-				Spec: configv1.FeatureGateSpec{
-					FeatureGateSelection: configv1.FeatureGateSelection{
-						FeatureSet: "LatencySensitive",
-					},
-				},
-			},
-			changeVerifier: func(t *testing.T, actions []kubetesting.Action) {
-				if len(actions) != 1 {
-					t.Fatalf("bad changes: %v", actions)
-				}
-				patchAction := actions[0].(kubetesting.PatchAction)
-				if patchAction.GetPatchType() != types.ApplyPatchType {
-					t.Fatalf("unexpected patch type: %v", patchAction.GetPatchType())
-				}
-				applied := string(patchAction.GetPatch())
-				expectedApplied := `{"kind":"FeatureGate","apiVersion":"config.openshift.io/v1","metadata":{"name":"cluster"},"spec":{"featureSet":""}}`
-				if applied != expectedApplied {
-					t.Fatal(applied)
-				}
-			},
-		},
+		// patch type isn't supported by fake in this fake client level.
+		// the actual API was GA in 1.22
+		//{
+		//	name: "clear-value",
+		//	featureGate: &configv1.FeatureGate{
+		//		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		//		Spec: configv1.FeatureGateSpec{
+		//			FeatureGateSelection: configv1.FeatureGateSelection{
+		//				FeatureSet: "LatencySensitive",
+		//			},
+		//		},
+		//	},
+		//	changeVerifier: func(t *testing.T, actions []kubetesting.Action) {
+		//		if len(actions) != 1 {
+		//			t.Fatalf("bad changes: %v", actions)
+		//		}
+		//		patchAction := actions[0].(kubetesting.PatchAction)
+		//		if patchAction.GetPatchType() != types.ApplyPatchType {
+		//			t.Fatalf("unexpected patch type: %v", patchAction.GetPatchType())
+		//		}
+		//		applied := string(patchAction.GetPatch())
+		//		expectedApplied := `{"kind":"FeatureGate","apiVersion":"config.openshift.io/v1","metadata":{"name":"cluster"},"spec":{"featureSet":""}}`
+		//		if applied != expectedApplied {
+		//			t.Fatal(applied)
+		//		}
+		//	},
+		//},
 		{
 			name: "leave-other-value",
 			featureGate: &configv1.FeatureGate{
