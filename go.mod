@@ -21,6 +21,8 @@ require (
 	sigs.k8s.io/yaml v1.3.0
 )
 
+replace github.com/openshift/api => github.com/sairameshv/api v0.0.0-20230803100812-3fdba02e7b31
+
 require (
 	github.com/NYTimes/gziphandler v1.1.1 // indirect
 	github.com/antlr/antlr4/runtime/Go/antlr v1.4.10 // indirect
