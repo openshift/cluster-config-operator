@@ -247,7 +247,7 @@ const (
 )
 
 // ClusterVersionCapability enumerates optional, core cluster components.
-// +kubebuilder:validation:Enum=openshift-samples;baremetal;marketplace;Console;Insights;Storage;CSISnapshot;NodeTuning;MachineAPI;Ingress
+// +kubebuilder:validation:Enum=openshift-samples;baremetal;marketplace;Console;Insights;Storage;CSISnapshot;NodeTuning;MachineAPI;Build;DeploymentConfig
 type ClusterVersionCapability string
 
 const (
@@ -314,26 +314,28 @@ const (
 	// and may cause cluster damage
 	ClusterVersionCapabilityMachineAPI ClusterVersionCapability = "MachineAPI"
 
-	// ClusterVersionCapabilityIngress manages the cluster ingress operator
-	// which is responsible for running the ingress controllers (including OpenShift router).
+	// ClusterVersionCapabilityBuild manages the Build API which is responsible
+	// for watching the Build API objects and managing their lifecycle.
+	// The functionality is located under openshift-apiserver and openshift-controller-manager.
 	//
-	// The following CRDs are part of the capability as well:
-	// IngressController
-	// DNSRecord
-	// GatewayClass
-	// Gateway
-	// HTTPRoute
-	// ReferenceGrant
+	// The following resources are taken into account:
+	// - builds
+	// - buildconfigs
+	ClusterVersionCapabilityBuild ClusterVersionCapability = "Build"
+
+	// ClusterVersionCapabilityDeploymentConfig manages the DeploymentConfig API
+	// which is responsible for watching the DeploymentConfig API and managing their lifecycle.
+	// The functionality is located under openshift-apiserver and openshift-controller-manager.
 	//
-	// WARNING: This capability cannot be disabled on the standalone OpenShift.
-	ClusterVersionCapabilityIngress ClusterVersionCapability = "Ingress"
+	// The following resources are taken into account:
+	// - deploymentconfigs
+	ClusterVersionCapabilityDeploymentConfig ClusterVersionCapability = "DeploymentConfig"
 )
 
 // KnownClusterVersionCapabilities includes all known optional, core cluster components.
 var KnownClusterVersionCapabilities = []ClusterVersionCapability{
 	ClusterVersionCapabilityBaremetal,
 	ClusterVersionCapabilityConsole,
-	ClusterVersionCapabilityIngress,
 	ClusterVersionCapabilityInsights,
 	ClusterVersionCapabilityMarketplace,
 	ClusterVersionCapabilityStorage,
@@ -341,6 +343,8 @@ var KnownClusterVersionCapabilities = []ClusterVersionCapability{
 	ClusterVersionCapabilityCSISnapshot,
 	ClusterVersionCapabilityNodeTuning,
 	ClusterVersionCapabilityMachineAPI,
+	ClusterVersionCapabilityBuild,
+	ClusterVersionCapabilityDeploymentConfig,
 }
 
 // ClusterVersionCapabilitySet defines sets of cluster version capabilities.
@@ -412,7 +416,6 @@ var ClusterVersionCapabilitySets = map[ClusterVersionCapabilitySet][]ClusterVers
 	ClusterVersionCapabilitySet4_14: {
 		ClusterVersionCapabilityBaremetal,
 		ClusterVersionCapabilityConsole,
-		ClusterVersionCapabilityIngress,
 		ClusterVersionCapabilityInsights,
 		ClusterVersionCapabilityMarketplace,
 		ClusterVersionCapabilityStorage,
@@ -420,11 +423,12 @@ var ClusterVersionCapabilitySets = map[ClusterVersionCapabilitySet][]ClusterVers
 		ClusterVersionCapabilityCSISnapshot,
 		ClusterVersionCapabilityNodeTuning,
 		ClusterVersionCapabilityMachineAPI,
+		ClusterVersionCapabilityBuild,
+		ClusterVersionCapabilityDeploymentConfig,
 	},
 	ClusterVersionCapabilitySetCurrent: {
 		ClusterVersionCapabilityBaremetal,
 		ClusterVersionCapabilityConsole,
-		ClusterVersionCapabilityIngress,
 		ClusterVersionCapabilityInsights,
 		ClusterVersionCapabilityMarketplace,
 		ClusterVersionCapabilityStorage,
@@ -432,6 +436,8 @@ var ClusterVersionCapabilitySets = map[ClusterVersionCapabilitySet][]ClusterVers
 		ClusterVersionCapabilityCSISnapshot,
 		ClusterVersionCapabilityNodeTuning,
 		ClusterVersionCapabilityMachineAPI,
+		ClusterVersionCapabilityBuild,
+		ClusterVersionCapabilityDeploymentConfig,
 	},
 }
 
