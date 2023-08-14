@@ -686,6 +686,14 @@ func (EtcdList) SwaggerDoc() map[string]string {
 	return map_EtcdList
 }
 
+var map_EtcdSpec = map[string]string{
+	"controlPlaneHardwareSpeed": "HardwareSpeed allows user to change the etcd tuning profile which configures the latency parameters for heartbeat interval and leader election timeouts allowing the cluster to tolerate longer round-trip-times between etcd members. Valid values are \"\", \"Standard\" and \"Slower\".\n\t\"\" means no opinion and the platform is left to choose a reasonable default\n\twhich is subject to change without notice.",
+}
+
+func (EtcdSpec) SwaggerDoc() map[string]string {
+	return map_EtcdSpec
+}
+
 var map_AWSClassicLoadBalancerParameters = map[string]string{
 	"":                      "AWSClassicLoadBalancerParameters holds configuration parameters for an AWS Classic load balancer.",
 	"connectionIdleTimeout": "connectionIdleTimeout specifies the maximum time period that a connection may be idle before the load balancer closes the connection.  The value must be parseable as a time duration value; see <https://pkg.go.dev/time#ParseDuration>.  A nil or zero value means no opinion, in which case a default value is used.  The default value for this field is 60s.  This default is subject to change.",
@@ -852,7 +860,7 @@ func (IngressControllerCaptureHTTPHeaders) SwaggerDoc() map[string]string {
 
 var map_IngressControllerHTTPHeader = map[string]string{
 	"":       "IngressControllerHTTPHeader specifies configuration for setting or deleting an HTTP header.",
-	"name":   "name specifies the name of a header on which to perform an action. Its value must be a valid HTTP header name as defined in RFC 2616 section 4.2. The name must consist only of alphanumeric and the following special characters, \"-!#$%&'*+.^_`\". The following header names are reserved and may not be modified via this API: Strict-Transport-Security, Proxy, Host, Cookie, Set-Cookie. It must be no more than 1024 characters in length. Header name must be unique.",
+	"name":   "name specifies the name of a header on which to perform an action. Its value must be a valid HTTP header name as defined in RFC 2616 section 4.2. The name must consist only of alphanumeric and the following special characters, \"-!#$%&'*+.^_`\". The following header names are reserved and may not be modified via this API: Strict-Transport-Security, Proxy, Host, Cookie, Set-Cookie. It must be no more than 255 characters in length. Header name must be unique.",
 	"action": "action specifies actions to perform on headers, such as setting or deleting headers.",
 }
 
