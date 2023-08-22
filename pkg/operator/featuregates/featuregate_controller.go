@@ -8,20 +8,18 @@ import (
 	"strings"
 	"time"
 
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-
 	configv1 "github.com/openshift/api/config/v1"
-
-	"k8s.io/apimachinery/pkg/util/sets"
-
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	v1 "github.com/openshift/client-go/config/informers/externalversions/config/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
+	"github.com/openshift/cluster-config-operator/featuregates/featuregatesnapshot"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/status"
 	operatorv1helpers "github.com/openshift/library-go/pkg/operator/v1helpers"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/util/sets"
 )
 
 const FeatureVersionName = "feature-gates"
@@ -51,7 +49,7 @@ func NewFeatureGateController(operatorClient operatorv1helpers.OperatorClient,
 		featureGatesClient:   featureGatesClient,
 		featureGatesLister:   featureGatesInformer.Lister(),
 		clusterVersionLister: clusterVersionInformer.Lister(),
-		featureSetMap:        configv1.FeatureSets,
+		featureSetMap:        featuregatesnapshot.FeatureSets,
 		versionRecorder:      versionRecorder,
 		eventRecorder:        eventRecorder,
 	}
