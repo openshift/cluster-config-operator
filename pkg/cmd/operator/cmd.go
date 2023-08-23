@@ -10,11 +10,15 @@ import (
 )
 
 func NewOperator() *cobra.Command {
+	o := operator.NewOperatorOptions()
+
 	cmd := controllercmd.
-		NewControllerCommandConfig("config-operator", version.Get(), operator.RunOperator).
+		NewControllerCommandConfig("config-operator", version.Get(), o.RunOperator).
 		NewCommand()
 	cmd.Use = "operator"
 	cmd.Short = "Start the Cluster Config Operator"
+
+	o.AddFlags(cmd.Flags())
 
 	return cmd
 }

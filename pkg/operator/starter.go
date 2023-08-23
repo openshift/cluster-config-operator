@@ -2,7 +2,9 @@ package operator
 
 import (
 	"context"
+	"fmt"
 	"os"
+	"path/filepath"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -10,6 +12,7 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	configv1informers "github.com/openshift/client-go/config/informers/externalversions"
+	"github.com/openshift/cluster-config-operator/pkg/cmd/render"
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
 	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
 	"github.com/openshift/cluster-config-operator/pkg/operator/featureupgradablecontroller"
@@ -24,13 +27,31 @@ import (
 	"github.com/openshift/library-go/pkg/operator/staleconditions"
 	"github.com/openshift/library-go/pkg/operator/status"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
+	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 )
 
-func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
-	operatorVersion := os.Getenv("OPERATOR_IMAGE_VERSION")
+type OperatorOptions struct {
+	OperatorVersion             string
+	AuthoritativeFeatureGateDir string
+}
+
+func NewOperatorOptions() *OperatorOptions {
+	return &OperatorOptions{}
+}
+
+func (o *OperatorOptions) AddFlags(fs *pflag.FlagSet) {
+	fs.StringVar(&o.OperatorVersion, "operator-version", o.OperatorVersion, "version of the operator that is running")
+	fs.StringVar(&o.AuthoritativeFeatureGateDir, "authoritative-feature-gate-dir", o.AuthoritativeFeatureGateDir, "directory containing each possible featuregate manifest.")
+}
+
+func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
+	featureGateDetails, err := o.getFeatureGateMappingFromDisk()
+	if err != nil {
+		return err
+	}
 
 	// This kube client use protobuf, do not use it for CR
 	kubeClient, err := kubernetes.NewForConfig(controllerContext.ProtoKubeConfig)
@@ -67,11 +88,12 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	if _, ok := versionRecorder.GetVersions()[featuregates.FeatureVersionName]; !ok {
 		versionRecorder.SetVersion(featuregates.FeatureVersionName, "")
 	}
-	versionRecorder.SetVersion("operator", operatorVersion)
+	versionRecorder.SetVersion("operator", o.OperatorVersion)
 
 	featureGateController := featuregates.NewFeatureGateController(
+		featureGateDetails,
 		operatorClient,
-		operatorVersion,
+		o.OperatorVersion,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().FeatureGates(),
 		configInformers.Config().V1().ClusterVersions(),
@@ -190,4 +212,64 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 
 	<-ctx.Done()
 	return nil
+}
+
+func (o *OperatorOptions) getFeatureGateMappingFromDisk() (map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, error) {
+	ret := map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled{}
+
+	err := filepath.Walk(o.AuthoritativeFeatureGateDir,
+		func(path string, info os.FileInfo, err error) error {
+			if err != nil {
+				return err
+			}
+			if info.IsDir() {
+				return nil
+			}
+
+			content, err := os.ReadFile(path)
+			if err != nil {
+				return err
+			}
+
+			featureGate, err := render.ReadFeatureGateV1(content)
+			if err != nil {
+				return fmt.Errorf("%q is not a featuregate: %v", path, featureGate)
+			}
+
+			featureGateValues := &configv1.FeatureGateEnabledDisabled{}
+			for _, possibleGates := range featureGate.Status.FeatureGates {
+				if possibleGates.Version != o.OperatorVersion {
+					continue
+				}
+				for _, curr := range possibleGates.Enabled {
+					featureGateValues.Enabled = append(featureGateValues.Enabled, configv1.FeatureGateDescription{
+						FeatureGateAttributes: configv1.FeatureGateAttributes{
+							Name: curr.Name,
+						},
+					})
+				}
+				for _, curr := range possibleGates.Disabled {
+					featureGateValues.Disabled = append(featureGateValues.Disabled, configv1.FeatureGateDescription{
+						FeatureGateAttributes: configv1.FeatureGateAttributes{
+							Name: curr.Name,
+						},
+					})
+				}
+
+				break
+			}
+			ret[featureGate.Spec.FeatureGateSelection.FeatureSet] = featureGateValues
+
+			return nil
+		},
+	)
+	if err != nil {
+		return nil, err
+	}
+
+	if len(ret) == 0 {
+		return nil, fmt.Errorf("featuregates not located")
+	}
+
+	return ret, nil
 }

@@ -36,6 +36,26 @@ spec:
         secret:
           secretName: config-operator-serving-cert
           optional: true
+      initContainers:
+        - name: openshift-api
+          securityContext:
+            allowPrivilegeEscalation: false
+            capabilities:
+              drop: ["ALL"]
+          terminationMessagePolicy: FallbackToLogsOnError
+          image: quay.io/openshift/origin-cluster-config-api:v4.0
+          imagePullPolicy: IfNotPresent
+          command:
+            - write-available-featuresets
+            - asset-output-dir=/available-featuregates
+            - payload-version=$(OPERATOR_IMAGE_VERSION)
+          resources:
+            requests:
+              memory: 50Mi
+              cpu: 10m
+          env:
+            - name: OPERATOR_IMAGE_VERSION
+              value: "0.0.1-snapshot"
       containers:
       - name: openshift-config-operator
         securityContext:
@@ -45,7 +65,11 @@ spec:
         terminationMessagePolicy: FallbackToLogsOnError
         image: quay.io/openshift/origin-cluster-config-operator:v4.0
         imagePullPolicy: IfNotPresent
-        command: ["cluster-config-operator", "operator"]
+        command:
+          - cluster-config-operator
+          - operator
+          - --operator-version=$(OPERATOR_IMAGE_VERSION)
+          - --authoritative-feature-gate-dir=/available-featuregates
         ports:
           - containerPort: 8443
             name: metrics
