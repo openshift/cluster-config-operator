@@ -116,4 +116,4 @@ require (
 	sigs.k8s.io/structured-merge-diff/v4 v4.3.0 // indirect
 )
 
-replace github.com/openshift/api => github.com/ibihim/api v0.0.0-20230831174615-509c80a1707b
+replace github.com/openshift/api => github.com/ibihim/api v0.0.0-20230831154615-509c80a1707b
