@@ -167,14 +167,12 @@ var FeatureSets = map[FeatureSet]*FeatureGateEnabledDisabled{
 		with(externalCloudProvider).
 		with(externalCloudProviderGCP).
 		with(csiDriverSharedResource).
-		with(buildCSIVolumes).
 		with(nodeSwap).
 		with(machineAPIProviderOpenStack).
 		with(insightsConfigAPI).
 		with(retroactiveDefaultStorageClass).
 		with(dynamicResourceAllocation).
 		with(admissionWebhookMatchConditions).
-		with(azureWorkloadIdentity).
 		with(gateGatewayAPI).
 		with(maxUnavailableStatefulSet).
 		without(eventedPleg).
@@ -194,10 +192,12 @@ var defaultFeatures = &FeatureGateEnabledDisabled{
 	Enabled: []FeatureGateDescription{
 		openShiftPodSecurityAdmission,
 		alibabaPlatform, // This is a bug, it should be TechPreviewNoUpgrade. This must be downgraded before 4.14 is shipped.
+		azureWorkloadIdentity,
 		cloudDualStackNodeIPs,
 		externalCloudProviderAzure,
 		externalCloudProviderExternal,
 		privateHostedZoneAWS,
+		buildCSIVolumes,
 	},
 	Disabled: []FeatureGateDescription{
 		retroactiveDefaultStorageClass,
