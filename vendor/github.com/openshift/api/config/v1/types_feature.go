@@ -177,7 +177,7 @@ var FeatureSets = map[FeatureSet]*FeatureGateEnabledDisabled{
 		with(maxUnavailableStatefulSet).
 		without(eventedPleg).
 		with(sigstoreImageVerification).
-		with(gcpLabelsTags).
+		without(gcpLabelsTags).
 		with(vSphereStaticIPs).
 		with(routeExternalCertificate).
 		with(automatedEtcdBackup).
