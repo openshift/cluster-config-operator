@@ -2,8 +2,11 @@ package render
 
 import (
 	"fmt"
+	"io/fs"
 	"io/ioutil"
 	"os"
+	"path/filepath"
+	"strings"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
 
@@ -117,6 +120,18 @@ type TemplateData struct {
 
 // Run contains the logic of the render command.
 func (r *renderOpts) Run() error {
+	err := filepath.Walk(r.generic.TemplatesDir, func(path string, _ fs.FileInfo, err error) error {
+		if err != nil {
+			return err
+		}
+
+		if strings.HasSuffix(path, "_build.crd.yaml") || strings.HasSuffix(path, "_build.cr.yaml") {
+			return os.Remove(path)
+		}
+
+		return nil
+	})
+
 	renderConfig := TemplateData{}
 
 	if len(r.clusterConfigFile) > 0 {
