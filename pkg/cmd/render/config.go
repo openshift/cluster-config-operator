@@ -16,15 +16,6 @@ func init() {
 	utilruntime.Must(configv1.AddToScheme(configScheme))
 }
 
-func ReadFeatureGateV1OrDie(objBytes []byte) *configv1.FeatureGate {
-	requiredObj, err := runtime.Decode(configCodecs.UniversalDecoder(configv1.SchemeGroupVersion), objBytes)
-	if err != nil {
-		panic(err)
-	}
-
-	return requiredObj.(*configv1.FeatureGate)
-}
-
 func WriteFeatureGateV1OrDie(obj *configv1.FeatureGate) string {
 	return runtime.EncodeOrDie(configCodecs.LegacyCodec(configv1.SchemeGroupVersion), obj)
 }
