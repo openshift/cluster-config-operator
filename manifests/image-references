@@ -6,3 +6,7 @@ spec:
     from:
       kind: DockerImage
       name: quay.io/openshift/origin-cluster-config-operator:v4.0
+  - name: cluster-config-api
+    from:
+      kind: DockerImage
+      name: quay.io/openshift/origin-cluster-config-api:v4.15
