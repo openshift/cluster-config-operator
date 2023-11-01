@@ -22,6 +22,8 @@ type renderOpts struct {
 	manifest genericrenderoptions.ManifestOptions
 	generic  genericrenderoptions.GenericOptions
 
+	skipAPIRendering bool
+
 	clusterConfigFile string
 
 	clusterInfrastructureInputFile string
@@ -61,6 +63,9 @@ func NewRenderCommand() *cobra.Command {
 func (r *renderOpts) AddFlags(fs *pflag.FlagSet) {
 	r.manifest.AddFlags(fs, "config")
 	r.generic.AddFlags(fs, configv1.GroupVersion.WithKind("Config"))
+
+	// added so that we can transition from cluster-config-operator to cluster-config-api rendering this content in a single installer PR
+	fs.BoolVar(&r.skipAPIRendering, "skip-api-rendering", r.skipAPIRendering, "added so that we can transition from cluster-config-operator to cluster-config-api rendering this content in a single installer PR.")
 
 	fs.StringVar(&r.clusterConfigFile, "cluster-config-file", r.clusterConfigFile, "Openshift Cluster API Config file.")
 
@@ -140,32 +145,35 @@ func (r *renderOpts) Run() error {
 		return err
 	}
 
-	featureGateFiles, err := featureGateManifests(r.generic)
-	if err != nil {
-		return fmt.Errorf("problem with featuregate manifests: %w", err)
-	}
-	for _, featureGateFile := range featureGateFiles {
-		featureGatesObj, err := featureGateFile.GetDecodedObj()
+	if !r.skipAPIRendering {
+		featureGateFiles, err := featureGateManifests(r.generic)
 		if err != nil {
-			return fmt.Errorf("error decoding FeatureGate: %w", err)
+			return fmt.Errorf("problem with featuregate manifests: %w", err)
 		}
-		featureGates := featureGatesObj.(*configv1.FeatureGate)
-		currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.generic.PayloadVersion)
-		if err != nil {
-			return fmt.Errorf("error determining FeatureGates: %w", err)
-		}
-		featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
+		for _, featureGateFile := range featureGateFiles {
+			featureGatesObj, err := featureGateFile.GetDecodedObj()
+			if err != nil {
+				return fmt.Errorf("error decoding FeatureGate: %w", err)
+			}
+			featureGates := featureGatesObj.(*configv1.FeatureGate)
+			currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.generic.PayloadVersion)
+			if err != nil {
+				return fmt.Errorf("error determining FeatureGates: %w", err)
+			}
+			featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
 
-		featureGateOutBytes := WriteFeatureGateV1OrDie(featureGates)
-		if err := os.WriteFile(featureGateFile.OriginalFilename, []byte(featureGateOutBytes), 0644); err != nil {
-			return fmt.Errorf("error writing FeatureGate manifest: %w", err)
+			featureGateOutBytes := WriteFeatureGateV1OrDie(featureGates)
+			if err := os.WriteFile(featureGateFile.OriginalFilename, []byte(featureGateOutBytes), 0644); err != nil {
+				return fmt.Errorf("error writing FeatureGate manifest: %w", err)
+			}
+		}
+
+		if err := genericrender.WriteFiles(&r.generic, &renderConfig.FileConfig, renderConfig); err != nil {
+			return err
 		}
 	}
 
-	if err := genericrender.WriteFiles(&r.generic, &renderConfig.FileConfig, renderConfig); err != nil {
-		return err
-	}
-
+	// TODO this almost certainly belongs in a different spot and several other operators were just arguing over who had to own a thing that none of them wanted.
 	if len(r.clusterInfrastructureInputFile) > 0 && len(r.cloudProviderConfigOutputFile) > 0 {
 		targetCloudConfigMapData, err := kubecloudconfig.BootstrapTransform(r.clusterInfrastructureInputFile, r.cloudProviderConfigInputFile)
 		if err != nil {
