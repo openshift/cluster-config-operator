@@ -11,3 +11,13 @@ status:
   versions:
     - name: operator
       version: "0.0.1-snapshot"
+  relatedObjects:
+    - group: operator.openshift.io
+      name: cluster
+      resource: configs
+    - group: ""
+      name: openshift-config
+      resource: namespaces
+    - group: ""
+      name: openshift-config-operator
+      resource: namespaces
