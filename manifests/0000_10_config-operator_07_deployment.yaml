@@ -36,6 +36,9 @@ spec:
         secret:
           secretName: config-operator-serving-cert
           optional: true
+      - name: available-featuregates
+        emptyDir:
+          sizeLimit: 100Mi
       initContainers:
         - name: openshift-api
           securityContext:
@@ -47,8 +50,8 @@ spec:
           imagePullPolicy: IfNotPresent
           command:
             - write-available-featuresets
-            - asset-output-dir=/available-featuregates
-            - payload-version=$(OPERATOR_IMAGE_VERSION)
+            - --asset-output-dir=/available-featuregates
+            - --payload-version=$(OPERATOR_IMAGE_VERSION)
           resources:
             requests:
               memory: 50Mi
@@ -56,6 +59,9 @@ spec:
           env:
             - name: OPERATOR_IMAGE_VERSION
               value: "0.0.1-snapshot"
+          volumeMounts:
+            - mountPath: /available-featuregates
+              name: available-featuregates
       containers:
       - name: openshift-config-operator
         securityContext:
@@ -95,6 +101,8 @@ spec:
         volumeMounts:
         - mountPath: /var/run/secrets/serving-cert
           name: serving-cert
+        - mountPath: /available-featuregates
+          name: available-featuregates
         env:
         - name: IMAGE
           value: quay.io/openshift/origin-cluster-config-operator:v4.0
