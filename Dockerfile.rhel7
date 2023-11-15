@@ -15,12 +15,5 @@ COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/
 COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /usr/share/bootkube/manifests/manifests
 COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/cluster-config-operator /usr/bin/
 COPY manifests /manifests
-COPY vendor/github.com/openshift/api/config/v1/*_config-operator_*.yaml /manifests
-COPY vendor/github.com/openshift/api/quota/v1/*.crd.yaml /manifests
-COPY vendor/github.com/openshift/api/security/v1/*.crd.yaml /manifests
-COPY vendor/github.com/openshift/api/securityinternal/v1/*.crd.yaml /manifests
-COPY vendor/github.com/openshift/api/authorization/v1/*.crd.yaml /manifests
-COPY vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /manifests
-COPY vendor/github.com/openshift/api/operator/v1/0000_10_config-operator_*.yaml /manifests
-COPY empty-resources /manifests
+
 LABEL io.openshift.release.operator true
