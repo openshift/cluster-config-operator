@@ -4,6 +4,7 @@ import (
 	"fmt"
 	"io/ioutil"
 	"os"
+	"path/filepath"
 
 	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
 
@@ -178,6 +179,10 @@ func (r *renderOpts) Run() error {
 		targetCloudConfigMapData, err := kubecloudconfig.BootstrapTransform(r.clusterInfrastructureInputFile, r.cloudProviderConfigInputFile)
 		if err != nil {
 			return err
+		}
+		// need to create this if not present.  Happens
+		if err := os.MkdirAll(filepath.Dir(r.cloudProviderConfigOutputFile), 0755); err != nil {
+			return fmt.Errorf("failed to create %v: %w", r.cloudProviderConfigOutputFile, err)
 		}
 		if err := ioutil.WriteFile(r.cloudProviderConfigOutputFile, targetCloudConfigMapData, 0644); err != nil {
 			return fmt.Errorf("failed to write merged config to %q: %v", r.cloudProviderConfigOutputFile, err)
