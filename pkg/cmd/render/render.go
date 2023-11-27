@@ -172,6 +172,12 @@ func (r *renderOpts) Run() error {
 		if err := genericrender.WriteFiles(&r.generic, &renderConfig.FileConfig, renderConfig); err != nil {
 			return err
 		}
+	} else {
+		// need to create this, so we can later write files if need be.
+		if err := os.MkdirAll(filepath.Join(r.generic.AssetOutputDir, "manifests"), 0755); err != nil {
+			return fmt.Errorf("failed to create manifest dir: %w", err)
+		}
+
 	}
 
 	// TODO this almost certainly belongs in a different spot and several other operators were just arguing over who had to own a thing that none of them wanted.
@@ -180,7 +186,7 @@ func (r *renderOpts) Run() error {
 		if err != nil {
 			return err
 		}
-		// need to create this if not present.  Happens
+		// need to create this if not present.
 		if err := os.MkdirAll(filepath.Dir(r.cloudProviderConfigOutputFile), 0755); err != nil {
 			return fmt.Errorf("failed to create %v: %w", r.cloudProviderConfigOutputFile, err)
 		}
