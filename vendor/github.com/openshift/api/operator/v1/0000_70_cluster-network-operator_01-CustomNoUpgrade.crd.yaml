@@ -183,6 +183,9 @@ spec:
                             ipForwarding:
                               description: IPForwarding controls IP forwarding for all traffic on OVN-Kubernetes managed interfaces (such as br-ex). By default this is set to Restricted, and Kubernetes related traffic is still forwarded appropriately, but other IP traffic will not be routed by the OCP node. If there is a desire to allow the host to forward traffic across OVN-Kubernetes managed interfaces, then set this field to "Global". The supported values are "Restricted" and "Global".
                               type: string
+                              x-kubernetes-validations:
+                                - rule: self == oldSelf || self == 'Restricted' || self == 'Global'
+                                  message: invalid value for IPForwarding, valid values are 'Restricted' or 'Global'
                             ipv4:
                               description: ipv4 allows users to configure IP settings for IPv4 connections. When omitted, this means no opinion and the default configuration is used. Check individual members fields within ipv4 for details of default values.
                               type: object

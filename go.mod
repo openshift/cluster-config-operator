@@ -2,6 +2,8 @@ module github.com/openshift/cluster-config-operator
 
 go 1.20
 
+replace github.com/openshift/api => github.com/andreaskaris/api-definitions v0.0.0-20231219223131-13786d3ead88
+
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-bindata/go-bindata v3.1.2+incompatible

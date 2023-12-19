@@ -431,6 +431,7 @@ type HybridOverlayConfig struct {
 type IPsecConfig struct {
 }
 
+// +kubebuilder:validation:XValidation:rule="self == oldSelf || self == 'Restricted' || self == 'Global'",message="invalid value for IPForwarding, valid values are 'Restricted' or 'Global'"
 type IPForwardingMode string
 
 const (
