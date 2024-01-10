@@ -7,6 +7,12 @@ RUN make build --warn-undefined-variables
 FROM registry.ci.openshift.org/ocp/4.15:base
 RUN mkdir -p /usr/share/bootkube/manifests/manifests
 RUN mkdir -p /usr/share/bootkube/manifests/bootstrap-manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/config/v1/*_config-operator_*.yaml /usr/share/bootkube/manifests/manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/quota/v1/*.crd.yaml /usr/share/bootkube/manifests/manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/security/v1/*.crd.yaml /usr/share/bootkube/manifests/manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/securityinternal/v1/*.crd.yaml /usr/share/bootkube/manifests/manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/authorization/v1/*.crd.yaml /usr/share/bootkube/manifests/manifests
+COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/vendor/github.com/openshift/api/operator/v1alpha1/0000_10_config-operator_01_imagecontentsourcepolicy.crd.yaml /usr/share/bootkube/manifests/manifests
 COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/cluster-config-operator /usr/bin/
 COPY manifests /manifests
 
