@@ -1,0 +1,107 @@
+{
+  "apiVersion": "config.openshift.io/v1",
+  "kind": "FeatureGate",
+  "metadata": {
+      "creationTimestamp": "2024-01-09T10:14:03Z",
+      "generation": 1,
+      "name": "cluster",
+      "resourceVersion": "1354",
+      "uid": "da0ec281-1113-4909-b7f0-02c610b64d16"
+  },
+  "spec": {},
+  "status": {
+      "featureGates": [
+          {
+              "disabled": [
+                  {
+                      "name": "AdminNetworkPolicy"
+                  },
+                  {
+                      "name": "AdmissionWebhookMatchConditions"
+                  },
+                  {
+                      "name": "AutomatedEtcdBackup"
+                  },
+                  {
+                      "name": "CSIDriverSharedResource"
+                  },
+                  {
+                      "name": "DynamicResourceAllocation"
+                  },
+                  {
+                      "name": "EventedPLEG"
+                  },
+                  {
+                      "name": "ExternalCloudProvider"
+                  },
+                  {
+                      "name": "ExternalCloudProviderGCP"
+                  },
+                  {
+                      "name": "GCPLabelsTags"
+                  },
+                  {
+                      "name": "GatewayAPI"
+                  },
+                  {
+                      "name": "InsightsConfigAPI"
+                  },
+                  {
+                      "name": "MachineAPIOperatorDisableMachineHealthCheckController"
+                  },
+                  {
+                      "name": "MachineAPIProviderOpenStack"
+                  },
+                  {
+                      "name": "MaxUnavailableStatefulSet"
+                  },
+                  {
+                      "name": "NodeSwap"
+                  },
+                  {
+                      "name": "OpenShiftPodSecurityAdmission"
+                  },
+                  {
+                      "name": "RetroactiveDefaultStorageClass"
+                  },
+                  {
+                      "name": "RouteExternalCertificate"
+                  },
+                  {
+                      "name": "SigstoreImageVerification"
+                  },
+                  {
+                      "name": "VSphereStaticIPs"
+                  },
+                  {
+                      "name": "ValidatingAdmissionPolicy"
+                  }
+              ],
+              "enabled": [
+                  {
+                      "name": "AlibabaPlatform"
+                  },
+                  {
+                      "name": "AzureWorkloadIdentity"
+                  },
+                  {
+                      "name": "BuildCSIVolumes"
+                  },
+                  {
+                      "name": "CloudDualStackNodeIPs"
+                  },
+                  {
+                      "name": "ExternalCloudProviderAzure"
+                  },
+                  {
+                      "name": "ExternalCloudProviderExternal"
+                  },
+                  {
+                      "name": "PrivateHostedZoneAWS"
+                  }
+              ],
+              "version": "4.14.0-0.nightly-2024-01-09-095729"
+          }
+      ]
+  }
+}
