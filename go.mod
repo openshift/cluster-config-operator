@@ -5,9 +5,9 @@ go 1.21
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
-	github.com/openshift/api v0.0.0-20240202140003-8b34b9854c7f
+	github.com/openshift/api v0.0.0-20240214213616-e741d64e9f22
 	github.com/openshift/build-machinery-go v0.0.0-20230306181456-d321ffa04533
-	github.com/openshift/client-go v0.0.0-20240125160436-aa5df63097c4
+	github.com/openshift/client-go v0.0.0-20240215090359-b71f6f2731f5
 	github.com/openshift/library-go v0.0.0-20240115112243-470c096a1ca9
 	github.com/spf13/cobra v1.7.0
 	github.com/spf13/pflag v1.0.5

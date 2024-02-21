@@ -138,12 +138,12 @@ github.com/onsi/ginkgo/v2 v2.13.0 h1:0jY9lJquiL8fcf3M4LAXN5aMlS/b2BV86HFFPCPMgE4
 github.com/onsi/ginkgo/v2 v2.13.0/go.mod h1:TE309ZR8s5FsKKpuB1YAQYBzCaAfUgatB/xlT/ETL/o=
 github.com/onsi/gomega v1.29.0 h1:KIA/t2t5UBzoirT4H9tsML45GEbo3ouUnBHsCfD2tVg=
 github.com/onsi/gomega v1.29.0/go.mod h1:9sxs+SwGrKI0+PWe4Fxa9tFQQBG5xSsSbMXOI8PPpoQ=
-github.com/openshift/api v0.0.0-20240202140003-8b34b9854c7f h1:yJ8mEpEW2aJo+97wguYL+ehCsJe/pbeKjFsbdMuuEJI=
-github.com/openshift/api v0.0.0-20240202140003-8b34b9854c7f/go.mod h1:CxgbWAlvu2iQB0UmKTtRu1YfepRg1/vJ64n2DlIEVz4=
+github.com/openshift/api v0.0.0-20240214213616-e741d64e9f22 h1:9si1NobNdpxr90AUCdcd0WmtNfWfDTW32PIRtyAQAlE=
+github.com/openshift/api v0.0.0-20240214213616-e741d64e9f22/go.mod h1:CxgbWAlvu2iQB0UmKTtRu1YfepRg1/vJ64n2DlIEVz4=
 github.com/openshift/build-machinery-go v0.0.0-20230306181456-d321ffa04533 h1:mh3ZYs7kPIIe3UUY6tJcTExmtjnXXUu0MrBuK2W/Qvw=
 github.com/openshift/build-machinery-go v0.0.0-20230306181456-d321ffa04533/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
-github.com/openshift/client-go v0.0.0-20240125160436-aa5df63097c4 h1:Ct+/c9d5rjZudN+VBLxRJIQfPy1gJZier1P1KdpvCaM=
-github.com/openshift/client-go v0.0.0-20240125160436-aa5df63097c4/go.mod h1:ZS5cpA+0zI/ziDQxAKKvGkRKn9BJppqDYdAph+OUTlo=
+github.com/openshift/client-go v0.0.0-20240215090359-b71f6f2731f5 h1:iQ2Y1LUX7FbBm6ddaSVz/KeWXUMkqrBP/C5yt0DvBgI=
+github.com/openshift/client-go v0.0.0-20240215090359-b71f6f2731f5/go.mod h1:Y5Hp789dTrF6Fq8cA5YQlpwffmlLy8mc2un/CY0cg7Q=
 github.com/openshift/library-go v0.0.0-20240115112243-470c096a1ca9 h1:dQmXUWo3Ko+8K/fxKPF01NuTrD92d/ABBQ4NfxkwbAY=
 github.com/openshift/library-go v0.0.0-20240115112243-470c096a1ca9/go.mod h1:82B0gt8XawdXWRtKMrm3jSMTeRsiOSYKCi4F0fvPjG0=
 github.com/pkg/errors v0.8.1/go.mod h1:bwawxfHBFNV+L2hUp1rHADufV3IMtnDRdf1r5NINEl0=
