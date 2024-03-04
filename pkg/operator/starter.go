@@ -6,14 +6,16 @@ import (
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
-	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/client-go/kubernetes"
-
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	configv1informers "github.com/openshift/client-go/config/informers/externalversions"
+	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
+	"github.com/openshift/cluster-config-operator/pkg/operator/featureupgradablecontroller"
+	kubecloudconfig "github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
+	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
+	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
+	"github.com/openshift/cluster-config-operator/pkg/operator/removelatencysensitive"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/genericoperatorclient"
@@ -21,11 +23,9 @@ import (
 	"github.com/openshift/library-go/pkg/operator/staleconditions"
 	"github.com/openshift/library-go/pkg/operator/status"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
-
-	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
-	kubecloudconfig "github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
-	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
-	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
+	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/client-go/kubernetes"
 )
 
 func RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
@@ -50,6 +50,20 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	if err != nil {
 		return err
 	}
+
+	// to be removed a release after we block upgrades
+	latencySensitiveRemover := removelatencysensitive.NewLatencySensitiveRemovalController(
+		operatorClient,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().FeatureGates(),
+		controllerContext.EventRecorder,
+	)
+
+	featureUpgradeableController := featureupgradablecontroller.NewFeatureUpgradeableController(
+		operatorClient,
+		configInformers,
+		controllerContext.EventRecorder,
+	)
 
 	infraController := aws_platform_service_location.NewController(
 		operatorClient,
@@ -153,6 +167,8 @@ func RunOperator(ctx context.Context, controllerContext *controllercmd.Controlle
 	go operatorController.Run(ctx, 1)
 	go migrationPlatformStatusController.Run(ctx, 1)
 	go staleConditionsController.Run(ctx, 1)
+	go latencySensitiveRemover.Run(ctx, 1)
+	go featureUpgradeableController.Run(ctx, 1)
 
 	<-ctx.Done()
 	return nil
