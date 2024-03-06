@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strings"
 	"time"
 
 	"github.com/davecgh/go-spew/spew"
@@ -48,17 +49,17 @@ func (o *OperatorOptions) AddFlags(fs *pflag.FlagSet) {
 }
 
 func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
-	featureGateDetails, err := o.getFeatureGateMappingFromDisk()
-	if err != nil {
-		return err
-	}
-
 	// This kube client use protobuf, do not use it for CR
 	kubeClient, err := kubernetes.NewForConfig(controllerContext.ProtoKubeConfig)
 	if err != nil {
 		return err
 	}
 	configClient, err := configv1client.NewForConfig(controllerContext.KubeConfig)
+	if err != nil {
+		return err
+	}
+
+	featureGateDetails, err := o.getFeatureGateMappingFromDisk(ctx, configClient)
 	if err != nil {
 		return err
 	}
@@ -214,10 +215,27 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 	return nil
 }
 
-func (o *OperatorOptions) getFeatureGateMappingFromDisk() (map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, error) {
+func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, configClient configv1client.Interface) (map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, error) {
+	// TODO get the cluster profile in a better way, this isn't strictly correct
+	infrastructure, err := configClient.ConfigV1().Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
+	if err != nil {
+		return nil, fmt.Errorf("unable to get clusterprofile: %w", err)
+	}
+	clusterProfileAnnotation := ""
+	switch infrastructure.Status.ControlPlaneTopology {
+	case configv1.HighlyAvailableTopologyMode:
+		clusterProfileAnnotation = "include.release.openshift.io/self-managed-high-availability"
+	case configv1.SingleReplicaTopologyMode:
+		clusterProfileAnnotation = "include.release.openshift.io/single-node-developer"
+	case configv1.ExternalTopologyMode:
+		clusterProfileAnnotation = "include.release.openshift.io/ibm-cloud-managed"
+	default:
+		return nil, fmt.Errorf("unable to get clusterprofile from topology %q", infrastructure.Status.ControlPlaneTopology)
+	}
+
 	ret := map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled{}
 
-	err := filepath.Walk(o.AuthoritativeFeatureGateDir,
+	err = filepath.Walk(o.AuthoritativeFeatureGateDir,
 		func(path string, info os.FileInfo, err error) error {
 			if err != nil {
 				return err
@@ -234,6 +252,15 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk() (map[configv1.FeatureS
 			featureGate, err := render.ReadFeatureGateV1(content)
 			if err != nil {
 				return fmt.Errorf("%q is not a featuregate: %v", path, featureGate)
+			}
+
+			// older versions of openshift/api did not write manifests with clusterprofiles preferences, but new ones do
+			if hasClusterProfilePreference(featureGate.Annotations) {
+				// if the manifest has a clusterprofile preference and it's not the one we're installing with
+				// skip the manifest.
+				if featureGate.Annotations[clusterProfileAnnotation] != "false-except-for-the-config-operator" {
+					return nil
+				}
 			}
 
 			featureGateValues := &configv1.FeatureGateEnabledDisabled{}
@@ -272,4 +299,14 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk() (map[configv1.FeatureS
 	}
 
 	return ret, nil
+}
+
+func hasClusterProfilePreference(annotations map[string]string) bool {
+	for k := range annotations {
+		if strings.HasPrefix(k, "include.release.openshift.io/") {
+			return true
+		}
+	}
+
+	return false
 }
