@@ -323,20 +323,16 @@ func TestFeatureGateController_sync(t *testing.T) {
 					withFeatureSet(configv1.CustomNoUpgrade).
 					customEnabled("Eleven", "Twelve").
 					customDisabled("Kale", "Lettuce").
-					statusEnabled("current-version", "Eleven", "Twelve").
-					statusDisabled("current-version", "Kale", "Lettuce").
+					statusEnabled("current-version",
+						"Eleven",  // from spec
+						"Five",    // from default
+						"Six",     // from default
+						"Twelve"). // from spec
 					statusDisabled("current-version",
-						"Apple",    // known
-						"Banana",   // known
-						"Eggplant", // known
-						"Five",     // known
-						"FoieGras", // known
-						"Kale",     // specific
-						"Lettuce",  // specific
-						"One",      // known
-						"Six",      // known
-						"Two",      // known
-					).
+						"Eggplant", // from default
+						"FoieGras", // from default
+						"Kale",     // from spec
+						"Lettuce"). // from spec
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
 					t.Fatal(spew.Sdump(actual))
