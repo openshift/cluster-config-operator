@@ -148,8 +148,11 @@ func (c FeatureGateController) sync(ctx context.Context, syncCtx factory.SyncCon
 func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
 	if featureGates.Spec.FeatureSet == configv1.CustomNoUpgrade {
 		if featureGates.Spec.FeatureGateSelection.CustomNoUpgrade != nil {
-			completeEnabled, completeDisabled := completeFeatureGates(knownFeatureSets, featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Enabled, featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Disabled)
-			return completeEnabled, completeDisabled, nil
+			return completeFeatureGatesForCustom(
+				knownFeatureSets[configv1.Default],
+				featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Enabled,
+				featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Disabled,
+			)
 		}
 		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, nil
 	}
@@ -190,6 +193,45 @@ func completeFeatureGates(knownFeatureSets map[configv1.FeatureSet]*configv1.Fea
 	}
 
 	return enabled, knownFeatureGates.Difference(specificallyEnabledFeatureGates).UnsortedList()
+}
+
+func completeFeatureGatesForCustom(defaultFeatureGates *configv1.FeatureGateEnabledDisabled, forceEnabledList, forceDisabledList []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
+	for _, forceEnabled := range forceEnabledList {
+		if inListOfNames(forceDisabledList, forceEnabled) {
+			return nil, nil, fmt.Errorf("trying to enable and disable %q", forceEnabled)
+		}
+	}
+
+	enabled := []configv1.FeatureGateName{}
+	for _, forceEnabled := range forceEnabledList {
+		enabled = append(enabled, forceEnabled)
+	}
+	for _, defaultEnabled := range defaultFeatureGates.Enabled {
+		if !inListOfNames(forceDisabledList, defaultEnabled.FeatureGateAttributes.Name) {
+			enabled = append(enabled, defaultEnabled.FeatureGateAttributes.Name)
+		}
+	}
+
+	disabled := []configv1.FeatureGateName{}
+	for _, forceDisabled := range forceDisabledList {
+		disabled = append(disabled, forceDisabled)
+	}
+	for _, defaultDisabled := range defaultFeatureGates.Disabled {
+		if !inListOfNames(forceEnabledList, defaultDisabled.FeatureGateAttributes.Name) {
+			disabled = append(disabled, defaultDisabled.FeatureGateAttributes.Name)
+		}
+	}
+
+	return enabled, disabled, nil
+}
+
+func inListOfNames(haystack []configv1.FeatureGateName, needle configv1.FeatureGateName) bool {
+	for _, curr := range haystack {
+		if curr == needle {
+			return true
+		}
+	}
+	return false
 }
 
 func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate, currentVersion string) (*configv1.FeatureGateDetails, error) {
