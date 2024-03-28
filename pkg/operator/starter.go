@@ -223,14 +223,10 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, con
 	}
 	clusterProfileAnnotation := ""
 	switch infrastructure.Status.ControlPlaneTopology {
-	case configv1.HighlyAvailableTopologyMode:
-		clusterProfileAnnotation = "include.release.openshift.io/self-managed-high-availability"
-	case configv1.SingleReplicaTopologyMode:
-		clusterProfileAnnotation = "include.release.openshift.io/single-node-developer"
 	case configv1.ExternalTopologyMode:
 		clusterProfileAnnotation = "include.release.openshift.io/ibm-cloud-managed"
 	default:
-		return nil, fmt.Errorf("unable to get clusterprofile from topology %q", infrastructure.Status.ControlPlaneTopology)
+		clusterProfileAnnotation = "include.release.openshift.io/self-managed-high-availability"
 	}
 
 	ret := map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled{}
