@@ -21,6 +21,7 @@ spec:
       name: openshift-config-operator
       annotations:
         target.workload.openshift.io/management: '{"effect": "PreferredDuringScheduling"}'
+        openshift.io/required-scc: nonroot-v2
       labels:
         app: openshift-config-operator
     spec:
