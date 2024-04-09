@@ -2,6 +2,7 @@ package render
 
 import (
 	"fmt"
+	"github.com/openshift/cluster-config-operator/pkg/cmd"
 	"io/ioutil"
 	"os"
 	"path/filepath"
@@ -157,7 +158,14 @@ func (r *renderOpts) Run() error {
 				return fmt.Errorf("error decoding FeatureGate: %w", err)
 			}
 			featureGates := featureGatesObj.(*configv1.FeatureGate)
-			currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.generic.PayloadVersion)
+			// Get cluster profile for new FeatureGate access.  Blank is no longer an option, so default to
+			// SelfManaged.
+			clusterProfile := cmd.GetClusterProfileName()
+			featureSets, ok := configv1.AllFeatureSets()[clusterProfile]
+			if !ok {
+				return fmt.Errorf("no feature sets for cluster profile %q", clusterProfile)
+			}
+			currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(featureSets, featureGates, r.generic.PayloadVersion)
 			if err != nil {
 				return fmt.Errorf("error determining FeatureGates: %w", err)
 			}
