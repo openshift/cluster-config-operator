@@ -138,8 +138,6 @@ github.com/onsi/ginkgo/v2 v2.13.0 h1:0jY9lJquiL8fcf3M4LAXN5aMlS/b2BV86HFFPCPMgE4
 github.com/onsi/ginkgo/v2 v2.13.0/go.mod h1:TE309ZR8s5FsKKpuB1YAQYBzCaAfUgatB/xlT/ETL/o=
 github.com/onsi/gomega v1.29.0 h1:KIA/t2t5UBzoirT4H9tsML45GEbo3ouUnBHsCfD2tVg=
 github.com/onsi/gomega v1.29.0/go.mod h1:9sxs+SwGrKI0+PWe4Fxa9tFQQBG5xSsSbMXOI8PPpoQ=
-github.com/openshift/api v0.0.0-20240202140003-8b34b9854c7f h1:yJ8mEpEW2aJo+97wguYL+ehCsJe/pbeKjFsbdMuuEJI=
-github.com/openshift/api v0.0.0-20240202140003-8b34b9854c7f/go.mod h1:CxgbWAlvu2iQB0UmKTtRu1YfepRg1/vJ64n2DlIEVz4=
 github.com/openshift/build-machinery-go v0.0.0-20230306181456-d321ffa04533 h1:mh3ZYs7kPIIe3UUY6tJcTExmtjnXXUu0MrBuK2W/Qvw=
 github.com/openshift/build-machinery-go v0.0.0-20230306181456-d321ffa04533/go.mod h1:b1BuldmJlbA/xYtdZvKi+7j5YGB44qJUJDZ9zwiNCfE=
 github.com/openshift/client-go v0.0.0-20240125160436-aa5df63097c4 h1:Ct+/c9d5rjZudN+VBLxRJIQfPy1gJZier1P1KdpvCaM=
@@ -168,6 +166,8 @@ github.com/rogpeppe/go-internal v1.10.0/go.mod h1:UQnix2H7Ngw/k4C5ijL5+65zddjncj
 github.com/russross/blackfriday/v2 v2.1.0/go.mod h1:+Rmxgy9KzJVeS9/2gXHxylqXiyQDYRxCVz55jmeOWTM=
 github.com/sirupsen/logrus v1.9.0 h1:trlNQbNUG3OdDrDil03MCb1H2o9nJ1x4/5LYw7byDE0=
 github.com/sirupsen/logrus v1.9.0/go.mod h1:naHLuLoDiP4jHNo9R0sCBMtWGeIprob74mVsIT4qYEQ=
+github.com/slashpai/api v1.0.0 h1:Q+BD/dIsCc3KfSnS9J0CURBcMfy7N7DmGlzs7VkD2dM=
+github.com/slashpai/api v1.0.0/go.mod h1:CxgbWAlvu2iQB0UmKTtRu1YfepRg1/vJ64n2DlIEVz4=
 github.com/soheilhy/cmux v0.1.5 h1:jjzc5WVemNEDTLwv9tlmemhC73tI08BNOIGwBOo10Js=
 github.com/soheilhy/cmux v0.1.5/go.mod h1:T7TcVDs9LWfQgPlPsdngu6I6QIoyIFZDDC6sNE1GqG0=
 github.com/spf13/cobra v1.7.0 h1:hyqWnYt1ZQShIddO5kBpj3vu05/++x6tJ6dg8EC572I=
