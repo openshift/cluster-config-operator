@@ -9,6 +9,7 @@ import (
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/api/features"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	v1 "github.com/openshift/client-go/config/informers/externalversions/config/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
@@ -30,7 +31,7 @@ type FeatureGateController struct {
 	featureGatesLister   configlistersv1.FeatureGateLister
 	clusterVersionLister configlistersv1.ClusterVersionLister
 	// for unit testing
-	featureSetMap map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled
+	featureSetMap map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled
 
 	versionRecorder status.VersionGetter
 	eventRecorder   events.Recorder
@@ -38,7 +39,7 @@ type FeatureGateController struct {
 
 // NewController returns a new FeatureGateController.
 func NewFeatureGateController(
-	featureGateDetails map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled,
+	featureGateDetails map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled,
 	operatorClient operatorv1helpers.OperatorClient,
 	processVersion string,
 	featureGatesClient configv1client.FeatureGatesGetter, featureGatesInformer v1.FeatureGateInformer,
@@ -145,7 +146,7 @@ func (c FeatureGateController) sync(ctx context.Context, syncCtx factory.SyncCon
 	return nil
 }
 
-func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
+func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
 	if featureGates.Spec.FeatureSet == configv1.CustomNoUpgrade {
 		if featureGates.Spec.FeatureGateSelection.CustomNoUpgrade != nil {
 			return completeFeatureGatesForCustom(
@@ -166,7 +167,7 @@ func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*conf
 	return completeEnabled, completeDisabled, nil
 }
 
-func toFeatureGateNames(in []configv1.FeatureGateDescription) []configv1.FeatureGateName {
+func toFeatureGateNames(in []features.FeatureGateDescription) []configv1.FeatureGateName {
 	out := []configv1.FeatureGateName{}
 	for _, curr := range in {
 		out = append(out, curr.FeatureGateAttributes.Name)
@@ -176,7 +177,7 @@ func toFeatureGateNames(in []configv1.FeatureGateDescription) []configv1.Feature
 }
 
 // completeFeatureGates identifies every known feature and ensures that is explicitly on or explicitly off
-func completeFeatureGates(knownFeatureSets map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, enabled, disabled []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName) {
+func completeFeatureGates(knownFeatureSets map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, enabled, disabled []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName) {
 	specificallyEnabledFeatureGates := sets.New[configv1.FeatureGateName]()
 	specificallyEnabledFeatureGates.Insert(enabled...)
 
@@ -195,7 +196,7 @@ func completeFeatureGates(knownFeatureSets map[configv1.FeatureSet]*configv1.Fea
 	return enabled, knownFeatureGates.Difference(specificallyEnabledFeatureGates).UnsortedList()
 }
 
-func completeFeatureGatesForCustom(defaultFeatureGates *configv1.FeatureGateEnabledDisabled, forceEnabledList, forceDisabledList []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
+func completeFeatureGatesForCustom(defaultFeatureGates *features.FeatureGateEnabledDisabled, forceEnabledList, forceDisabledList []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
 	for _, forceEnabled := range forceEnabledList {
 		if inListOfNames(forceDisabledList, forceEnabled) {
 			return nil, nil, fmt.Errorf("trying to enable and disable %q", forceEnabled)
@@ -234,7 +235,7 @@ func inListOfNames(haystack []configv1.FeatureGateName, needle configv1.FeatureG
 	return false
 }
 
-func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate, currentVersion string) (*configv1.FeatureGateDetails, error) {
+func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate, currentVersion string) (*configv1.FeatureGateDetails, error) {
 	enabled, disabled, err := featuresGatesFromFeatureSets(featureSetMap, featureGates)
 	if err != nil {
 		return nil, err

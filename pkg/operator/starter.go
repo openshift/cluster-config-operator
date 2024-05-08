@@ -3,6 +3,7 @@ package operator
 import (
 	"context"
 	"fmt"
+	"github.com/openshift/api/features"
 	"os"
 	"path/filepath"
 	"strings"
@@ -215,7 +216,7 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 	return nil
 }
 
-func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, configClient configv1client.Interface) (map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled, error) {
+func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, configClient configv1client.Interface) (map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, error) {
 	// TODO get the cluster profile in a better way, this isn't strictly correct
 	infrastructure, err := configClient.ConfigV1().Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
 	if err != nil {
@@ -229,7 +230,7 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, con
 		clusterProfileAnnotation = "include.release.openshift.io/self-managed-high-availability"
 	}
 
-	ret := map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled{}
+	ret := map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled{}
 
 	err = filepath.Walk(o.AuthoritativeFeatureGateDir,
 		func(path string, info os.FileInfo, err error) error {
@@ -259,20 +260,20 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, con
 				}
 			}
 
-			featureGateValues := &configv1.FeatureGateEnabledDisabled{}
+			featureGateValues := &features.FeatureGateEnabledDisabled{}
 			for _, possibleGates := range featureGate.Status.FeatureGates {
 				if possibleGates.Version != o.OperatorVersion {
 					continue
 				}
 				for _, curr := range possibleGates.Enabled {
-					featureGateValues.Enabled = append(featureGateValues.Enabled, configv1.FeatureGateDescription{
+					featureGateValues.Enabled = append(featureGateValues.Enabled, features.FeatureGateDescription{
 						FeatureGateAttributes: configv1.FeatureGateAttributes{
 							Name: curr.Name,
 						},
 					})
 				}
 				for _, curr := range possibleGates.Disabled {
-					featureGateValues.Disabled = append(featureGateValues.Disabled, configv1.FeatureGateDescription{
+					featureGateValues.Disabled = append(featureGateValues.Disabled, features.FeatureGateDescription{
 						FeatureGateAttributes: configv1.FeatureGateAttributes{
 							Name: curr.Name,
 						},

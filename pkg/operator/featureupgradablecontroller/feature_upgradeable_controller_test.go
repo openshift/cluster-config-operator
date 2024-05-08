@@ -46,13 +46,13 @@ func TestNewUpgradeableCondition(t *testing.T) {
 			},
 		},
 		{
-			name:     "latencysensitive",
-			features: string(configv1.LatencySensitive),
+			name:     "devpreview",
+			features: string(configv1.DevPreviewNoUpgrade),
 			expected: operatorv1.OperatorCondition{
-				Reason:  "RestrictedFeatureGates_LatencySensitive",
+				Reason:  "RestrictedFeatureGates_DevPreviewNoUpgrade",
 				Status:  "False",
 				Type:    "FeatureGatesUpgradeable",
-				Message: "\"LatencySensitive\" does not allow updates",
+				Message: "\"DevPreviewNoUpgrade\" does not allow updates",
 			},
 		},
 	}

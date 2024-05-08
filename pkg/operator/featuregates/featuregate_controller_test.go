@@ -8,6 +8,7 @@ import (
 	"github.com/davecgh/go-spew/spew"
 
 	configv1 "github.com/openshift/api/config/v1"
+	"github.com/openshift/api/features"
 	configv1fake "github.com/openshift/client-go/config/clientset/versioned/fake"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	"github.com/openshift/library-go/pkg/controller/factory"
@@ -122,9 +123,9 @@ func (f *testFeatureGateBuilder) toFeatureGate() *configv1.FeatureGate {
 	return ret
 }
 
-var testingFeatureSets = map[configv1.FeatureSet]*configv1.FeatureGateEnabledDisabled{
+var testingFeatureSets = map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled{
 	configv1.Default: {
-		Enabled: []configv1.FeatureGateDescription{
+		Enabled: []features.FeatureGateDescription{
 			{
 				FeatureGateAttributes: configv1.FeatureGateAttributes{
 					Name: "Five",
@@ -136,7 +137,7 @@ var testingFeatureSets = map[configv1.FeatureSet]*configv1.FeatureGateEnabledDis
 				},
 			},
 		},
-		Disabled: []configv1.FeatureGateDescription{
+		Disabled: []features.FeatureGateDescription{
 			{
 				FeatureGateAttributes: configv1.FeatureGateAttributes{
 					Name: "Eggplant",
@@ -150,11 +151,11 @@ var testingFeatureSets = map[configv1.FeatureSet]*configv1.FeatureGateEnabledDis
 		},
 	},
 	configv1.CustomNoUpgrade: {
-		Enabled:  []configv1.FeatureGateDescription{},
-		Disabled: []configv1.FeatureGateDescription{},
+		Enabled:  []features.FeatureGateDescription{},
+		Disabled: []features.FeatureGateDescription{},
 	},
 	configv1.TechPreviewNoUpgrade: {
-		Enabled: []configv1.FeatureGateDescription{
+		Enabled: []features.FeatureGateDescription{
 			{
 				FeatureGateAttributes: configv1.FeatureGateAttributes{
 					Name: "One",
@@ -166,7 +167,7 @@ var testingFeatureSets = map[configv1.FeatureSet]*configv1.FeatureGateEnabledDis
 				},
 			},
 		},
-		Disabled: []configv1.FeatureGateDescription{
+		Disabled: []features.FeatureGateDescription{
 			{
 				FeatureGateAttributes: configv1.FeatureGateAttributes{
 					Name: "Apple",

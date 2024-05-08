@@ -6,15 +6,12 @@ import (
 	"os"
 	"path/filepath"
 
-	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
-
 	"github.com/spf13/cobra"
 	"github.com/spf13/pflag"
 	"k8s.io/klog/v2"
 
 	configv1 "github.com/openshift/api/config/v1"
 	kubecloudconfig "github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
-	genericrender "github.com/openshift/library-go/pkg/operator/render"
 	genericrenderoptions "github.com/openshift/library-go/pkg/operator/render/options"
 )
 
@@ -146,38 +143,9 @@ func (r *renderOpts) Run() error {
 		return err
 	}
 
-	if !r.skipAPIRendering {
-		featureGateFiles, err := featureGateManifests(r.generic)
-		if err != nil {
-			return fmt.Errorf("problem with featuregate manifests: %w", err)
-		}
-		for _, featureGateFile := range featureGateFiles {
-			featureGatesObj, err := featureGateFile.GetDecodedObj()
-			if err != nil {
-				return fmt.Errorf("error decoding FeatureGate: %w", err)
-			}
-			featureGates := featureGatesObj.(*configv1.FeatureGate)
-			currentDetails, err := featuregates.FeaturesGateDetailsFromFeatureSets(configv1.FeatureSets, featureGates, r.generic.PayloadVersion)
-			if err != nil {
-				return fmt.Errorf("error determining FeatureGates: %w", err)
-			}
-			featureGates.Status.FeatureGates = []configv1.FeatureGateDetails{*currentDetails}
-
-			featureGateOutBytes := WriteFeatureGateV1OrDie(featureGates)
-			if err := os.WriteFile(featureGateFile.OriginalFilename, []byte(featureGateOutBytes), 0644); err != nil {
-				return fmt.Errorf("error writing FeatureGate manifest: %w", err)
-			}
-		}
-
-		if err := genericrender.WriteFiles(&r.generic, &renderConfig.FileConfig, renderConfig); err != nil {
-			return err
-		}
-	} else {
-		// need to create this, so we can later write files if need be.
-		if err := os.MkdirAll(filepath.Join(r.generic.AssetOutputDir, "manifests"), 0755); err != nil {
-			return fmt.Errorf("failed to create manifest dir: %w", err)
-		}
-
+	// need to create this, so we can later write files if need be.
+	if err := os.MkdirAll(filepath.Join(r.generic.AssetOutputDir, "manifests"), 0755); err != nil {
+		return fmt.Errorf("failed to create manifest dir: %w", err)
 	}
 
 	// TODO this almost certainly belongs in a different spot and several other operators were just arguing over who had to own a thing that none of them wanted.
