@@ -1,0 +1,7 @@
+apiVersion: config.openshift.io/v1
+kind: ImageContentPolicy
+metadata:
+  name: imagecontentpolicy-remove
+  annotations:
+    release.openshift.io/delete: "true"
+spec: {}
