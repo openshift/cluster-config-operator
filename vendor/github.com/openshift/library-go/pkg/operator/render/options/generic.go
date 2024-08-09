@@ -4,11 +4,10 @@ import (
 	"bytes"
 	"errors"
 	"fmt"
-	"io/ioutil"
+	"os"
 	"path/filepath"
 	"text/template"
 
-	"github.com/ghodss/yaml"
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/library-go/pkg/assets"
 	"github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
@@ -16,6 +15,7 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+	"sigs.k8s.io/yaml"
 )
 
 // GenericOptions contains the generic render command options.
@@ -235,7 +235,7 @@ func (o *GenericOptions) configFromDefaultsPlusOverride(defaultConfig, overrides
 	}
 	configs := [][]byte{defaultConfigContent, overridesContent}
 	for _, fname := range o.AdditionalConfigOverrideFiles {
-		bs, err := ioutil.ReadFile(fname)
+		bs, err := os.ReadFile(fname)
 		if err != nil {
 			return nil, fmt.Errorf("failed to load config overrides at %q: %v", fname, err)
 		}
