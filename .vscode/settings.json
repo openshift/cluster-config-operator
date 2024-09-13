@@ -1,0 +1,16 @@
+{
+    "Wingman.Ollama": {
+        "chatModel": "deepseek-coder:6.7b-instruct-q8_0",
+        "codeModel": "deepseek-coder:6.7b-base-q8_0",
+        "baseUrl": "http://localhost:11434",
+        "apiPath": "/api/generate",
+        "modelInfoPath": "/api/show"
+    },
+    "Wingman.Provider": "OpenAI",
+    "Wingman.OpenAI": {
+        "chatModel": "gpt-4-0125-preview",
+        "codeModel": "gpt-4-0125-preview",
+        "baseUrl": "https://api.openai.com/v1/chat/completions",
+        "apiKey": "ADD ME"
+    }
+}
