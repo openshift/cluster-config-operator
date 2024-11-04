@@ -5,7 +5,7 @@ go 1.20
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
-	github.com/openshift/api v0.0.0-20231031181504-3be12e93388f
+	github.com/openshift/api v0.0.0-20241031180523-b1c90a6cf9a3
 	github.com/openshift/build-machinery-go v0.0.0-20230306181456-d321ffa04533
 	github.com/openshift/client-go v0.0.0-20230718165156-6014fb98e86a
 	github.com/openshift/library-go v0.0.0-20231019174803-a2be4c7ba05f
