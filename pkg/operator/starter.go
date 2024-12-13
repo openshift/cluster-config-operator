@@ -3,17 +3,19 @@ package operator
 import (
 	"context"
 	"fmt"
-	"github.com/openshift/api/features"
 	"os"
 	"path/filepath"
 	"strings"
 	"time"
+
+	"github.com/openshift/api/features"
 
 	"github.com/davecgh/go-spew/spew"
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	configv1informers "github.com/openshift/client-go/config/informers/externalversions"
+	applyoperatorv1 "github.com/openshift/client-go/operator/applyconfigurations/operator/v1"
 	"github.com/openshift/cluster-config-operator/pkg/cmd/render"
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
 	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
@@ -32,7 +34,10 @@ import (
 	"github.com/spf13/pflag"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
+	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/utils/clock"
 )
 
 type OperatorOptions struct {
@@ -72,7 +77,14 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		operatorclient.GlobalMachineSpecifiedConfigNamespace,
 		"kube-system",
 	)
-	operatorClient, dynamicInformers, err := genericoperatorclient.NewClusterScopedOperatorClient(controllerContext.KubeConfig, operatorv1.GroupVersion.WithResource("configs"))
+	operatorClient, dynamicInformers, err := genericoperatorclient.NewClusterScopedOperatorClient(
+		clock.RealClock{},
+		controllerContext.KubeConfig,
+		operatorv1.GroupVersion.WithResource("configs"),
+		operatorv1.GroupVersion.WithKind("Config"),
+		extractOperatorSpec,
+		extractOperatorStatus,
+	)
 	if err != nil {
 		return err
 	}
@@ -306,4 +318,35 @@ func hasClusterProfilePreference(annotations map[string]string) bool {
 	}
 
 	return false
+}
+
+func extractOperatorSpec(obj *unstructured.Unstructured, fieldManager string) (*applyoperatorv1.OperatorSpecApplyConfiguration, error) {
+	castObj := &operatorv1.Config{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, castObj); err != nil {
+		return nil, fmt.Errorf("unable to convert to Config: %w", err)
+	}
+	ret, err := applyoperatorv1.ExtractConfig(castObj, fieldManager)
+	if err != nil {
+		return nil, fmt.Errorf("unable to extract fields for %q: %w", fieldManager, err)
+	}
+	if ret.Spec == nil {
+		return nil, nil
+	}
+	return &ret.Spec.OperatorSpecApplyConfiguration, nil
+}
+
+func extractOperatorStatus(obj *unstructured.Unstructured, fieldManager string) (*applyoperatorv1.OperatorStatusApplyConfiguration, error) {
+	castObj := &operatorv1.Config{}
+	if err := runtime.DefaultUnstructuredConverter.FromUnstructured(obj.Object, castObj); err != nil {
+		return nil, fmt.Errorf("unable to convert to Config: %w", err)
+	}
+	ret, err := applyoperatorv1.ExtractConfigStatus(castObj, fieldManager)
+	if err != nil {
+		return nil, fmt.Errorf("unable to extract fields for %q: %w", fieldManager, err)
+	}
+
+	if ret.Status == nil {
+		return nil, nil
+	}
+	return &ret.Status.OperatorStatusApplyConfiguration, nil
 }
