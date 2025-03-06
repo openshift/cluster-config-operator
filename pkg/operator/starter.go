@@ -170,6 +170,7 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		operatorClient,
 		versionRecorder,
 		controllerContext.EventRecorder,
+		controllerContext.Clock,
 	)
 
 	logLevelController := loglevel.NewClusterOperatorLoggingController(operatorClient, controllerContext.EventRecorder)
@@ -204,6 +205,7 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 	// MigrationAWSStatusControllerDegraded conditions has been replaced with the
 	// MigrationPlatformStatusControllerDegraded condition. The old condition is stale and should be removed.
 	staleConditionsController := staleconditions.NewRemoveStaleConditionsController(
+		"StaleConditionController",
 		[]string{"MigrationAWSStatusControllerDegraded"},
 		operatorClient,
 		controllerContext.EventRecorder,

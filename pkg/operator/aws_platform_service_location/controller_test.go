@@ -4,12 +4,14 @@ import (
 	"context"
 	"sort"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	ktesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
+	clocktesting "k8s.io/utils/clock/testing"
 
 	configv1 "github.com/openshift/api/config/v1"
 	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
@@ -181,7 +183,7 @@ func Test_sync(t *testing.T) {
 			}
 
 			err := ctrl.sync(context.TODO(),
-				factory.NewSyncContext("AWSPlatformServiceLocationController", events.NewInMemoryRecorder("AWSPlatformServiceLocationController")))
+				factory.NewSyncContext("AWSPlatformServiceLocationController", events.NewInMemoryRecorder("AWSPlatformServiceLocationController", clocktesting.NewFakePassiveClock(time.Now()))))
 			if tc.expectedErr == "" {
 				assert.NoError(t, err)
 			} else {

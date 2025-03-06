@@ -3,6 +3,7 @@ package migration_platform_status
 import (
 	"context"
 	"testing"
+	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
 	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
@@ -15,6 +16,7 @@ import (
 	"k8s.io/client-go/kubernetes/fake"
 	ktesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
 func Test_sync(t *testing.T) {
@@ -189,7 +191,7 @@ sshKey: REDACTED`,
 			}
 
 			err := ctrl.sync(context.TODO(),
-				factory.NewSyncContext("MigrationPlatformStatusController", events.NewInMemoryRecorder("MigrationPlatformStatusController")))
+				factory.NewSyncContext("MigrationPlatformStatusController", events.NewInMemoryRecorder("MigrationPlatformStatusController", clocktesting.NewFakePassiveClock(time.Now()))))
 			if test.err == "" {
 				assert.NoError(t, err)
 				assert.Equal(t, test.actions, len(fakeConfig.Actions()))

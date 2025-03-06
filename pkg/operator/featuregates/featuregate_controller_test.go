@@ -4,6 +4,7 @@ import (
 	"context"
 	"reflect"
 	"testing"
+	"time"
 
 	"github.com/davecgh/go-spew/spew"
 
@@ -18,6 +19,7 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	kubetesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
+	clocktesting "k8s.io/utils/clock/testing"
 )
 
 type testFeatureGateBuilder struct {
@@ -567,7 +569,7 @@ func TestFeatureGateController_sync(t *testing.T) {
 				clusterVersionLister: clusterVersionLister,
 				featureSetMap:        testingFeatureSets,
 				versionRecorder:      status.NewVersionGetter(),
-				eventRecorder:        events.NewInMemoryRecorder("fakee"),
+				eventRecorder:        events.NewInMemoryRecorder("fakee", clocktesting.NewFakePassiveClock(time.Now())),
 			}
 			if err := c.sync(ctx, tt.args.syncCtx); (err != nil) != tt.wantErr {
 				t.Errorf("sync() error = %v, wantErr %v", err, tt.wantErr)
