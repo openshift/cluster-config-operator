@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	configv1 "github.com/openshift/api/config/v1"
 	"github.com/openshift/api/features"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
@@ -20,6 +21,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/sets"
+	"k8s.io/klog/v2"
 )
 
 const FeatureVersionName = "feature-gates"
@@ -29,6 +31,8 @@ type FeatureGateController struct {
 	processVersion       string
 	featureGatesClient   configv1client.FeatureGatesGetter
 	featureGatesLister   configlistersv1.FeatureGateLister
+	nodeClient           configv1client.NodesGetter
+	nodeLister           configlistersv1.NodeLister
 	clusterVersionLister configlistersv1.ClusterVersionLister
 	// for unit testing
 	featureSetMap map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled
@@ -43,6 +47,7 @@ func NewFeatureGateController(
 	operatorClient operatorv1helpers.OperatorClient,
 	processVersion string,
 	featureGatesClient configv1client.FeatureGatesGetter, featureGatesInformer v1.FeatureGateInformer,
+	nodeClient configv1client.NodesGetter, nodeInformer v1.NodeInformer,
 	clusterVersionInformer v1.ClusterVersionInformer,
 	versionRecorder status.VersionGetter,
 	eventRecorder events.Recorder) factory.Controller {
@@ -50,6 +55,8 @@ func NewFeatureGateController(
 		processVersion:       processVersion,
 		featureGatesClient:   featureGatesClient,
 		featureGatesLister:   featureGatesInformer.Lister(),
+		nodeClient:           nodeClient,
+		nodeLister:           nodeInformer.Lister(),
 		clusterVersionLister: clusterVersionInformer.Lister(),
 		featureSetMap:        featureGateDetails,
 		versionRecorder:      versionRecorder,
@@ -61,6 +68,7 @@ func NewFeatureGateController(
 			operatorClient.Informer(),
 			featureGatesInformer.Informer(),
 			clusterVersionInformer.Informer(),
+			nodeInformer.Informer(),
 		).
 		WithSync(c.sync).
 		WithSyncDegradedOnError(operatorClient).
@@ -90,7 +98,18 @@ func (c FeatureGateController) sync(ctx context.Context, syncCtx factory.SyncCon
 		knownVersions.Insert(cvoVersion.Version)
 	}
 
-	currentDetails, err := FeaturesGateDetailsFromFeatureSets(c.featureSetMap, featureGates, c.processVersion)
+	nodesConfig, err := c.nodeLister.Get("cluster")
+	// ignore not found errors, as we can treat that as minimum kubelet version isn't populated yet.
+	// When it is, we'll get an update and rollout an update to the features
+	if err != nil && !apierrors.IsNotFound(err) {
+		return fmt.Errorf("unable to get NodesConfig: %w", err)
+	}
+	currentMinimumVersions := map[configv1.MinimumComponent]string{}
+	if nodesConfig != nil && nodesConfig.Spec.MinimumKubeletVersion != "" {
+		currentMinimumVersions[configv1.MinimumComponentKubelet] = nodesConfig.Spec.MinimumKubeletVersion
+	}
+
+	currentDetails, err := FeaturesGateDetailsFromFeatureSets(c.featureSetMap, featureGates, c.processVersion, currentMinimumVersions)
 	if err != nil {
 		return fmt.Errorf("unable to determine FeatureGateDetails from FeatureSets: %w", err)
 	}
@@ -146,7 +165,7 @@ func (c FeatureGateController) sync(ctx context.Context, syncCtx factory.SyncCon
 	return nil
 }
 
-func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
+func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate) ([]configv1.FeatureGateName, []configv1.FeatureGateName, map[configv1.FeatureGateName][]configv1.MinimumComponentVersion, error) {
 	if featureGates.Spec.FeatureSet == configv1.CustomNoUpgrade {
 		if featureGates.Spec.FeatureGateSelection.CustomNoUpgrade != nil {
 			return completeFeatureGatesForCustom(
@@ -155,16 +174,16 @@ func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*feat
 				featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Disabled,
 			)
 		}
-		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, nil
+		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, nil, nil
 	}
 
 	featureSet, ok := knownFeatureSets[featureGates.Spec.FeatureSet]
 	if !ok {
-		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, fmt.Errorf(".spec.featureSet %q not found", featureSet)
+		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, nil, fmt.Errorf(".spec.featureSet %q not found", featureSet)
 	}
 
-	completeEnabled, completeDisabled := completeFeatureGates(knownFeatureSets, toFeatureGateNames(featureSet.Enabled), toFeatureGateNames(featureSet.Disabled))
-	return completeEnabled, completeDisabled, nil
+	completeEnabled, completeDisabled, minimumVersions := completeFeatureGates(knownFeatureSets, toFeatureGateNames(featureSet.Enabled), toFeatureGateNames(featureSet.Disabled))
+	return completeEnabled, completeDisabled, minimumVersions, nil
 }
 
 func toFeatureGateNames(in []features.FeatureGateDescription) []configv1.FeatureGateName {
@@ -177,31 +196,48 @@ func toFeatureGateNames(in []features.FeatureGateDescription) []configv1.Feature
 }
 
 // completeFeatureGates identifies every known feature and ensures that is explicitly on or explicitly off
-func completeFeatureGates(knownFeatureSets map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, enabled, disabled []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName) {
+func completeFeatureGates(knownFeatureSets map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, enabled, disabled []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName, map[configv1.FeatureGateName][]configv1.MinimumComponentVersion) {
 	specificallyEnabledFeatureGates := sets.New[configv1.FeatureGateName]()
 	specificallyEnabledFeatureGates.Insert(enabled...)
 
 	knownFeatureGates := sets.New[configv1.FeatureGateName]()
 	knownFeatureGates.Insert(enabled...)
 	knownFeatureGates.Insert(disabled...)
+	minimumVersionMap := map[configv1.FeatureGateName][]configv1.MinimumComponentVersion{}
 	for _, known := range knownFeatureSets {
 		for _, curr := range known.Disabled {
 			knownFeatureGates.Insert(curr.FeatureGateAttributes.Name)
+			if len(curr.FeatureGateAttributes.RequiredMinimumComponentVersions) != 0 {
+				cpy := make([]configv1.MinimumComponentVersion, 0, len(curr.FeatureGateAttributes.RequiredMinimumComponentVersions))
+				for _, cv := range curr.FeatureGateAttributes.RequiredMinimumComponentVersions {
+					cpy = append(cpy, cv)
+				}
+				minimumVersionMap[curr.FeatureGateAttributes.Name] = cpy
+			}
 		}
 		for _, curr := range known.Enabled {
 			knownFeatureGates.Insert(curr.FeatureGateAttributes.Name)
+			if len(curr.FeatureGateAttributes.RequiredMinimumComponentVersions) != 0 {
+				cpy := make([]configv1.MinimumComponentVersion, 0, len(curr.FeatureGateAttributes.RequiredMinimumComponentVersions))
+				for _, cv := range curr.FeatureGateAttributes.RequiredMinimumComponentVersions {
+					cpy = append(cpy, cv)
+				}
+				minimumVersionMap[curr.FeatureGateAttributes.Name] = cpy
+			}
 		}
 	}
 
-	return enabled, knownFeatureGates.Difference(specificallyEnabledFeatureGates).UnsortedList()
+	return enabled, knownFeatureGates.Difference(specificallyEnabledFeatureGates).UnsortedList(), minimumVersionMap
 }
 
-func completeFeatureGatesForCustom(defaultFeatureGates *features.FeatureGateEnabledDisabled, forceEnabledList, forceDisabledList []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName, error) {
+func completeFeatureGatesForCustom(defaultFeatureGates *features.FeatureGateEnabledDisabled, forceEnabledList, forceDisabledList []configv1.FeatureGateName) ([]configv1.FeatureGateName, []configv1.FeatureGateName, map[configv1.FeatureGateName][]configv1.MinimumComponentVersion, error) {
 	for _, forceEnabled := range forceEnabledList {
 		if inListOfNames(forceDisabledList, forceEnabled) {
-			return nil, nil, fmt.Errorf("trying to enable and disable %q", forceEnabled)
+			return nil, nil, nil, fmt.Errorf("trying to enable and disable %q", forceEnabled)
 		}
 	}
+
+	minimumVersionMap := map[configv1.FeatureGateName][]configv1.MinimumComponentVersion{}
 
 	enabled := []configv1.FeatureGateName{}
 	for _, forceEnabled := range forceEnabledList {
@@ -210,6 +246,14 @@ func completeFeatureGatesForCustom(defaultFeatureGates *features.FeatureGateEnab
 	for _, defaultEnabled := range defaultFeatureGates.Enabled {
 		if !inListOfNames(forceDisabledList, defaultEnabled.FeatureGateAttributes.Name) {
 			enabled = append(enabled, defaultEnabled.FeatureGateAttributes.Name)
+		}
+		if len(defaultEnabled.FeatureGateAttributes.RequiredMinimumComponentVersions) != 0 {
+			cpy := make([]configv1.MinimumComponentVersion, 0, len(defaultEnabled.FeatureGateAttributes.RequiredMinimumComponentVersions))
+			for _, cv := range defaultEnabled.FeatureGateAttributes.RequiredMinimumComponentVersions {
+				cpy = append(cpy, cv)
+			}
+			klog.Infof("XXX %+v", cpy)
+			minimumVersionMap[defaultEnabled.FeatureGateAttributes.Name] = cpy
 		}
 	}
 
@@ -221,9 +265,17 @@ func completeFeatureGatesForCustom(defaultFeatureGates *features.FeatureGateEnab
 		if !inListOfNames(forceEnabledList, defaultDisabled.FeatureGateAttributes.Name) {
 			disabled = append(disabled, defaultDisabled.FeatureGateAttributes.Name)
 		}
+		if len(defaultDisabled.FeatureGateAttributes.RequiredMinimumComponentVersions) != 0 {
+			cpy := make([]configv1.MinimumComponentVersion, 0, len(defaultDisabled.FeatureGateAttributes.RequiredMinimumComponentVersions))
+			for _, cv := range defaultDisabled.FeatureGateAttributes.RequiredMinimumComponentVersions {
+				cpy = append(cpy, cv)
+			}
+			klog.Infof("XXX %+v", cpy)
+			minimumVersionMap[defaultDisabled.FeatureGateAttributes.Name] = cpy
+		}
 	}
 
-	return enabled, disabled, nil
+	return enabled, disabled, minimumVersionMap, nil
 }
 
 func inListOfNames(haystack []configv1.FeatureGateName, needle configv1.FeatureGateName) bool {
@@ -235,8 +287,8 @@ func inListOfNames(haystack []configv1.FeatureGateName, needle configv1.FeatureG
 	return false
 }
 
-func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate, currentVersion string) (*configv1.FeatureGateDetails, error) {
-	enabled, disabled, err := featuresGatesFromFeatureSets(featureSetMap, featureGates)
+func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled, featureGates *configv1.FeatureGate, currentVersion string, currentMinimumVersions map[configv1.MinimumComponent]string) (*configv1.FeatureGateDetails, error) {
+	enabled, disabled, minimumVersionsOfGates, err := featuresGatesFromFeatureSets(featureSetMap, featureGates)
 	if err != nil {
 		return nil, err
 	}
@@ -244,13 +296,48 @@ func FeaturesGateDetailsFromFeatureSets(featureSetMap map[configv1.FeatureSet]*f
 		Version: currentVersion,
 	}
 	for _, gateName := range enabled {
-		currentDetails.Enabled = append(currentDetails.Enabled, configv1.FeatureGateAttributes{
-			Name: gateName,
-		})
+		// If the API defines a current minimum version...
+		requiredComponentVersions, _ := minimumVersionsOfGates[gateName]
+		// ... we may need to skip it...
+		skip := false
+		for _, requiredComponentVersion := range requiredComponentVersions {
+			// ... are any minimum versions defined in the API?
+			currentMinVersionStr, ok := currentMinimumVersions[requiredComponentVersion.Component]
+			if !ok || currentMinVersionStr == "" {
+				// disable gates that don't have a minimum version currently enabled in the API
+				disabled = append(disabled, gateName)
+				skip = true
+				continue
+			}
+			requiredMinVersion, err := semver.Parse(requiredComponentVersion.Version)
+			if err != nil {
+				// This shouldn't be possible, so we should panic
+				panic(fmt.Errorf("Programming error: specified required minimum kubelet version for %s did not parse %w", gateName, err))
+			}
+			currentMinVersion, err := semver.Parse(currentMinVersionStr)
+			if err != nil {
+				// This shouldn't be possible (faulty min versions should be filtered from API) so we should panic
+				panic(fmt.Errorf("Programming error: configured minimum kubelet version for %s did not parse %w", gateName, err))
+			}
+			if requiredMinVersion.LT(currentMinVersion) {
+				// disable gates that don't have a new enough minimum version
+				disabled = append(disabled, gateName)
+				skip = true
+			}
+		}
+		// If there's no minimum version enabled for this feature, or the minimum version is new enough, keep it in enabled
+		if !skip {
+			currentDetails.Enabled = append(currentDetails.Enabled, configv1.FeatureGateAttributes{
+				Name:                             gateName,
+				RequiredMinimumComponentVersions: requiredComponentVersions,
+			})
+		}
 	}
 	for _, gateName := range disabled {
+		minVersions, _ := minimumVersionsOfGates[gateName]
 		currentDetails.Disabled = append(currentDetails.Disabled, configv1.FeatureGateAttributes{
-			Name: gateName,
+			Name:                             gateName,
+			RequiredMinimumComponentVersions: minVersions,
 		})
 	}
 

@@ -110,6 +110,8 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		o.OperatorVersion,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().FeatureGates(),
+		configClient.ConfigV1(),
+		configInformers.Config().V1().Nodes(),
 		configInformers.Config().V1().ClusterVersions(),
 		versionRecorder,
 		controllerContext.EventRecorder,

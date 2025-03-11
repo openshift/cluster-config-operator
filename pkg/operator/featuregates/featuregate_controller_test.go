@@ -114,15 +114,35 @@ func (f *testFeatureGateBuilder) toFeatureGate() *configv1.FeatureGate {
 			Version: features.version,
 		}
 		for _, curr := range features.features.Enabled {
-			details.Enabled = append(details.Enabled, configv1.FeatureGateAttributes{Name: curr})
+			// this pattern smells bad, but we need a way to translate between a featureGateName and
+			// the actual object
+			if curr == testingMinimumComponentVersionFeatureGate.Name {
+				details.Enabled = append(details.Enabled, testingMinimumComponentVersionFeatureGate)
+			} else {
+				details.Enabled = append(details.Enabled, configv1.FeatureGateAttributes{Name: curr})
+			}
 		}
 		for _, curr := range features.features.Disabled {
-			details.Disabled = append(details.Disabled, configv1.FeatureGateAttributes{Name: curr})
+			// this pattern smells bad, but we need a way to translate between a featureGateName and
+			// the actual object
+			if curr == testingMinimumComponentVersionFeatureGate.Name {
+				details.Disabled = append(details.Disabled, testingMinimumComponentVersionFeatureGate)
+			} else {
+				details.Disabled = append(details.Disabled, configv1.FeatureGateAttributes{Name: curr})
+			}
 		}
 		ret.Status.FeatureGates = append(ret.Status.FeatureGates, details)
 	}
 
 	return ret
+}
+
+var testingMinimumComponentVersionFeatureGate = configv1.FeatureGateAttributes{
+	Name: "Seven",
+	RequiredMinimumComponentVersions: []configv1.MinimumComponentVersion{{
+		Version:   "1.30.0",
+		Component: configv1.MinimumComponentKubelet,
+	}},
 }
 
 var testingFeatureSets = map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled{
@@ -137,6 +157,9 @@ var testingFeatureSets = map[configv1.FeatureSet]*features.FeatureGateEnabledDis
 				FeatureGateAttributes: configv1.FeatureGateAttributes{
 					Name: "Six",
 				},
+			},
+			{
+				FeatureGateAttributes: testingMinimumComponentVersionFeatureGate,
 			},
 		},
 		Disabled: []features.FeatureGateDescription{
@@ -197,9 +220,10 @@ func TestFeatureGateController_sync(t *testing.T) {
 		firstFeatureGate *configv1.FeatureGate
 		cvoVersions      []string
 
-		fields  fields
-		args    args
-		wantErr bool
+		fields                fields
+		minimumKubeletVersion string
+		args                  args
+		wantErr               bool
 
 		changeVerifier func(t *testing.T, actions []kubetesting.Action, versionRecorder status.VersionGetter)
 	}{
@@ -230,10 +254,12 @@ func TestFeatureGateController_sync(t *testing.T) {
 						"Eggplant", // known
 						"Five",     // known
 						"FoieGras", // known
+						"Seven",    // version unset
 						"Six",      // known
 					).
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
+					t.Log(spew.Sdump(expected))
 					t.Fatal(spew.Sdump(actual))
 				}
 			},
@@ -250,6 +276,7 @@ func TestFeatureGateController_sync(t *testing.T) {
 					"Eggplant", // known
 					"Five",     // known
 					"FoieGras", // known
+					"Seven",    // version unset
 					"Six",      // known
 				).
 				toFeatureGate(),
@@ -294,10 +321,12 @@ func TestFeatureGateController_sync(t *testing.T) {
 						"Eggplant", // specific
 						"FoieGras", // specific
 						"One",      // known
+						"Seven",    // version unset
 						"Two",      // known
 					).
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
+					t.Log(spew.Sdump(expected))
 					t.Fatal(spew.Sdump(actual))
 				}
 			},
@@ -335,9 +364,11 @@ func TestFeatureGateController_sync(t *testing.T) {
 						"Eggplant", // from default
 						"FoieGras", // from default
 						"Kale",     // from spec
-						"Lettuce"). // from spec
+						"Lettuce",  // from spec
+						"Seven").   // version unset
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
+					t.Log(spew.Sdump(expected))
 					t.Fatal(spew.Sdump(actual))
 				}
 			},
@@ -371,6 +402,7 @@ func TestFeatureGateController_sync(t *testing.T) {
 						"Eggplant", // known
 						"Five",     // known
 						"FoieGras", // known
+						"Seven",    // version unset
 						"Six",      // known
 					).
 					statusEnabled("prior-version", "Fifteen", "Sixteen").
@@ -394,6 +426,7 @@ func TestFeatureGateController_sync(t *testing.T) {
 					"Eggplant", // known
 					"Five",     // known
 					"FoieGras", // known
+					"Seven",    // version unset
 					"Six",      // known
 				).
 				statusEnabled("prior-version", "Fifteen", "Sixteen").
@@ -442,6 +475,7 @@ func TestFeatureGateController_sync(t *testing.T) {
 						"Eggplant", // specific
 						"FoieGras", // specific
 						"One",      // known
+						"Seven",    // version unset
 						"Two",      // known
 					).
 					statusEnabled("prior-version", "Fifteen", "Sixteen").
@@ -484,9 +518,11 @@ func TestFeatureGateController_sync(t *testing.T) {
 						"Eggplant", // specific
 						"FoieGras", // specific
 						"One",      // known
+						"Seven",    // version unset
 						"Two",      // known
 					).toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
+					t.Log(spew.Sdump(expected))
 					t.Fatal(spew.Sdump(actual))
 				}
 			},
@@ -522,10 +558,89 @@ func TestFeatureGateController_sync(t *testing.T) {
 						"Eggplant", // known
 						"Five",     // known
 						"FoieGras", // known
+						"Seven",    // version unset
 						"Six",      // known
 					).
 					toFeatureGate()
 				if !reflect.DeepEqual(actual, expected) {
+					t.Fatalf("expected: %+v, actual %+v", spew.Sdump(expected), spew.Sdump(actual))
+				}
+			},
+		},
+		{
+			name:        "filter-given-minimum-version-not-set",
+			cvoVersions: []string{"current-version", "prior-version"},
+			firstFeatureGate: featureGateBuilder().
+				withFeatureSet(configv1.Default).
+				statusEnabled("current-version", "One", "Two", "Seven").
+				statusDisabled("current-version", "Apple", "Banana").
+				toFeatureGate(),
+			fields: fields{
+				processVersion: "current-version",
+			},
+			changeVerifier: func(t *testing.T, actions []kubetesting.Action, versionRecorder status.VersionGetter) {
+				if versionRecorder.GetVersions()[FeatureVersionName] != "current-version" {
+					t.Errorf("bad version: %v", versionRecorder.GetVersions())
+				}
+				if len(actions) != 1 {
+					t.Fatalf("bad changes: %v", actions)
+				}
+				updateAction := actions[0].(kubetesting.UpdateAction)
+				actual := updateAction.GetObject().(*configv1.FeatureGate)
+				expected := featureGateBuilder().
+					withFeatureSet(configv1.Default).
+					statusEnabled("current-version", "Five", "Six").
+					statusDisabled("current-version",
+						"Apple",    // known
+						"Banana",   // known
+						"Eggplant", // specific
+						"FoieGras", // specific
+						"One",      // known
+						"Seven",    // not set
+						"Two",      // known
+					).
+					toFeatureGate()
+				if !reflect.DeepEqual(actual, expected) {
+					t.Log(spew.Sdump(expected))
+					t.Fatal(spew.Sdump(actual))
+				}
+			},
+		},
+		{
+			name:        "add-given-minimum-version-set",
+			cvoVersions: []string{"current-version", "prior-version"},
+			firstFeatureGate: featureGateBuilder().
+				withFeatureSet(configv1.Default).
+				statusEnabled("current-version", "One", "Two", "Seven").
+				statusDisabled("current-version", "Apple", "Banana").
+				toFeatureGate(),
+			fields: fields{
+				processVersion: "current-version",
+			},
+			minimumKubeletVersion: "1.30.0",
+			changeVerifier: func(t *testing.T, actions []kubetesting.Action, versionRecorder status.VersionGetter) {
+				if versionRecorder.GetVersions()[FeatureVersionName] != "current-version" {
+					t.Errorf("bad version: %v", versionRecorder.GetVersions())
+				}
+				if len(actions) != 1 {
+					t.Fatalf("bad changes: %v", actions)
+				}
+				updateAction := actions[0].(kubetesting.UpdateAction)
+				actual := updateAction.GetObject().(*configv1.FeatureGate)
+				expected := featureGateBuilder().
+					withFeatureSet(configv1.Default).
+					statusEnabled("current-version", "Five", "Seven", "Six").
+					statusDisabled("current-version",
+						"Apple",    // known
+						"Banana",   // known
+						"Eggplant", // specific
+						"FoieGras", // specific
+						"One",      // known
+						"Two",      // known
+					).
+					toFeatureGate()
+				if !reflect.DeepEqual(actual, expected) {
+					t.Log(spew.Sdump(expected))
 					t.Fatal(spew.Sdump(actual))
 				}
 			},
@@ -562,6 +677,15 @@ func TestFeatureGateController_sync(t *testing.T) {
 			indexer.Add(cvo)
 			clusterVersionLister = configlistersv1.NewClusterVersionLister(indexer)
 
+			nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+			nodeLister := configlistersv1.NewNodeLister(nodeIndexer)
+			nodeIndexer.Add(&configv1.Node{
+				ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+				Spec: configv1.NodeSpec{
+					MinimumKubeletVersion: tt.minimumKubeletVersion,
+				},
+			})
+
 			c := FeatureGateController{
 				processVersion:       tt.fields.processVersion,
 				featureGatesClient:   fakeClient.ConfigV1(),
@@ -570,6 +694,8 @@ func TestFeatureGateController_sync(t *testing.T) {
 				featureSetMap:        testingFeatureSets,
 				versionRecorder:      status.NewVersionGetter(),
 				eventRecorder:        events.NewInMemoryRecorder("fakee", clocktesting.NewFakePassiveClock(time.Now())),
+				nodeClient:           fakeClient.ConfigV1(),
+				nodeLister:           nodeLister,
 			}
 			if err := c.sync(ctx, tt.args.syncCtx); (err != nil) != tt.wantErr {
 				t.Errorf("sync() error = %v, wantErr %v", err, tt.wantErr)
