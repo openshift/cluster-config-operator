@@ -282,18 +282,28 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, con
 					continue
 				}
 				for _, curr := range possibleGates.Enabled {
-					featureGateValues.Enabled = append(featureGateValues.Enabled, features.FeatureGateDescription{
+					desc := features.FeatureGateDescription{
 						FeatureGateAttributes: configv1.FeatureGateAttributes{
 							Name: curr.Name,
 						},
-					})
+					}
+					if curr.RequiredMinimumComponentVersions != nil {
+						desc.FeatureGateAttributes.RequiredMinimumComponentVersions = make([]configv1.MinimumComponentVersion, 0, len(curr.RequiredMinimumComponentVersions))
+						copy(desc.FeatureGateAttributes.RequiredMinimumComponentVersions, curr.RequiredMinimumComponentVersions)
+					}
+					featureGateValues.Enabled = append(featureGateValues.Enabled, desc)
 				}
 				for _, curr := range possibleGates.Disabled {
-					featureGateValues.Disabled = append(featureGateValues.Disabled, features.FeatureGateDescription{
+					desc := features.FeatureGateDescription{
 						FeatureGateAttributes: configv1.FeatureGateAttributes{
 							Name: curr.Name,
 						},
-					})
+					}
+					if curr.RequiredMinimumComponentVersions != nil {
+						desc.FeatureGateAttributes.RequiredMinimumComponentVersions = make([]configv1.MinimumComponentVersion, 0, len(curr.RequiredMinimumComponentVersions))
+						copy(desc.FeatureGateAttributes.RequiredMinimumComponentVersions, curr.RequiredMinimumComponentVersions)
+					}
+					featureGateValues.Disabled = append(featureGateValues.Disabled, desc)
 				}
 
 				break
