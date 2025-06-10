@@ -343,6 +343,40 @@ func TestFeatureGateController_sync(t *testing.T) {
 			},
 		},
 		{
+			name:        "resolve-custom-no-enabled-disabled-specified",
+			cvoVersions: []string{"current-version"},
+			firstFeatureGate: featureGateBuilder().
+				withFeatureSet(configv1.CustomNoUpgrade).
+				toFeatureGate(),
+			fields: fields{
+				processVersion: "current-version",
+			},
+			changeVerifier: func(t *testing.T, actions []kubetesting.Action, versionRecorder status.VersionGetter) {
+				if versionRecorder.GetVersions()[FeatureVersionName] != "current-version" {
+					t.Errorf("bad version: %v", versionRecorder.GetVersions())
+				}
+				if len(actions) != 1 {
+					t.Fatalf("bad changes: %v", actions)
+				}
+				updateAction := actions[0].(kubetesting.UpdateAction)
+				actual := updateAction.GetObject().(*configv1.FeatureGate)
+				expected := featureGateBuilder().
+					withFeatureSet(configv1.CustomNoUpgrade).
+					statusEnabled("current-version",
+						"Five", // from default
+						"Six",  // from default
+					).
+					statusDisabled("current-version",
+						"Eggplant", // from default
+						"FoieGras", // from default
+					).
+					toFeatureGate()
+				if !reflect.DeepEqual(actual, expected) {
+					t.Fatal(spew.Sdump(actual))
+				}
+			},
+		},
+		{
 			name:        "add-current-version-to-empty-with-existing",
 			cvoVersions: []string{"prior-version"},
 			firstFeatureGate: featureGateBuilder().

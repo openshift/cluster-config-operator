@@ -45,7 +45,8 @@ func NewFeatureGateController(
 	featureGatesClient configv1client.FeatureGatesGetter, featureGatesInformer v1.FeatureGateInformer,
 	clusterVersionInformer v1.ClusterVersionInformer,
 	versionRecorder status.VersionGetter,
-	eventRecorder events.Recorder) factory.Controller {
+	eventRecorder events.Recorder,
+) factory.Controller {
 	c := &FeatureGateController{
 		processVersion:       processVersion,
 		featureGatesClient:   featureGatesClient,
@@ -155,7 +156,7 @@ func featuresGatesFromFeatureSets(knownFeatureSets map[configv1.FeatureSet]*feat
 				featureGates.Spec.FeatureGateSelection.CustomNoUpgrade.Disabled,
 			)
 		}
-		return []configv1.FeatureGateName{}, []configv1.FeatureGateName{}, nil
+		return completeFeatureGatesForCustom(knownFeatureSets[configv1.Default], []configv1.FeatureGateName{}, []configv1.FeatureGateName{})
 	}
 
 	featureSet, ok := knownFeatureSets[featureGates.Spec.FeatureSet]
