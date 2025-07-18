@@ -2,6 +2,7 @@ package migration_platform_status
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"time"
 
@@ -12,7 +13,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	operatorv1helpers "github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/equality"
-	"k8s.io/apimachinery/pkg/api/errors"
+	kerrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1client "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -62,7 +63,7 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 
 func (c MigrationPlatformStatusController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	obji, err := c.infraLister.Get("cluster")
-	if errors.IsNotFound(err) {
+	if kerrors.IsNotFound(err) {
 		syncCtx.Recorder().Warningf("MigrationPlatformStatusController", "Required infrastructures.%s/cluster not found", configv1.GroupName)
 		return nil
 	}
@@ -81,7 +82,7 @@ func (c MigrationPlatformStatusController) sync(ctx context.Context, syncCtx fac
 	if old, new := currentInfra.Status.Platform, currentInfra.Status.PlatformStatus.Type; old != "" && new != "" && old != new {
 		message := fmt.Sprintf("Mis-match between status.platform (%s) and status.platformStatus.type (%s) in infrastructures.%s/cluster", old, new, configv1.GroupName)
 		syncCtx.Recorder().Warningf("MigrationPlatformStatusController", message)
-		return fmt.Errorf(message)
+		return errors.New(message)
 	}
 
 	if err := c.migratePlatformSpecificFields(ctx, currentInfra); err != nil {
