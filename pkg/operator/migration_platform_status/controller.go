@@ -81,7 +81,7 @@ func (c MigrationPlatformStatusController) sync(ctx context.Context, syncCtx fac
 	if old, new := currentInfra.Status.Platform, currentInfra.Status.PlatformStatus.Type; old != "" && new != "" && old != new {
 		message := fmt.Sprintf("Mis-match between status.platform (%s) and status.platformStatus.type (%s) in infrastructures.%s/cluster", old, new, configv1.GroupName)
 		syncCtx.Recorder().Warningf("MigrationPlatformStatusController", message)
-		return fmt.Errorf(message)
+		return fmt.Errorf("%s", message)
 	}
 
 	if err := c.migratePlatformSpecificFields(ctx, currentInfra); err != nil {
