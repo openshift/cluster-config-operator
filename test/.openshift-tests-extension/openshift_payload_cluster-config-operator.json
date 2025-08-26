@@ -1,0 +1,12 @@
+[
+  {
+    "name": "[Jira:config-operator][sig-api-machinery] sanity test should always pass [Suite:openshift/cluster-config-operator/conformance/parallel]",
+    "labels": {},
+    "resources": {
+      "isolation": {}
+    },
+    "source": "openshift:payload:cluster-config-operator",
+    "lifecycle": "blocking",
+    "environmentSelector": {}
+  }
+]

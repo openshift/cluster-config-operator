@@ -7,6 +7,9 @@ toolchain go1.24.5
 require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
+	github.com/onsi/ginkgo/v2 v2.23.4
+	github.com/onsi/gomega v1.38.0
+	github.com/openshift-eng/openshift-tests-extension v0.0.0-20250804142706-7b3ab438a292
 	github.com/openshift/api v0.0.0-20250806102053-6a7223edb2fc
 	github.com/openshift/build-machinery-go v0.0.0-20250530140348-dc5b2804eeee
 	github.com/openshift/client-go v0.0.0-20250710075018-396b36f983ee
@@ -119,3 +122,6 @@ require (
 	sigs.k8s.io/randfill v1.0.0 // indirect
 	sigs.k8s.io/structured-merge-diff/v4 v4.7.0 // indirect
 )
+
+// This replace is required for we use the OCP fork of Ginkgo.
+replace github.com/onsi/ginkgo/v2 => github.com/openshift/onsi-ginkgo/v2 v2.6.1-0.20241205171354-8006f302fd12
