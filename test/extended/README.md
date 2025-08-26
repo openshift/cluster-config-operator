@@ -5,6 +5,9 @@ This repository contains the tests for the Cluster Config Operator for OpenShift
 These tests run against OpenShift clusters and are meant to be used in the OpenShift CI/CD pipeline.
 They use the framework: https://github.com/openshift-eng/openshift-tests-extension
 
+## Sequence Diagram
+<img width="1359" height="645" alt="image" src="https://github.com/user-attachments/assets/6d6efcc8-463a-4aed-9eee-91dcbaaa01e3" />
+
 ## How to Run the Tests Locally
 
 | Command                                                                                    | Description                                                              |
