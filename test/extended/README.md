@@ -1,12 +1,11 @@
 # Cluster Config Operator Tests Extension
-========================
 
 This repository contains the tests for the Cluster Config Operator for OpenShift.
 These tests run against OpenShift clusters and are meant to be used in the OpenShift CI/CD pipeline.
-They use the framework: https://github.com/openshift-eng/openshift-tests-extension
+They use the framework: [openshift-tests-extension](https://github.com/openshift-eng/openshift-tests-extension)
 
 ## Sequence Diagram
-<img width="1359" height="645" alt="image" src="https://github.com/user-attachments/assets/6d6efcc8-463a-4aed-9eee-91dcbaaa01e3" />
+![OpenShift Tests Extension sequence for Cluster Config Operator](https://github.com/user-attachments/assets/6d6efcc8-463a-4aed-9eee-91dcbaaa01e3)
 
 ## How to Run the Tests Locally
 
@@ -65,7 +64,7 @@ export KUBECONFIG=~/.kube/cluster-bot.kubeconfig
 To generate JUnit XML reports for CI integration:
 
 ```shell
-./cluster-config-operator-tests-ext  run-suite openshift/cluster-config-operator/conformance/parallel --junit-path $(ARTIFACT_DIR)/junit_$(shell date +%Y%m%d-%H%M%S).xml
+./cluster-config-operator-tests-ext run-suite openshift/cluster-config-operator/conformance/parallel --junit-path "${ARTIFACT_DIR}/junit_$(date +%Y%m%d-%H%M%S).xml"
 ```
 
 This generates both OTE framework and Ginkgo JUnit XML reports that can be integrated into CI systems.
@@ -80,8 +79,8 @@ You can write tests in the `test/extended/` directory.
 - Run `make build` to build the operator binary and `make tests-ext-build` for the test binary.
 - You can run the full suite or one test using the commands in the table above.
 - Before committing your changes:
-    - Run `make tests-ext-update`
-    - Run `make verify` to check formatting, linting, and validation
+  - Run `make tests-ext-update`
+  - Run `make verify` to check formatting, linting, and validation
 
 ## How to Rename a Test
 
@@ -91,10 +90,10 @@ You can write tests in the `test/extended/` directory.
 
 ```go
 It("should pass a renamed sanity check",
-	Label("original-name:[sig-config-operator] My Old Test Name"),
-	func(ctx context.Context) {
-		Expect(len("test")).To(BeNumerically(">", 0))
-	})
+  Label("original-name:[sig-config-operator] My Old Test Name"),
+  func(ctx context.Context) {
+    Expect(len("test")).To(BeNumerically(">", 0))
+  })
 ```
 
 4. Run `make tests-ext-update` to update the metadata
@@ -115,9 +114,9 @@ ext.IgnoreObsoleteTests(
 3. Delete the test code from your suite.
 4. Run `make tests-ext-update` to clean the metadata
 
-**WARNING**: Deleting a test may cause issues with Sippy https://sippy.dptools.openshift.org/sippy-ng/
+*****WARNING**: Deleting a test may cause issues with Sippy <https://sippy.dptools.openshift.org/sippy-ng/>
 or other tools that expected the Unique TestID tracked outside of this repository. [More info](https://github.com/openshift-eng/ci-test-mapping)
-Check the status of https://issues.redhat.com/browse/TRT-2208 before proceeding with test deletions.
+Check the status of [TRT-2208](https://issues.redhat.com/browse/TRT-2208) before proceeding with test deletions.
 
 ## E2E Test Configuration
 
@@ -148,7 +147,7 @@ releases:
       include_built_images: true
 ```
 
-More info: https://docs.ci.openshift.org/docs/architecture/ci-operator/#testing-with-an-ephemeral-openshift-release
+More info: [Testing with an ephemeral OpenShift release](https://docs.ci.openshift.org/docs/architecture/ci-operator/#testing-with-an-ephemeral-openshift-release)
 
 ## Makefile Commands
 
@@ -159,7 +158,7 @@ More info: https://docs.ci.openshift.org/docs/architecture/ci-operator/#testing-
 | `make tests-ext-update`  | Updates the metadata JSON file and cleans machine-specific codeLocations.    |
 | `make verify`            | Runs formatting, vet, and linter.                                            |
 
-**Note:** Metadata is stored in: `.openshift-tests-extension/openshift_payload_cluster-config-operator.json`
+**Note:** Metadata is stored in: `test/.openshift-tests-extension/openshift_payload_cluster-config-operator.json`
 
 ## FAQ
 
@@ -175,11 +174,11 @@ and test configuration — all of which adds overhead.
 
 From the OpenShift architecture point of view:
 
-1. Tests for payload components are part of the product. Many users (such as storage vendors, or third-party CNIs)
+1. Tests for payload components are part of the product. Many users (such as storage vendors or third-party CNIs)
 rely on these tests to validate that their solutions are compatible and conformant with OpenShift.
 
-2. Adding new images to the payload comes with significant overhead and cost. 
-It is generally preferred to include tests in the same image as the component 
+2. Adding new images to the payload comes with significant overhead and cost.
+It is generally preferred to include tests in the same image as the component
 being tested whenever possible.
 
 ### Why do we need to run `make tests-ext-update`?
@@ -192,8 +191,8 @@ executed and reported.
 
 This step is important whenever you add, rename, or delete a test.
 More information:
-- https://github.com/openshift/enhancements/blob/master/enhancements/testing/openshift-tests-extension.md#test-id
-- https://github.com/openshift-eng/ci-test-mapping
+- [Enhancement: OpenShift Tests Extension — Test ID](https://github.com/openshift/enhancements/blob/master/enhancements/testing/openshift-tests-extension.md#test-id)
+- [ci-test-mapping](https://github.com/openshift-eng/ci-test-mapping)
 
 ### How to get help with OTE?
 

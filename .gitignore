@@ -16,6 +16,9 @@ junit.xml
 report.json
 test-results/
 
+# metadata about tests
+.openshift-tests-extension/openshift_payload_*.json
+
 _output/
 .idea
 cluster-config-operator
