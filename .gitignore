@@ -11,6 +11,15 @@
 # Output of the go coverage tool, specifically when used with LiteIDE
 *.out
 
+# Test output files
+junit.xml
+report.json
+test-results/
+
+# metadata about tests
+.openshift-tests-extension/openshift_payload_*.json
+
 _output/
 .idea
 cluster-config-operator
+/cluster-config-operator-tests-ext
