@@ -1,15 +1,15 @@
 reviewers:
   - deads2k
-  - mfojtik
-  - sttts
-  - soltysh
   - tkashem
   - JoelSpeed
+  - benluddy
+  - p0lyn0mial
+  - everettraven
 approvers:
   - deads2k
-  - mfojtik
-  - sttts
-  - soltysh
   - tkashem
   - JoelSpeed
+  - benluddy
+  - p0lyn0mial
+  - everettraven
 component: config-operator
