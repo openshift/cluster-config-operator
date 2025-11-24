@@ -2,7 +2,6 @@ package render
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 	"path/filepath"
 
@@ -123,7 +122,7 @@ func (r *renderOpts) Run() error {
 	renderConfig := TemplateData{}
 
 	if len(r.clusterConfigFile) > 0 {
-		_, err := ioutil.ReadFile(r.clusterConfigFile)
+		_, err := os.ReadFile(r.clusterConfigFile)
 		if err != nil {
 			return err
 		}
@@ -158,7 +157,7 @@ func (r *renderOpts) Run() error {
 		if err := os.MkdirAll(filepath.Dir(r.cloudProviderConfigOutputFile), 0755); err != nil {
 			return fmt.Errorf("failed to create %v: %w", r.cloudProviderConfigOutputFile, err)
 		}
-		if err := ioutil.WriteFile(r.cloudProviderConfigOutputFile, targetCloudConfigMapData, 0644); err != nil {
+		if err := os.WriteFile(r.cloudProviderConfigOutputFile, targetCloudConfigMapData, 0644); err != nil {
 			return fmt.Errorf("failed to write merged config to %q: %v", r.cloudProviderConfigOutputFile, err)
 		}
 	}
