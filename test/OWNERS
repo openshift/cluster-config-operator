@@ -1,11 +1,15 @@
 reviewers:
-  - JoelSpeed
   - benluddy
   - p0lyn0mial
   - everettraven
+  - wangke19
+  - gangwgr
+  - xingxingxia
 approvers:
-  - JoelSpeed
   - benluddy
   - p0lyn0mial
   - everettraven
+  - wangke19
+  - gangwgr
+  - xingxingxia
 component: config-operator
