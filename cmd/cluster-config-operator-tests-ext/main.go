@@ -8,7 +8,7 @@ https://github.com/openshift-eng/openshift-tests-extension/blob/main/cmd/example
 package main
 
 import (
-	"context"
+	"fmt"
 	"os"
 
 	"github.com/spf13/cobra"
@@ -22,13 +22,20 @@ import (
 )
 
 func main() {
-	command := newOperatorTestCommand(context.Background())
-	code := cli.Run(command)
+	cmd, err := newOperatorTestCommand()
+	if err != nil {
+		klog.Fatal(err)
+	}
+
+	code := cli.Run(cmd)
 	os.Exit(code)
 }
 
-func newOperatorTestCommand(ctx context.Context) *cobra.Command {
-	registry := prepareOperatorTestsRegistry()
+func newOperatorTestCommand() (*cobra.Command, error) {
+	registry, err := prepareOperatorTestsRegistry()
+	if err != nil {
+		return nil, fmt.Errorf("failed to prepare test registry: %w", err)
+	}
 
 	cmd := &cobra.Command{
 		Use:   "cluster-config-operator-tests-ext",
@@ -49,7 +56,7 @@ func newOperatorTestCommand(ctx context.Context) *cobra.Command {
 
 	cmd.AddCommand(otecmd.DefaultExtensionCommands(registry)...)
 
-	return cmd
+	return cmd, nil
 }
 
 // prepareOperatorTestsRegistry creates the OTE registry for this operator.
@@ -57,10 +64,10 @@ func newOperatorTestCommand(ctx context.Context) *cobra.Command {
 // Note:
 //
 // This method must be called before adding the registry to the OTE framework.
-func prepareOperatorTestsRegistry() *oteextension.Registry {
+func prepareOperatorTestsRegistry() (*oteextension.Registry, error) {
 	registry := oteextension.NewRegistry()
 	extension := oteextension.NewExtension("openshift", "payload", "cluster-config-operator")
 
 	registry.Register(extension)
-	return registry
+	return registry, nil
 }
