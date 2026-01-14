@@ -13,12 +13,12 @@ import (
 
 	"github.com/spf13/cobra"
 	"k8s.io/component-base/cli"
+	"k8s.io/klog/v2"
 
 	otecmd "github.com/openshift-eng/openshift-tests-extension/pkg/cmd"
 	oteextension "github.com/openshift-eng/openshift-tests-extension/pkg/extension"
+	oteginkgo "github.com/openshift-eng/openshift-tests-extension/pkg/ginkgo"
 	"github.com/openshift/cluster-config-operator/pkg/version"
-
-	"k8s.io/klog/v2"
 )
 
 func main() {
@@ -65,9 +65,29 @@ func newOperatorTestCommand() (*cobra.Command, error) {
 //
 // This method must be called before adding the registry to the OTE framework.
 func prepareOperatorTestsRegistry() (*oteextension.Registry, error) {
-	registry := oteextension.NewRegistry()
+	// Build test specs from Ginkgo
+	specs, err := oteginkgo.BuildExtensionTestSpecsFromOpenShiftGinkgoSuite()
+	if err != nil {
+		return nil, fmt.Errorf("failed to build test specs from ginkgo: %w", err)
+	}
+
+	// Create extension
 	extension := oteextension.NewExtension("openshift", "payload", "cluster-config-operator")
 
+	// Add test suites
+	extension.AddSuite(oteextension.Suite{
+		Name: "openshift/cluster-config-operator/operator/parallel",
+		Qualifiers: []string{
+			`name.contains("[Operator]") && name.contains("[Parallel]")`,
+		},
+	})
+
+	// Add specs to extension
+	extension.AddSpecs(specs)
+
+	// Register extension with registry
+	registry := oteextension.NewRegistry()
 	registry.Register(extension)
+
 	return registry, nil
 }
