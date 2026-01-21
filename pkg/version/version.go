@@ -22,6 +22,9 @@ var (
 	goVersion    string
 	compiler     string
 	platform     string
+
+	// SCOS is a setting to enable CentOS Stream CoreOS-only modifications
+	SCOS = false
 )
 
 // Get returns the overall codebase version. It's for detecting
@@ -38,4 +41,9 @@ func Get() version.Info {
 		Compiler:     compiler,
 		Platform:     platform,
 	}
+}
+
+// IsSCOS returns true if CentOs Stream CoreOS-only modifications are enabled
+func IsSCOS() bool {
+	return SCOS
 }

@@ -11,6 +11,8 @@ include $(addprefix ./vendor/github.com/openshift/build-machinery-go/make/, \
 
 IMAGE_REGISTRY?=registry.svc.ci.openshift.org
 
+TAGS ?=
+GO_BUILD_FLAGS := $(if ${TAGS},-tags ${TAGS},)
 # This will call a macro called "build-image" which will generate image specific targets based on the parameters:
 # $0 - macro name
 # $1 - target suffix
