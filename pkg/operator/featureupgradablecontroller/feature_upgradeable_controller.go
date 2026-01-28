@@ -12,6 +12,8 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/util/sets"
+
+	version "github.com/openshift/cluster-config-operator/pkg/version"
 )
 
 var (
@@ -55,7 +57,7 @@ func (c *FeatureUpgradeableController) sync(ctx context.Context, syncCtx factory
 }
 
 func newUpgradeableCondition(featureGates *configv1.FeatureGate) operatorv1.OperatorCondition {
-	if featureGatesAllowingUpgrade.Has(string(featureGates.Spec.FeatureSet)) {
+	if featureGatesAllowingUpgrade.Has(string(featureGates.Spec.FeatureSet)) || (version.IsSCOS() && featureGates.Spec.FeatureSet == configv1.OKD) {
 		return operatorv1.OperatorCondition{
 			Type:   "FeatureGatesUpgradeable",
 			Reason: "AllowedFeatureGates_" + string(featureGates.Spec.FeatureSet),

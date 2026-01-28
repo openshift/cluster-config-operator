@@ -1,4 +1,5 @@
 FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.24-openshift-4.22 AS builder
+ARG TAGS=""
 WORKDIR /go/src/github.com/openshift/cluster-config-operator
 COPY . .
 ENV GO_PACKAGE github.com/openshift/cluster-config-operator
