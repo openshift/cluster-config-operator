@@ -21,6 +21,7 @@ import (
 	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
 	"github.com/openshift/cluster-config-operator/pkg/operator/featureupgradablecontroller"
 	kubecloudconfig "github.com/openshift/cluster-config-operator/pkg/operator/kube_cloud_config"
+	"github.com/openshift/cluster-config-operator/pkg/operator/migrateokdfeatureset"
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
 	"github.com/openshift/cluster-config-operator/pkg/operator/removelatencysensitive"
@@ -117,6 +118,15 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 
 	// to be removed a release after we block upgrades
 	latencySensitiveRemover := removelatencysensitive.NewLatencySensitiveRemovalController(
+		operatorClient,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().FeatureGates(),
+		controllerContext.EventRecorder,
+	)
+
+	// Migrates Default featureset to OKD for OKD builds
+	// to be removed a release after OKD upgrades are stable
+	okdFeatureSetMigrator := migrateokdfeatureset.NewOKDFeatureSetMigrationController(
 		operatorClient,
 		configClient.ConfigV1(),
 		configInformers.Config().V1().FeatureGates(),
@@ -224,6 +234,7 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 	go staleConditionsController.Run(ctx, 1)
 	go featureGateController.Run(ctx, 1)
 	go latencySensitiveRemover.Run(ctx, 1)
+	go okdFeatureSetMigrator.Run(ctx, 1)
 	go featureUpgradeableController.Run(ctx, 1)
 
 	<-ctx.Done()
