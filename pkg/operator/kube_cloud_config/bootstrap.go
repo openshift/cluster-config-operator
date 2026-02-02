@@ -2,7 +2,6 @@ package kubecloudconfig
 
 import (
 	"fmt"
-	"io/ioutil"
 	"os"
 
 	corev1 "k8s.io/api/core/v1"
@@ -34,7 +33,7 @@ func BootstrapTransform(infrastructureFile string, cloudProviderFile string) ([]
 
 	// Read, parse, and save the infrastructure object
 	var clusterInfrastructure configv1.Infrastructure
-	fileData, err := ioutil.ReadFile(infrastructureFile)
+	fileData, err := os.ReadFile(infrastructureFile)
 	if err != nil {
 		return nil, fmt.Errorf("failed to read infrastructure file: %w", err)
 	}
@@ -46,7 +45,7 @@ func BootstrapTransform(infrastructureFile string, cloudProviderFile string) ([]
 	// Read, parse, and save the user provided cloud configmap
 	var cloudProviderConfigInput corev1.ConfigMap
 	if len(cloudProviderFile) > 0 {
-		fileData, err = ioutil.ReadFile(cloudProviderFile)
+		fileData, err = os.ReadFile(cloudProviderFile)
 		if err != nil {
 			return nil, fmt.Errorf("failed to read cloud provider file: %w", err)
 		}
