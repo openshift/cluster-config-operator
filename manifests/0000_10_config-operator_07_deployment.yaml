@@ -40,6 +40,9 @@ spec:
       - name: available-featuregates
         emptyDir:
           sizeLimit: 100Mi
+      - name: config
+        configMap:
+          name: openshift-config-operator-config
       initContainers:
         - name: openshift-api
           securityContext:
@@ -77,6 +80,7 @@ spec:
           - operator
           - --operator-version=$(OPERATOR_IMAGE_VERSION)
           - --authoritative-feature-gate-dir=/available-featuregates
+          - --config=/var/run/configmaps/config/config.yaml
         ports:
           - containerPort: 8443
             name: metrics
@@ -104,6 +108,8 @@ spec:
           name: serving-cert
         - mountPath: /available-featuregates
           name: available-featuregates
+        - mountPath: /var/run/configmaps/config
+          name: config
         env:
         - name: IMAGE
           value: quay.io/openshift/origin-cluster-config-operator:v4.0
