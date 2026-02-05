@@ -5,9 +5,11 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/blang/semver/v4"
 	"github.com/openshift/api/features"
 
 	"github.com/davecgh/go-spew/spew"
@@ -255,6 +257,11 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, con
 		clusterProfileAnnotation = "include.release.openshift.io/self-managed-high-availability"
 	}
 
+	operatorVersion, err := semver.ParseTolerant(o.OperatorVersion)
+	if err != nil {
+		return nil, fmt.Errorf("unable to parse operator version: %w", err)
+	}
+
 	ret := map[configv1.FeatureSet]*features.FeatureGateEnabledDisabled{}
 
 	err = filepath.Walk(o.AuthoritativeFeatureGateDir,
@@ -283,6 +290,11 @@ func (o *OperatorOptions) getFeatureGateMappingFromDisk(ctx context.Context, con
 				if featureGate.Annotations[clusterProfileAnnotation] != "false-except-for-the-config-operator" {
 					return nil
 				}
+			}
+
+			if excludesOperatorVersion(featureGate.Annotations, operatorVersion.Major) {
+				// This manifest includes a range of versions it applies to, but it does not apply to our current version.
+				return nil
 			}
 
 			featureGateValues := &features.FeatureGateEnabledDisabled{}
@@ -362,4 +374,44 @@ func extractOperatorStatus(obj *unstructured.Unstructured, fieldManager string) 
 		return nil, nil
 	}
 	return &ret.Status.OperatorStatusApplyConfiguration, nil
+}
+
+func excludesOperatorVersion(annotations map[string]string, operatorVersion uint64) bool {
+	var versionsRaw string
+
+	for k, v := range annotations {
+		if k == "release.openshift.io/major-version" {
+			versionsRaw = v
+			break
+		}
+	}
+
+	if versionsRaw == "" {
+		return false
+	}
+
+	versions := strings.Split(versionsRaw, ",")
+
+	hasOperatorVersion, err := includesDesiredVersion(versions, operatorVersion)
+	if err != nil {
+		// Malformed annotation so should be excluded.
+		return true
+	}
+
+	return !hasOperatorVersion
+}
+
+func includesDesiredVersion(versions []string, operatorVersion uint64) (bool, error) {
+	for _, version := range versions {
+		version, err := strconv.ParseUint(version, 10, 64)
+		if err != nil {
+			// Malformed annotation so should be excluded
+			return false, fmt.Errorf("malformed annotation: %s", version)
+		}
+		if version == operatorVersion {
+			return true, nil
+		}
+	}
+
+	return false, nil
 }
