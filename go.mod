@@ -125,4 +125,7 @@ require (
 )
 
 // This replace is required for we use the OCP fork of Ginkgo.
-replace github.com/onsi/ginkgo/v2 => github.com/openshift/onsi-ginkgo/v2 v2.6.1-0.20241205171354-8006f302fd12
+replace (
+	github.com/onsi/ginkgo/v2 => github.com/openshift/onsi-ginkgo/v2 v2.6.1-0.20241205171354-8006f302fd12
+	github.com/openshift/api => github.com/dgrisonnet/api v0.0.0-20260205181805-6b0ea490734b
+)
