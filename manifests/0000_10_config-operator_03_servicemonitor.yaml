@@ -24,4 +24,5 @@ spec:
   selector:
     matchLabels:
       app: openshift-config-operator
+  serviceDiscoveryRole: EndpointSlice
 
