@@ -336,6 +336,86 @@ SubnetID = subnet-test
 
 		outputcm: nil,
 		err:      `invalid user provided cloud.conf: user provided cloud.conf and infrastructure object both include service overrides`,
+	}, {
+		name: "config map with NodeIPFamilies dual stack IPv4 preferred",
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv4
+NodeIPFamilies = ipv6
+`}},
+		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{Platform: configv1.AWSPlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AWSPlatformType, AWS: &configv1.AWSPlatformStatus{Region: "test-region"}}}},
+
+		outputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv4
+NodeIPFamilies = ipv6
+`}},
+		err: ``,
+	}, {
+		name: "config map with NodeIPFamilies dual stack IPv6 preferred",
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv6
+NodeIPFamilies = ipv4
+`}},
+		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{Platform: configv1.AWSPlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AWSPlatformType, AWS: &configv1.AWSPlatformStatus{Region: "test-region"}}}},
+
+		outputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv6
+NodeIPFamilies = ipv4
+`}},
+		err: ``,
+	}, {
+		name: "config map with NodeIPFamilies IPv4 preferred and service endpoints",
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv4
+NodeIPFamilies = ipv6
+`}},
+		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{Platform: configv1.AWSPlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AWSPlatformType, AWS: &configv1.AWSPlatformStatus{Region: "test-region", ServiceEndpoints: []configv1.AWSServiceEndpoint{{Name: "ec2", URL: "ec2.local"}}}}}},
+
+		outputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv4
+NodeIPFamilies = ipv6
+
+[ServiceOverride "0"]
+	Service = ec2
+	Region = test-region
+	URL = ec2.local
+	SigningRegion = test-region
+`}},
+		err: ``,
+	}, {
+		name: "config map with NodeIPFamilies IPv6 preferred and service endpoints",
+		inputcm: &corev1.ConfigMap{Data: map[string]string{"config": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv6
+NodeIPFamilies = ipv4
+`}},
+		inputinfra: &configv1.Infrastructure{Status: configv1.InfrastructureStatus{Platform: configv1.AWSPlatformType, PlatformStatus: &configv1.PlatformStatus{Type: configv1.AWSPlatformType, AWS: &configv1.AWSPlatformStatus{Region: "test-region", ServiceEndpoints: []configv1.AWSServiceEndpoint{{Name: "ec2", URL: "ec2.local"}}}}}},
+
+		outputcm: &corev1.ConfigMap{Data: map[string]string{"cloud.conf": `[Global]
+VPC = vpc-test
+SubnetID = subnet-test
+NodeIPFamilies = ipv6
+NodeIPFamilies = ipv4
+
+[ServiceOverride "0"]
+	Service = ec2
+	Region = test-region
+	URL = ec2.local
+	SigningRegion = test-region
+`}},
+		err: ``,
 	}}
 
 	for _, test := range cases {
