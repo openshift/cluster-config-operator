@@ -8,7 +8,7 @@ require (
 	github.com/davecgh/go-spew v1.1.2-0.20180830191138-d8f796af33cc
 	github.com/go-bindata/go-bindata v3.1.2+incompatible
 	github.com/openshift-eng/openshift-tests-extension v0.0.0-20250804142706-7b3ab438a292
-	github.com/openshift/api v0.0.0-20260121130051-59aa3e50a9fb
+	github.com/openshift/api v0.0.0-20260218112846-22c744831738
 	github.com/openshift/build-machinery-go v0.0.0-20250530140348-dc5b2804eeee
 	github.com/openshift/client-go v0.0.0-20260108185524-48f4ccfc4e13
 	github.com/openshift/library-go v0.0.0-20260121132910-dc3a1c884c04
