@@ -56,6 +56,9 @@ type CloudConfig struct {
 		//yourself in an non-AWS cloud and open an issue, please indicate that in the
 		//issue body.
 		DisableStrictZoneCheck bool
+
+		// NodeIPFamilies determines which IP addresses are added to node objects and their ordering.
+		NodeIPFamilies []string
 	}
 	// [ServiceOverride "1"]
 	//  Service = s3
