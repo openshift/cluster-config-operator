@@ -1,4 +1,4 @@
-FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.24-openshift-4.22 AS builder
+FROM registry.ci.openshift.org/ocp/builder:rhel-9-golang-1.25-openshift-4.22 AS builder
 ARG TAGS=""
 WORKDIR /go/src/github.com/openshift/cluster-config-operator
 COPY . .
@@ -6,7 +6,7 @@ ENV GO_PACKAGE github.com/openshift/cluster-config-operator
 RUN make build --warn-undefined-variables \
     && gzip cluster-config-operator-tests-ext
 
-FROM registry.ci.openshift.org/ocp/4.22:base-rhel9-minimal
+FROM registry.ci.openshift.org/ocp/4.22:base-rhel9
 RUN mkdir -p /usr/share/bootkube/manifests/manifests
 RUN mkdir -p /usr/share/bootkube/manifests/bootstrap-manifests
 COPY --from=builder /go/src/github.com/openshift/cluster-config-operator/cluster-config-operator /usr/bin/
