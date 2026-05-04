@@ -215,16 +215,17 @@ SubnetID = subnet-test
 			if err := indexerInfra.Add(test.inputinfra); err != nil {
 				t.Fatal(err.Error())
 			}
-			fakeConfig := configfakeclient.NewSimpleClientset(test.inputinfra)
+			fakeConfig := configfakeclient.NewClientset(test.inputinfra)
 
 			// Create a feature gate accessor with no enabled feature gates
 			featureGateAccessor := featuregates.NewHardcodedFeatureGateAccess(nil, nil)
+			currentFeatureGates, _ := featureGateAccessor.CurrentFeatureGates()
 
 			ctrl := KubeCloudConfigController{
 				infraClient:             fakeConfig.ConfigV1().Infrastructures(),
 				infraLister:             configv1listers.NewInfrastructureLister(indexerInfra),
 				configMapClient:         fake.CoreV1(),
-				featureGateAccess:       featureGateAccessor,
+				currentFeatureGates:     currentFeatureGates,
 				cloudConfigTransformers: cloudConfigTransformers(),
 			}
 
@@ -366,13 +367,16 @@ func Test_sync_withVSphereMultiVCenterDay2FeatureGate(t *testing.T) {
 				t.Fatal(err.Error())
 			}
 
-			fakeConfig := configfakeclient.NewSimpleClientset(inputInfra)
+			fakeConfig := configfakeclient.NewClientset(inputInfra)
+
+			// Get the current feature gates from the accessor
+			currentFeatureGates, _ := featureGateAccessor.CurrentFeatureGates()
 
 			ctrl := KubeCloudConfigController{
 				infraClient:             fakeConfig.ConfigV1().Infrastructures(),
 				infraLister:             configv1listers.NewInfrastructureLister(indexerInfra),
 				configMapClient:         fake.CoreV1(),
-				featureGateAccess:       featureGateAccessor,
+				currentFeatureGates:     currentFeatureGates,
 				cloudConfigTransformers: cloudConfigTransformers(),
 			}
 

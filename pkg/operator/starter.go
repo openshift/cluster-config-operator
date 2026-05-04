@@ -31,7 +31,6 @@ import (
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	featuregatelib "github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
-	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/genericoperatorclient"
 	"github.com/openshift/library-go/pkg/operator/loglevel"
 	"github.com/openshift/library-go/pkg/operator/staleconditions"
@@ -43,26 +42,21 @@ import (
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
-	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
 )
 
 type OperatorOptions struct {
 	OperatorVersion             string
 	AuthoritativeFeatureGateDir string
-	ManagedNamespace            string
 }
 
 func NewOperatorOptions() *OperatorOptions {
-	return &OperatorOptions{
-		ManagedNamespace: "openshift-config-operator",
-	}
+	return &OperatorOptions{}
 }
 
 func (o *OperatorOptions) AddFlags(fs *pflag.FlagSet) {
 	fs.StringVar(&o.OperatorVersion, "operator-version", o.OperatorVersion, "version of the operator that is running")
 	fs.StringVar(&o.AuthoritativeFeatureGateDir, "authoritative-feature-gate-dir", o.AuthoritativeFeatureGateDir, "directory containing each possible featuregate manifest.")
-	fs.StringVar(&o.ManagedNamespace, "namespace", o.ManagedNamespace, "The namespace for managed objects, target cloud-conf in particular.")
 }
 
 func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *controllercmd.ControllerContext) error {
@@ -100,22 +94,15 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		return err
 	}
 
-	recorderName := "config-operator-kube-cloud-config-controller"
 	desiredVersion := util.GetReleaseVersion()
 	missingVersion := "0.0.1-snapshot"
-	sharedClock := clock.RealClock{}
-
-	controllerRef, err := events.GetControllerReferenceForCurrentPod(ctx, kubeClient, o.ManagedNamespace, nil)
-	if err != nil {
-		klog.Warningf("unable to get owner reference (falling back to namespace): %v", err)
-	}
 
 	// By default, this will exit(0) if the featuregates change
 	featureGateAccessor := featuregatelib.NewFeatureGateAccess(
 		desiredVersion, missingVersion,
 		configInformers.Config().V1().ClusterVersions(),
 		configInformers.Config().V1().FeatureGates(),
-		events.NewKubeRecorder(kubeClient.CoreV1().Events(o.ManagedNamespace), recorderName, controllerRef, sharedClock),
+		controllerContext.EventRecorder,
 	)
 	go featureGateAccessor.Run(ctx)
 

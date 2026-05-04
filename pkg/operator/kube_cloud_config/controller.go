@@ -37,10 +37,12 @@ type cloudConfigTransformer func(input *corev1.ConfigMap, key string, obj *confi
 // user specifications from `infrastructure.spec.platformSpec` to stitch together a new ConfigMap for kube cloud config.
 // The stitched ConfigMap is stored at `openshift-config-managed/kube-cloud-confg`.
 type KubeCloudConfigController struct {
-	infraClient       configv1client.InfrastructureInterface
-	infraLister       configv1listers.InfrastructureLister
-	configMapClient   corev1client.ConfigMapsGetter
-	featureGateAccess featuregates.FeatureGateAccess
+	infraClient     configv1client.InfrastructureInterface
+	infraLister     configv1listers.InfrastructureLister
+	configMapClient corev1client.ConfigMapsGetter
+
+	// currentFeatureGates stores the most recently observed feature gates
+	currentFeatureGates featuregates.FeatureGate
 
 	// transformers stores per platform tranformer
 	cloudConfigTransformers map[configv1.PlatformType]cloudConfigTransformer
@@ -57,9 +59,19 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 		infraClient:             infraClient.Infrastructures(),
 		infraLister:             infraLister,
 		configMapClient:         configMapClient,
-		featureGateAccess:       featureGateAccess,
 		cloudConfigTransformers: cloudConfigTransformers(),
 	}
+
+	// Initialize current feature gates if available
+	if featureGateAccess.AreInitialFeatureGatesObserved() {
+		currentFeatures, err := featureGateAccess.CurrentFeatureGates()
+		if err != nil {
+			klog.Warningf("unable to get current feature gates during controller initialization: %v", err)
+		} else {
+			c.currentFeatureGates = currentFeatures
+		}
+	}
+
 	return factory.New().
 		WithInformers(
 			operatorClient.Informer(),
@@ -185,10 +197,7 @@ func (c KubeCloudConfigController) shouldManageCloudConfig(platformType configv1
 	case configv1.VSpherePlatformType:
 		// For vSphere, check if VSphereMultiVCenterDay2 feature gate is enabled
 		// When enabled, ownership transfers to cluster-cloud-controller-manager-operator
-		enabled, err := c.isFeatureGateEnabled(features.FeatureGateVSphereMultiVCenterDay2)
-		if err != nil {
-			return false, err
-		}
+		enabled := c.isFeatureGateEnabled(features.FeatureGateVSphereMultiVCenterDay2)
 		// Return false (do not manage) if enabled, true (manage) if not enabled
 		return !enabled, nil
 
@@ -216,18 +225,13 @@ func (c KubeCloudConfigController) shouldManageCloudConfig(platformType configv1
 }
 
 // isFeatureGateEnabled checks if the specified feature gate is enabled in the cluster.
-// It returns an error only if there's an issue retrieving the feature gate (other than NotFound).
-func (c KubeCloudConfigController) isFeatureGateEnabled(gateName configv1.FeatureGateName) (bool, error) {
-	if !c.featureGateAccess.AreInitialFeatureGatesObserved() {
-		// Feature gates aren't initialized yet, return safe fallback
-		return false, nil
+// It uses the feature gates that were retrieved during controller initialization.
+// If feature gates weren't available at initialization, it returns false as a safe fallback.
+func (c KubeCloudConfigController) isFeatureGateEnabled(gateName configv1.FeatureGateName) bool {
+	if c.currentFeatureGates == nil {
+		// Feature gates weren't initialized, return safe fallback
+		return false
 	}
 
-	currentFeatures, err := c.featureGateAccess.CurrentFeatureGates()
-	if err != nil {
-		klog.Errorf("unable to get feature gates: %v", err)
-		return false, err
-	}
-
-	return currentFeatures.Enabled(gateName), nil
+	return c.currentFeatureGates.Enabled(gateName)
 }
