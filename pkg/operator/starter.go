@@ -27,8 +27,10 @@ import (
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
 	"github.com/openshift/cluster-config-operator/pkg/operator/removelatencysensitive"
+	"github.com/openshift/cluster-config-operator/pkg/util"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/controller/factory"
+	featuregatelib "github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
 	"github.com/openshift/library-go/pkg/operator/genericoperatorclient"
 	"github.com/openshift/library-go/pkg/operator/loglevel"
 	"github.com/openshift/library-go/pkg/operator/staleconditions"
@@ -91,6 +93,18 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 	if err != nil {
 		return err
 	}
+
+	desiredVersion := util.GetReleaseVersion()
+	missingVersion := "0.0.1-snapshot"
+
+	// By default, this will exit(0) if the featuregates change
+	featureGateAccessor := featuregatelib.NewFeatureGateAccess(
+		desiredVersion, missingVersion,
+		configInformers.Config().V1().ClusterVersions(),
+		configInformers.Config().V1().FeatureGates(),
+		controllerContext.EventRecorder,
+	)
+	go featureGateAccessor.Run(ctx)
 
 	// don't change any versions until we sync
 	versionRecorder := status.NewVersionGetter()
@@ -157,6 +171,7 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		v1helpers.CachedConfigMapGetter(kubeClient.CoreV1(), kubeInformersForNamespaces),
 		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalUserSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
 		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalMachineSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
+		featureGateAccessor,
 		controllerContext.EventRecorder,
 	)
 
