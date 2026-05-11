@@ -2,7 +2,6 @@ package kubecloudconfig
 
 import (
 	"context"
-	"sync"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -42,10 +41,7 @@ type KubeCloudConfigController struct {
 	infraLister     configv1listers.InfrastructureLister
 	configMapClient corev1client.ConfigMapsGetter
 
-	// currentFeatureGates stores the most recently observed feature gates
-	// Protected by featureGatesMu
-	currentFeatureGates featuregates.FeatureGate
-	featureGatesMu      sync.RWMutex
+	featureGateAccessor featuregates.FeatureGateAccess
 
 	// transformers stores per platform tranformer
 	cloudConfigTransformers map[configv1.PlatformType]cloudConfigTransformer
@@ -63,31 +59,8 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 		infraLister:             infraLister,
 		configMapClient:         configMapClient,
 		cloudConfigTransformers: cloudConfigTransformers(),
+		featureGateAccessor:     featureGateAccess,
 	}
-
-	// Initialize current feature gates if available
-	if featureGateAccess.AreInitialFeatureGatesObserved() {
-		currentFeatures, err := featureGateAccess.CurrentFeatureGates()
-		if err != nil {
-			klog.Warningf("unable to get current feature gates during controller initialization: %v", err)
-		} else {
-			c.featureGatesMu.Lock()
-			c.currentFeatureGates = currentFeatures
-			c.featureGatesMu.Unlock()
-		}
-	}
-
-	// Create change handler for when feature settings change
-	featureGateAccess.SetChangeHandler(func(featureChange featuregates.FeatureChange) {
-		currentFeatures, err := featureGateAccess.CurrentFeatureGates()
-		if err != nil {
-			klog.Warningf("unable to get current feature gates during change event: %v", err)
-		} else {
-			c.featureGatesMu.Lock()
-			c.currentFeatureGates = currentFeatures
-			c.featureGatesMu.Unlock()
-		}
-	})
 
 	return factory.New().
 		WithInformers(
@@ -128,7 +101,8 @@ func (c *KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.Sy
 		return err
 	}
 	if !shouldManage {
-		syncCtx.Recorder().Eventf("KubeCloudConfigController", "Skipping kube-cloud-config management for platform %s", platformName)
+		// Set log level to 4 instead of using an event recorder due to this logging / happening every minute.
+		klog.V(4).Infof("KubeCloudConfigController: Skipping kube-cloud-config management for platform %s", platformName)
 		return nil
 	}
 
@@ -245,15 +219,14 @@ func (c *KubeCloudConfigController) shouldManageCloudConfig(platformType configv
 // It uses the feature gates that were retrieved during controller initialization.
 // If feature gates weren't available at initialization, it returns false as a safe fallback.
 func (c *KubeCloudConfigController) isFeatureGateEnabled(gateName configv1.FeatureGateName) bool {
-	c.featureGatesMu.RLock()
-	defer c.featureGatesMu.RUnlock()
-
-	if c.currentFeatureGates == nil {
+	if !c.featureGateAccessor.AreInitialFeatureGatesObserved() {
 		// Feature gates weren't initialized, return safe fallback
 		klog.Warningf("unable to check featuregate %v due to currentFeatureGates == nil", gateName)
 		return false
 	}
 
-	klog.V(4).Infof("is featuregate %v enabled?  %v", gateName, c.currentFeatureGates.Enabled(gateName))
-	return c.currentFeatureGates.Enabled(gateName)
+	// We can ignore error since only time error happens if initial feature gates were not observed and we checked above
+	currentFeatureGates, _ := c.featureGateAccessor.CurrentFeatureGates()
+	klog.V(4).Infof("is featuregate %v enabled?  %v", gateName, currentFeatureGates.Enabled(gateName))
+	return currentFeatureGates.Enabled(gateName)
 }
