@@ -189,24 +189,6 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		controllerContext.Clock,
 	)
 
-	// Start informers before waiting for feature gates - the feature gate accessor needs them running
-	go dynamicInformers.Start(ctx.Done())
-	go configInformers.Start(ctx.Done())
-	go kubeInformersForNamespaces.Start(ctx.Done())
-
-	// Start the feature gate accessor and wait for it to observe initial feature gates
-	// This must happen before creating controllers that depend on feature gates
-	go featureGateAccessor.Run(ctx)
-	klog.Info("Started feature gate accessor")
-	select {
-	case <-featureGateAccessor.InitialFeatureGatesObserved():
-		klog.V(4).Info("FeatureGates initialized")
-	case <-time.After(1 * time.Minute):
-		accessError := errors.New("timed out waiting for FeatureGate detection")
-		klog.Error(accessError, "unable to start operator")
-		return accessError
-	}
-
 	kubeCloudConfigController := kubecloudconfig.NewController(
 		operatorClient,
 		configClient.ConfigV1(),
@@ -257,7 +239,25 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		controllerContext.EventRecorder,
 	)
 
-	// Informers were already started earlier before waiting for feature gates
+	// Start informers before waiting for feature gates - the feature gate accessor needs them running
+	go dynamicInformers.Start(ctx.Done())
+	go configInformers.Start(ctx.Done())
+	go kubeInformersForNamespaces.Start(ctx.Done())
+
+	// Start the feature gate accessor and wait for it to observe initial feature gates
+	// This must happen before creating controllers that depend on feature gates
+	go featureGateAccessor.Run(ctx)
+	go featureGateController.Run(ctx, 1)
+
+	klog.Info("Started feature gate accessor")
+	select {
+	case <-featureGateAccessor.InitialFeatureGatesObserved():
+		klog.Info("FeatureGates initialized")
+	case <-time.After(5 * time.Minute):
+		accessError := errors.New("timed out waiting for FeatureGate detection")
+		klog.Error(accessError, "unable to start operator")
+		return accessError
+	}
 
 	go infraController.Run(ctx, 1)
 	go kubeCloudConfigController.Run(ctx, 1)
@@ -266,7 +266,6 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 	go operatorController.Run(ctx, 1)
 	go migrationPlatformStatusController.Run(ctx, 1)
 	go staleConditionsController.Run(ctx, 1)
-	go featureGateController.Run(ctx, 1)
 	go latencySensitiveRemover.Run(ctx, 1)
 	go okdFeatureSetMigrator.Run(ctx, 1)
 	go featureUpgradeableController.Run(ctx, 1)
