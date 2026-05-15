@@ -41,8 +41,7 @@ type KubeCloudConfigController struct {
 	infraLister     configv1listers.InfrastructureLister
 	configMapClient corev1client.ConfigMapsGetter
 
-	// currentFeatureGates stores the most recently observed feature gates
-	currentFeatureGates featuregates.FeatureGate
+	featureGateAccessor featuregates.FeatureGateAccess
 
 	// transformers stores per platform tranformer
 	cloudConfigTransformers map[configv1.PlatformType]cloudConfigTransformer
@@ -60,16 +59,7 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 		infraLister:             infraLister,
 		configMapClient:         configMapClient,
 		cloudConfigTransformers: cloudConfigTransformers(),
-	}
-
-	// Initialize current feature gates if available
-	if featureGateAccess.AreInitialFeatureGatesObserved() {
-		currentFeatures, err := featureGateAccess.CurrentFeatureGates()
-		if err != nil {
-			klog.Warningf("unable to get current feature gates during controller initialization: %v", err)
-		} else {
-			c.currentFeatureGates = currentFeatures
-		}
+		featureGateAccessor:     featureGateAccess,
 	}
 
 	return factory.New().
@@ -85,7 +75,7 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 		ToController("KubeCloudConfigController", recorder)
 }
 
-func (c KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
+func (c *KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	obj, err := c.infraLister.Get("cluster")
 	if apierrors.IsNotFound(err) {
 		syncCtx.Recorder().Warningf("KubeCloudConfigController", "Required infrastructures.%s/cluster not found", configv1.GroupName)
@@ -111,7 +101,8 @@ func (c KubeCloudConfigController) sync(ctx context.Context, syncCtx factory.Syn
 		return err
 	}
 	if !shouldManage {
-		syncCtx.Recorder().Eventf("KubeCloudConfigController", "Skipping kube-cloud-config management for platform %s", platformName)
+		// Set log level to 4 instead of using an event recorder due to this logging / happening every minute.
+		klog.V(4).Infof("KubeCloudConfigController: Skipping kube-cloud-config management for platform %s", platformName)
 		return nil
 	}
 
@@ -192,7 +183,7 @@ func cloudConfigTransformers() map[configv1.PlatformType]cloudConfigTransformer 
 // shouldManageCloudConfig determines whether this controller should manage the kube-cloud-config
 // ConfigMap for the given platform type. This allows for platform-specific logic to determine
 // when ownership should transfer to another operator.
-func (c KubeCloudConfigController) shouldManageCloudConfig(platformType configv1.PlatformType) (bool, error) {
+func (c *KubeCloudConfigController) shouldManageCloudConfig(platformType configv1.PlatformType) (bool, error) {
 	switch platformType {
 	case configv1.VSpherePlatformType:
 		// For vSphere, check if VSphereMultiVCenterDay2 feature gate is enabled
@@ -227,11 +218,15 @@ func (c KubeCloudConfigController) shouldManageCloudConfig(platformType configv1
 // isFeatureGateEnabled checks if the specified feature gate is enabled in the cluster.
 // It uses the feature gates that were retrieved during controller initialization.
 // If feature gates weren't available at initialization, it returns false as a safe fallback.
-func (c KubeCloudConfigController) isFeatureGateEnabled(gateName configv1.FeatureGateName) bool {
-	if c.currentFeatureGates == nil {
+func (c *KubeCloudConfigController) isFeatureGateEnabled(gateName configv1.FeatureGateName) bool {
+	if !c.featureGateAccessor.AreInitialFeatureGatesObserved() {
 		// Feature gates weren't initialized, return safe fallback
+		klog.Warningf("unable to check featuregate %v due to currentFeatureGates == nil", gateName)
 		return false
 	}
 
-	return c.currentFeatureGates.Enabled(gateName)
+	// We can ignore error since only time error happens if initial feature gates were not observed and we checked above
+	currentFeatureGates, _ := c.featureGateAccessor.CurrentFeatureGates()
+	klog.V(4).Infof("is featuregate %v enabled?  %v", gateName, currentFeatureGates.Enabled(gateName))
+	return currentFeatureGates.Enabled(gateName)
 }
