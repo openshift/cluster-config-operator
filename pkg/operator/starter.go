@@ -19,6 +19,8 @@ import (
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	configv1informers "github.com/openshift/client-go/config/informers/externalversions"
 	applyoperatorv1 "github.com/openshift/client-go/operator/applyconfigurations/operator/v1"
+	operatorclient_versioned "github.com/openshift/client-go/operator/clientset/versioned"
+	operatorinformers "github.com/openshift/client-go/operator/informers/externalversions"
 	"github.com/openshift/cluster-config-operator/pkg/cmd/render"
 	"github.com/openshift/cluster-config-operator/pkg/operator/aws_platform_service_location"
 	"github.com/openshift/cluster-config-operator/pkg/operator/featuregates"
@@ -28,6 +30,7 @@ import (
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
 	"github.com/openshift/cluster-config-operator/pkg/operator/removelatencysensitive"
+	topologytransition "github.com/openshift/cluster-config-operator/pkg/operator/topology_transition_controller"
 	"github.com/openshift/cluster-config-operator/pkg/util"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/controller/factory"
@@ -262,6 +265,42 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		accessError := errors.New("timed out waiting for FeatureGate detection")
 		klog.Error(accessError, "unable to start operator")
 		return accessError
+	}
+
+	// Conditionally register the topology transition controller when the MutableTopology gate is enabled
+	featureGates, fgErr := featureGateAccessor.CurrentFeatureGates()
+	if fgErr != nil {
+		klog.Warningf("Unable to check feature gates for MutableTopology, skipping topology transition controller: %v", fgErr)
+	} else if featureGates.Enabled(features.FeatureGateMutableTopology) {
+		operatorConfigClient, err := operatorclient_versioned.NewForConfig(controllerContext.KubeConfig)
+		if err != nil {
+			return err
+		}
+		operatorInformers := operatorinformers.NewSharedInformerFactory(operatorConfigClient, 10*time.Minute)
+
+		kubeInformersForEtcd := v1helpers.NewKubeInformersForNamespaces(kubeClient, "openshift-etcd")
+
+		topologyTransitionController := topologytransition.NewController(
+			operatorClient,
+			configClient.ConfigV1(),
+			configInformers.Config().V1().Infrastructures().Lister(),
+			configInformers.Config().V1().Infrastructures().Informer(),
+			kubeInformersForNamespaces.InformersFor("").Core().V1().Nodes().Lister(),
+			kubeInformersForNamespaces.InformersFor("").Core().V1().Nodes().Informer(),
+			kubeInformersForEtcd.InformersFor("openshift-etcd").Core().V1().ConfigMaps().Lister().ConfigMaps("openshift-etcd"),
+			kubeInformersForEtcd.InformersFor("openshift-etcd").Core().V1().ConfigMaps().Informer(),
+			operatorInformers.Operator().V1().Etcds().Lister(),
+			operatorInformers.Operator().V1().Etcds().Informer(),
+			configInformers.Config().V1().ClusterOperators().Lister(),
+			configInformers.Config().V1().ClusterOperators().Informer(),
+			clock.RealClock{},
+			controllerContext.EventRecorder,
+		)
+
+		go operatorInformers.Start(ctx.Done())
+		go kubeInformersForEtcd.Start(ctx.Done())
+		go kubeInformersForNamespaces.Start(ctx.Done())
+		go topologyTransitionController.Run(ctx, 1)
 	}
 
 	go infraController.Run(ctx, 1)
