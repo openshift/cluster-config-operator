@@ -18,21 +18,21 @@ import (
 func TestSync(t *testing.T) {
 	t.Run("idle no-op when spec equals status", func(t *testing.T) {
 		infra := newTestInfra(configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, nil, noopTransitions(), nil)
+		ctrl := newTestController(infra, nil, nil, noopTransitions(), nil)
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 	})
 
 	t.Run("idle no-op when spec is empty", func(t *testing.T) {
 		infra := newTestInfra("", configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, nil, noopTransitions(), nil)
+		ctrl := newTestController(infra, nil, nil, noopTransitions(), nil)
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 	})
 
 	t.Run("transition triggered sets conditions and updates status", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, nil, noopTransitions(), nil)
+		ctrl := newTestController(infra, nil, nil, noopTransitions(), nil)
 
 		if !assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext())) {
 			return
@@ -55,7 +55,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("unsupported transition sets conditions and blocks upgrades", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.AWSPlatformType)
-		ctrl := newTestController(infra, nil, noopTransitions(), nil)
+		ctrl := newTestController(infra, nil, nil, noopTransitions(), nil)
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
@@ -93,7 +93,7 @@ func TestSync(t *testing.T) {
 		}
 
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, nil, failingTransitions, nil)
+		ctrl := newTestController(infra, nil, nil, failingTransitions, nil)
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
@@ -115,7 +115,7 @@ func TestSync(t *testing.T) {
 		now := time.Now()
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
 		clk := clocktesting.NewFakePassiveClock(now)
-		ctrl := newTestControllerWithClock(infra, transitionInProgressConditionsAt(now), noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestControllerWithClock(infra, transitionInProgressConditionsAt(now), nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return true, nil },
 		}, clk)
 
@@ -133,7 +133,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("reconciliation complete clears conditions", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, transitionInProgressConditions(), noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return true, nil },
 		})
 
@@ -151,7 +151,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("reconciliation not complete preserves conditions", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, transitionInProgressConditions(), noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return false, nil },
 		})
 
@@ -176,7 +176,7 @@ func TestSync(t *testing.T) {
 				Reason: reasonTopologyTransitionInProgress,
 			},
 		}
-		ctrl := newTestController(infra, staleConditions, noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestController(infra, staleConditions, nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return true, nil },
 		})
 
@@ -203,7 +203,7 @@ func TestSync(t *testing.T) {
 				LastTransitionTime: metav1.NewTime(now),
 			},
 		}
-		ctrl := newTestControllerWithClock(infra, staleConditions, noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestControllerWithClock(infra, staleConditions, nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return true, nil },
 		}, clk)
 
@@ -229,7 +229,7 @@ func TestSync(t *testing.T) {
 				LastTransitionTime: metav1.NewTime(now),
 			},
 		}
-		ctrl := newTestControllerWithClock(infra, staleConditions, noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestControllerWithClock(infra, staleConditions, nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return true, nil },
 		}, clk)
 
@@ -251,7 +251,7 @@ func TestSync(t *testing.T) {
 				Reason: reasonTopologyTransitionInProgress,
 			},
 		}
-		ctrl := newTestController(infra, staleConditions, noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestController(infra, staleConditions, nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return false, nil },
 		})
 
@@ -279,7 +279,7 @@ func TestSync(t *testing.T) {
 				Reason: "PreflightCheckFailed",
 			},
 		}
-		ctrl := newTestController(infra, staleConditions, noopTransitions(), nil)
+		ctrl := newTestController(infra, staleConditions, nil, noopTransitions(), nil)
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
@@ -292,7 +292,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("reconciliation check error is propagated", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, transitionInProgressConditions(), noopTransitions(), []func(context.Context) (bool, error){
+		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions(), []func(context.Context) (bool, error){
 			func(ctx context.Context) (bool, error) { return false, fmt.Errorf("failed to list ClusterOperators") },
 		})
 
@@ -310,7 +310,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("spec change during status update skips update and returns nil", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, nil, noopTransitions(), nil)
+		ctrl := newTestController(infra, nil, nil, noopTransitions(), nil)
 
 		reverted := infra.DeepCopy()
 		reverted.Spec.ControlPlaneTopology = configv1.SingleReplicaTopologyMode
@@ -333,7 +333,7 @@ func TestSync(t *testing.T) {
 		// Progressing=True but the infra status update never completed,
 		// so spec != status still holds.
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
-		ctrl := newTestController(infra, transitionInProgressConditions(), noopTransitions(), nil)
+		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions(), nil)
 
 		if !assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext())) {
 			return
@@ -505,7 +505,7 @@ func TestValidatePreflight(t *testing.T) {
 				func() error { return nil },
 			},
 		}
-		assert.NoError(t, validatePreflight(td))
+		assert.NoError(t, validatePreflight(nil, td))
 	})
 
 	t.Run("single validator fails", func(t *testing.T) {
@@ -515,7 +515,7 @@ func TestValidatePreflight(t *testing.T) {
 				func() error { return fmt.Errorf("node count too low") },
 			},
 		}
-		err := validatePreflight(td)
+		err := validatePreflight(nil, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 	})
@@ -528,7 +528,7 @@ func TestValidatePreflight(t *testing.T) {
 				func() error { return fmt.Errorf("etcd not ready") },
 			},
 		}
-		err := validatePreflight(td)
+		err := validatePreflight(nil, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 		assert.Contains(t, err.Error(), "etcd not ready")
@@ -536,6 +536,35 @@ func TestValidatePreflight(t *testing.T) {
 
 	t.Run("nil validators", func(t *testing.T) {
 		td := &TransitionDescriptor{}
-		assert.NoError(t, validatePreflight(td))
+		assert.NoError(t, validatePreflight(nil, td))
+	})
+
+	t.Run("global preflight checks run before transition validators", func(t *testing.T) {
+		globalChecks := []TransitionValidatorFunc{
+			func() error { return fmt.Errorf("global check failed") },
+		}
+		td := &TransitionDescriptor{
+			Validators: []TransitionValidatorFunc{
+				func() error { return nil },
+			},
+		}
+		err := validatePreflight(globalChecks, td)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "global check failed")
+	})
+
+	t.Run("global and transition failures are accumulated", func(t *testing.T) {
+		globalChecks := []TransitionValidatorFunc{
+			func() error { return fmt.Errorf("operators unstable") },
+		}
+		td := &TransitionDescriptor{
+			Validators: []TransitionValidatorFunc{
+				func() error { return fmt.Errorf("etcd not ready") },
+			},
+		}
+		err := validatePreflight(globalChecks, td)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "operators unstable")
+		assert.Contains(t, err.Error(), "etcd not ready")
 	})
 }

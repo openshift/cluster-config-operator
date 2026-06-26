@@ -29,7 +29,12 @@ func readyFixture() *testFixture {
 			newTestControlPlaneNodeWithConditions("master-2", false, readyNodeCondition()),
 		).
 		withEtcdEndpoints(3).
-		withEtcdCR(true, false)
+		withEtcdCR(true, false).
+		withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+		)
 }
 
 func TestSNOToHACompact(t *testing.T) {
@@ -233,6 +238,35 @@ func TestSNOToHACompact(t *testing.T) {
 		}
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "insufficient etcd voting members: need 3, have 1")
+	})
+
+	t.Run("cluster operators unstable", func(t *testing.T) {
+		fixture := newTestFixture().
+			withNodes(
+				newTestControlPlaneNodeWithConditions("master-0", false, readyNodeCondition()),
+				newTestControlPlaneNodeWithConditions("master-1", false, readyNodeCondition()),
+				newTestControlPlaneNodeWithConditions("master-2", false, readyNodeCondition()),
+			).
+			withEtcdEndpoints(3).
+			withEtcdCR(true, false).
+			withClusterOperators(
+				newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+				newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionFalse),
+			)
+
+		ctrl := fixture.newController(snoInfra(configv1.HighlyAvailableTopologyMode), nil)
+
+		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
+
+		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		if !assert.NotNil(t, cond) {
+			return
+		}
+		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
+		assert.Contains(t, cond.Message, "kube-apiserver")
+		assert.Contains(t, cond.Message, "Progressing=True")
 	})
 
 	t.Run("wrong platform", func(t *testing.T) {

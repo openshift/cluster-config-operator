@@ -233,11 +233,11 @@ func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorConditio
 	}
 }
 
-func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, transitions []TransitionDescriptor, reconciliationChecks []func(context.Context) (bool, error)) *TopologyTransitionController {
-	return newTestControllerWithClock(infra, conditions, transitions, reconciliationChecks, clocktesting.NewFakePassiveClock(time.Now()))
+func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor, reconciliationChecks []func(context.Context) (bool, error)) *TopologyTransitionController {
+	return newTestControllerWithClock(infra, conditions, preflightChecks, transitions, reconciliationChecks, clocktesting.NewFakePassiveClock(time.Now()))
 }
 
-func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, transitions []TransitionDescriptor, reconciliationChecks []func(context.Context) (bool, error), clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
+func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor, reconciliationChecks []func(context.Context) (bool, error), clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
 	fakeConfigClient := configfakeclient.NewSimpleClientset(infra)
 
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -264,6 +264,7 @@ func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []ope
 		),
 		infraLister:          configlistersv1.NewInfrastructureLister(indexer),
 		infraClient:          fakeConfigClient.ConfigV1().Infrastructures(),
+		preflightChecks:      preflightChecks,
 		reconciliationChecks: reconciliationChecks,
 		transitions:          transitions,
 		clock:                clk,
@@ -275,23 +276,28 @@ type testFixture struct {
 	nodeIndexer cache.Indexer
 	cmIndexer   cache.Indexer
 	etcdIndexer cache.Indexer
+	coIndexer   cache.Indexer
 	nodeLister  corev1listers.NodeLister
 	cmLister    corev1listers.ConfigMapNamespaceLister
 	etcdLister  operatorv1listers.EtcdLister
+	coLister    configlistersv1.ClusterOperatorLister
 }
 
 func newTestFixture() *testFixture {
 	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	cmIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	etcdIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	coIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
 	return &testFixture{
 		nodeIndexer: nodeIndexer,
 		cmIndexer:   cmIndexer,
 		etcdIndexer: etcdIndexer,
+		coIndexer:   coIndexer,
 		nodeLister:  corev1listers.NewNodeLister(nodeIndexer),
 		cmLister:    corev1listers.NewConfigMapLister(cmIndexer).ConfigMaps(etcdNamespace),
 		etcdLister:  operatorv1listers.NewEtcdLister(etcdIndexer),
+		coLister:    configlistersv1.NewClusterOperatorLister(coIndexer),
 	}
 }
 
@@ -318,12 +324,27 @@ func (f *testFixture) withEtcdCR(membersAvailable bool, progressing bool) *testF
 	return f
 }
 
+func (f *testFixture) withClusterOperators(operators ...*configv1.ClusterOperator) *testFixture {
+	for _, co := range operators {
+		if err := f.coIndexer.Add(co); err != nil {
+			panic(fmt.Sprintf("failed to add cluster operator to indexer: %v", err))
+		}
+	}
+	return f
+}
+
 func (f *testFixture) buildTransitions() []TransitionDescriptor {
 	return buildSupportedTransitions(f.nodeLister, f.cmLister, f.etcdLister)
 }
 
+func (f *testFixture) buildPreflightChecks() []TransitionValidatorFunc {
+	return []TransitionValidatorFunc{
+		validateClusterOperatorsStable(f.coLister),
+	}
+}
+
 func (f *testFixture) newController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition) *TopologyTransitionController {
-	return newTestController(infra, conditions, f.buildTransitions(), nil)
+	return newTestController(infra, conditions, f.buildPreflightChecks(), f.buildTransitions(), nil)
 }
 
 func newTestClusterOperator(name string, available, progressing, degraded configv1.ConditionStatus) *configv1.ClusterOperator {

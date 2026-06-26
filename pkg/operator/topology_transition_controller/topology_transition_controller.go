@@ -42,6 +42,7 @@ type TopologyTransitionController struct {
 	operatorClient       v1helpers.OperatorClient
 	infraLister          configlistersv1.InfrastructureLister
 	infraClient          configv1client.InfrastructureInterface
+	preflightChecks      []TransitionValidatorFunc
 	reconciliationChecks []func(context.Context) (bool, error)
 	transitions          []TransitionDescriptor
 	clock                clock.PassiveClock
@@ -68,8 +69,11 @@ func NewController(
 		operatorClient: operatorClient,
 		infraLister:    infraLister,
 		infraClient:    infraClient.Infrastructures(),
+		preflightChecks: []TransitionValidatorFunc{
+			validateClusterOperatorsStable(clusterOperatorLister),
+		},
 		reconciliationChecks: []func(context.Context) (bool, error){
-			checkAllClusterOperatorsStable(clusterOperatorLister),
+			reconcileClusterOperatorsStable(clusterOperatorLister),
 		},
 		transitions: buildSupportedTransitions(nodeLister, etcdConfigMapLister, etcdLister),
 		clock:       clk,
@@ -171,7 +175,7 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		return nil
 	}
 
-	if err := validatePreflight(transition); err != nil {
+	if err := validatePreflight(c.preflightChecks, transition); err != nil {
 		if _, _, condErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    transitionCondition,

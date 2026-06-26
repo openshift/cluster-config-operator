@@ -4,7 +4,110 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
+
+	configv1 "github.com/openshift/api/config/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
+
+func TestValidateClusterOperatorsStable(t *testing.T) {
+	t.Run("passes when all operators stable", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("passes when no operators exist", func(t *testing.T) {
+		fixture := newTestFixture()
+		v := validateClusterOperatorsStable(fixture.coLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("fails when operator progressing", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionFalse),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "kube-apiserver")
+		assert.Contains(t, err.Error(), "Progressing=True")
+	})
+
+	t.Run("fails when operator degraded", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionTrue),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "kube-apiserver")
+		assert.Contains(t, err.Error(), "Degraded=True")
+	})
+
+	t.Run("fails when operator unavailable", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionFalse, configv1.ConditionFalse, configv1.ConditionFalse),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "kube-apiserver")
+		assert.Contains(t, err.Error(), "Available=False")
+	})
+
+	t.Run("fails when Available condition missing", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			&configv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{Name: "new-operator"},
+			},
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "new-operator")
+		assert.Contains(t, err.Error(), "Available condition missing")
+	})
+
+	t.Run("config-operator is excluded", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("config-operator", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionTrue),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("multiple unstable operators listed", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionTrue),
+			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "etcd")
+		assert.Contains(t, err.Error(), "kube-apiserver")
+		assert.NotContains(t, err.Error(), "monitoring")
+	})
+}
 
 func TestValidateControlPlaneNodeCount(t *testing.T) {
 	t.Run("passes when enough nodes", func(t *testing.T) {

@@ -3,7 +3,10 @@ package topology_transition_controller
 import (
 	"errors"
 	"fmt"
+	"strings"
 
+	configv1 "github.com/openshift/api/config/v1"
+	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1 "k8s.io/api/core/v1"
@@ -18,10 +21,16 @@ const (
 	etcdMembersProgressingCondition = "EtcdMembersProgressing"
 )
 
-// validatePreflight runs all transition-specific validators for the given
-// descriptor. Returns a combined error containing all validation failures.
-func validatePreflight(transition *TransitionDescriptor) error {
+// validatePreflight runs global preflight checks followed by
+// transition-specific validators. Returns a combined error containing all
+// validation failures.
+func validatePreflight(globalChecks []TransitionValidatorFunc, transition *TransitionDescriptor) error {
 	var errs []error
+	for _, v := range globalChecks {
+		if err := v(); err != nil {
+			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
+		}
+	}
 	for _, v := range transition.Validators {
 		if err := v(); err != nil {
 			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
@@ -146,6 +155,66 @@ func validateControlPlaneNodesSchedulable(required int, nodeLister corev1listers
 		}
 		if schedulable < required {
 			return fmt.Errorf("insufficient schedulable control plane nodes: need %d, have %d", required, schedulable)
+		}
+		return nil
+	}
+}
+
+// checkClusterOperatorsStable checks whether all ClusterOperators (except
+// config-operator itself) have reached a stable state. Returns a list of
+// descriptions for unstable operators (empty = all stable). This is the shared
+// core used by both the preflight validator and the post-transition
+// reconciliation check.
+func checkClusterOperatorsStable(coLister configlistersv1.ClusterOperatorLister) ([]string, error) {
+	operators, err := coLister.List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+
+	var unstable []string
+	for _, co := range operators {
+		if co.Name == selfClusterOperatorName {
+			continue
+		}
+		var issues []string
+		availableSeen := false
+		for _, cond := range co.Status.Conditions {
+			switch cond.Type {
+			case configv1.OperatorAvailable:
+				availableSeen = true
+				if cond.Status != configv1.ConditionTrue {
+					issues = append(issues, "Available="+string(cond.Status))
+				}
+			case configv1.OperatorProgressing:
+				if cond.Status == configv1.ConditionTrue {
+					issues = append(issues, "Progressing=True")
+				}
+			case configv1.OperatorDegraded:
+				if cond.Status == configv1.ConditionTrue {
+					issues = append(issues, "Degraded=True")
+				}
+			}
+		}
+		if !availableSeen {
+			issues = append(issues, "Available condition missing")
+		}
+		if len(issues) > 0 {
+			unstable = append(unstable, fmt.Sprintf("%s: %s", co.Name, strings.Join(issues, ", ")))
+		}
+	}
+	return unstable, nil
+}
+
+// validateClusterOperatorsStable returns a TransitionValidatorFunc that checks
+// all ClusterOperators are stable before allowing a topology transition.
+func validateClusterOperatorsStable(coLister configlistersv1.ClusterOperatorLister) TransitionValidatorFunc {
+	return func() error {
+		unstable, err := checkClusterOperatorsStable(coLister)
+		if err != nil {
+			return fmt.Errorf("failed to check cluster operator stability: %w", err)
+		}
+		if len(unstable) > 0 {
+			return fmt.Errorf("cluster operators are not stable: %s", strings.Join(unstable, "; "))
 		}
 		return nil
 	}

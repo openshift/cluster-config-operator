@@ -17,7 +17,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.True(t, reconciled)
@@ -29,7 +29,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionFalse),
 			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.False(t, reconciled)
@@ -41,7 +41,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionTrue),
 			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.False(t, reconciled)
@@ -53,7 +53,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionFalse, configv1.ConditionFalse, configv1.ConditionFalse),
 			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.False(t, reconciled)
@@ -61,7 +61,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 
 	t.Run("no cluster operators", func(t *testing.T) {
 		lister := newTestClusterOperatorLister()
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.True(t, reconciled)
@@ -73,7 +73,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionTrue),
 			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.False(t, reconciled)
@@ -86,7 +86,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 				ObjectMeta: metav1.ObjectMeta{Name: "new-operator"},
 			},
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.False(t, reconciled)
@@ -105,7 +105,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 				},
 			},
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.False(t, reconciled)
@@ -116,7 +116,7 @@ func TestCheckAllClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 			newTestClusterOperator("config-operator", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionTrue),
 		)
-		check := checkAllClusterOperatorsStable(lister)
+		check := reconcileClusterOperatorsStable(lister)
 		reconciled, err := check(context.TODO())
 		assert.NoError(t, err)
 		assert.True(t, reconciled)
