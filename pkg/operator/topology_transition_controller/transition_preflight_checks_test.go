@@ -92,6 +92,78 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 		assert.NoError(t, v())
 	})
 
+	t.Run("fails when Progressing condition is Unknown", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionUnknown, configv1.ConditionFalse),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "kube-apiserver")
+		assert.Contains(t, err.Error(), "Progressing=Unknown")
+	})
+
+	t.Run("fails when Degraded condition is Unknown", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionUnknown),
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "kube-apiserver")
+		assert.Contains(t, err.Error(), "Degraded=Unknown")
+	})
+
+	t.Run("fails when Progressing condition missing", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			&configv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{Name: "incomplete-operator"},
+				Status: configv1.ClusterOperatorStatus{
+					Conditions: []configv1.ClusterOperatorStatusCondition{
+						{Type: configv1.OperatorAvailable, Status: configv1.ConditionTrue},
+						{Type: configv1.OperatorDegraded, Status: configv1.ConditionFalse},
+					},
+				},
+			},
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "incomplete-operator")
+		assert.Contains(t, err.Error(), "Progressing condition missing")
+	})
+
+	t.Run("fails when Degraded condition missing", func(t *testing.T) {
+		fixture := newTestFixture().withClusterOperators(
+			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
+			&configv1.ClusterOperator{
+				ObjectMeta: metav1.ObjectMeta{Name: "incomplete-operator"},
+				Status: configv1.ClusterOperatorStatus{
+					Conditions: []configv1.ClusterOperatorStatusCondition{
+						{Type: configv1.OperatorAvailable, Status: configv1.ConditionTrue},
+						{Type: configv1.OperatorProgressing, Status: configv1.ConditionFalse},
+					},
+				},
+			},
+		)
+		v := validateClusterOperatorsStable(fixture.coLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "incomplete-operator")
+		assert.Contains(t, err.Error(), "Degraded condition missing")
+	})
+
 	t.Run("multiple unstable operators listed", func(t *testing.T) {
 		fixture := newTestFixture().withClusterOperators(
 			newTestClusterOperator("etcd", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionFalse),
@@ -153,6 +225,26 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 		assert.Contains(t, err.Error(), "insufficient control plane nodes: need 3, have 0")
 	})
 
+	t.Run("counts legacy master-only nodes", func(t *testing.T) {
+		fixture := newTestFixture().withNodes(
+			newTestLegacyMasterNode("master-0", false),
+			newTestLegacyMasterNode("master-1", false),
+			newTestLegacyMasterNode("master-2", false),
+		)
+		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("counts mix of control-plane and legacy master nodes", func(t *testing.T) {
+		fixture := newTestFixture().withNodes(
+			newTestControlPlaneNode("master-0", false),
+			newTestLegacyMasterNode("master-1", false),
+			newTestControlPlaneNode("master-2", false),
+		)
+		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+		assert.NoError(t, v())
+	})
+
 	t.Run("does not count worker nodes", func(t *testing.T) {
 		fixture := newTestFixture().withNodes(
 			newTestControlPlaneNode("master-0", false),
@@ -203,6 +295,15 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 		fixture := newTestFixture().withNodes(
 			newTestControlPlaneNode("master-0", false),
 			newTestControlPlaneNode("master-1", false),
+		)
+		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("does not count legacy master nodes as dedicated workers", func(t *testing.T) {
+		fixture := newTestFixture().withNodes(
+			newTestLegacyMasterNode("master-0", false),
+			newTestLegacyMasterNode("master-1", false),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
 		assert.NoError(t, v())
@@ -272,6 +373,16 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 		}
 		assert.Contains(t, err.Error(), "insufficient schedulable control plane nodes: need 3, have 0")
 	})
+
+	t.Run("counts legacy master nodes as schedulable", func(t *testing.T) {
+		fixture := newTestFixture().withNodes(
+			newTestControlPlaneNode("master-0", false),
+			newTestLegacyMasterNode("master-1", false),
+			newTestControlPlaneNode("master-2", false),
+		)
+		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
+		assert.NoError(t, v())
+	})
 }
 
 func TestValidateControlPlaneNodesReady(t *testing.T) {
@@ -311,6 +422,16 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			return
 		}
 		assert.Contains(t, err.Error(), "insufficient ready control plane nodes: need 3, have 2")
+	})
+
+	t.Run("counts ready legacy master nodes", func(t *testing.T) {
+		fixture := newTestFixture().withNodes(
+			newTestControlPlaneNodeWithConditions("master-0", false, readyNodeCondition()),
+			newTestLegacyMasterNodeWithConditions("master-1", false, readyNodeCondition()),
+			newTestControlPlaneNodeWithConditions("master-2", false, readyNodeCondition()),
+		)
+		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
+		assert.NoError(t, v())
 	})
 }
 

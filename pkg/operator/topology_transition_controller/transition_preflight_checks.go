@@ -39,14 +39,35 @@ func validatePreflight(globalChecks []TransitionValidatorFunc, transition *Trans
 	return errors.Join(errs...)
 }
 
+// isControlPlaneNode returns true if the node carries either the modern
+// control-plane or the legacy master role label.
+func isControlPlaneNode(node *corev1.Node) bool {
+	_, hasControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]
+	_, hasMaster := node.Labels["node-role.kubernetes.io/master"]
+	return hasControlPlane || hasMaster
+}
+
+// listControlPlaneNodes returns all nodes with either the control-plane or
+// legacy master role label.
+func listControlPlaneNodes(nodeLister corev1listers.NodeLister) ([]*corev1.Node, error) {
+	allNodes, err := nodeLister.List(labels.Everything())
+	if err != nil {
+		return nil, err
+	}
+	var result []*corev1.Node
+	for _, node := range allNodes {
+		if isControlPlaneNode(node) {
+			result = append(result, node)
+		}
+	}
+	return result, nil
+}
+
 // validateControlPlaneNodeCount returns a TransitionValidator that checks
 // the number of control plane nodes meets the requirement.
 func validateControlPlaneNodeCount(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
 	return func() error {
-		selector := labels.SelectorFromSet(labels.Set{
-			"node-role.kubernetes.io/control-plane": "",
-		})
-		nodes, err := nodeLister.List(selector)
+		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
 			return fmt.Errorf("failed to list control plane nodes: %w", err)
 		}
@@ -70,7 +91,7 @@ func validateExactInfrastructureNodeCount(expected int, nodeLister corev1listers
 		}
 		dedicatedWorkers := 0
 		for _, node := range nodes {
-			if _, hasControlPlane := node.Labels["node-role.kubernetes.io/control-plane"]; !hasControlPlane {
+			if !isControlPlaneNode(node) {
 				dedicatedWorkers++
 			}
 		}
@@ -139,10 +160,7 @@ func validateEtcdQuorum(etcdLister operatorv1listers.EtcdLister) TransitionValid
 // the number of schedulable control plane nodes meets the requirement.
 func validateControlPlaneNodesSchedulable(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
 	return func() error {
-		selector := labels.SelectorFromSet(labels.Set{
-			"node-role.kubernetes.io/control-plane": "",
-		})
-		nodes, err := nodeLister.List(selector)
+		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
 			return fmt.Errorf("failed to list control plane nodes: %w", err)
 		}
@@ -178,6 +196,8 @@ func checkClusterOperatorsStable(coLister configlistersv1.ClusterOperatorLister)
 		}
 		var issues []string
 		availableSeen := false
+		progressingSeen := false
+		degradedSeen := false
 		for _, cond := range co.Status.Conditions {
 			switch cond.Type {
 			case configv1.OperatorAvailable:
@@ -186,17 +206,25 @@ func checkClusterOperatorsStable(coLister configlistersv1.ClusterOperatorLister)
 					issues = append(issues, "Available="+string(cond.Status))
 				}
 			case configv1.OperatorProgressing:
-				if cond.Status == configv1.ConditionTrue {
-					issues = append(issues, "Progressing=True")
+				progressingSeen = true
+				if cond.Status != configv1.ConditionFalse {
+					issues = append(issues, "Progressing="+string(cond.Status))
 				}
 			case configv1.OperatorDegraded:
-				if cond.Status == configv1.ConditionTrue {
-					issues = append(issues, "Degraded=True")
+				degradedSeen = true
+				if cond.Status != configv1.ConditionFalse {
+					issues = append(issues, "Degraded="+string(cond.Status))
 				}
 			}
 		}
 		if !availableSeen {
 			issues = append(issues, "Available condition missing")
+		}
+		if !progressingSeen {
+			issues = append(issues, "Progressing condition missing")
+		}
+		if !degradedSeen {
+			issues = append(issues, "Degraded condition missing")
 		}
 		if len(issues) > 0 {
 			unstable = append(unstable, fmt.Sprintf("%s: %s", co.Name, strings.Join(issues, ", ")))
@@ -224,10 +252,7 @@ func validateClusterOperatorsStable(coLister configlistersv1.ClusterOperatorList
 // the required number of control plane nodes have a Ready=True condition.
 func validateControlPlaneNodesReady(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
 	return func() error {
-		selector := labels.SelectorFromSet(labels.Set{
-			"node-role.kubernetes.io/control-plane": "",
-		})
-		nodes, err := nodeLister.List(selector)
+		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
 			return fmt.Errorf("failed to list control plane nodes: %w", err)
 		}

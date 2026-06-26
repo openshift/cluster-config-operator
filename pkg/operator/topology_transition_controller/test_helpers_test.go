@@ -90,6 +90,37 @@ func notReadyNodeCondition() []corev1.NodeCondition {
 	}
 }
 
+func newTestLegacyMasterNode(name string, unschedulable bool) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"node-role.kubernetes.io/master": "",
+			},
+		},
+		Spec: corev1.NodeSpec{
+			Unschedulable: unschedulable,
+		},
+	}
+}
+
+func newTestLegacyMasterNodeWithConditions(name string, unschedulable bool, conditions []corev1.NodeCondition) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"node-role.kubernetes.io/master": "",
+			},
+		},
+		Spec: corev1.NodeSpec{
+			Unschedulable: unschedulable,
+		},
+		Status: corev1.NodeStatus{
+			Conditions: conditions,
+		},
+	}
+}
+
 func newTestWorkerNode(name string) *corev1.Node {
 	return &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
