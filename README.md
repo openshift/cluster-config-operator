@@ -89,4 +89,4 @@ Do not file security issues as public GitHub issues.
 
 ## License
 
-cluster-config-operator is licensed under the [Apache License, Version 2.0](http://www.apache.org/licenses/).
+cluster-config-operator is licensed under the [Apache License, Version 2.0](https://github.com/openshift/cluster-config-operator/blob/main/LICENSE).
