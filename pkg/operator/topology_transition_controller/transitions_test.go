@@ -53,7 +53,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.Equal(t, configv1.HighlyAvailableTopologyMode, updated.Status.InfrastructureTopology)
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionCondition))
+		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 
@@ -68,7 +68,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -93,7 +93,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -140,7 +140,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -163,7 +163,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -186,7 +186,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -209,7 +209,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -232,7 +232,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -259,7 +259,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -282,7 +282,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}

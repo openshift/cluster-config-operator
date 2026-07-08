@@ -242,7 +242,7 @@ func noopTransitions() []TransitionDescriptor {
 	}
 }
 
-// transitionConditions returns the standard in-progress operator conditions.
+// transitionProgressingConditions returns the standard in-progress operator conditions.
 func transitionInProgressConditions() []operatorv1.OperatorCondition {
 	return transitionInProgressConditionsAt(time.Now().Add(-10 * time.Minute))
 }
@@ -250,7 +250,7 @@ func transitionInProgressConditions() []operatorv1.OperatorCondition {
 func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorCondition {
 	return []operatorv1.OperatorCondition{
 		{
-			Type:               transitionCondition,
+			Type:               transitionProgressingCondition,
 			Status:             operatorv1.ConditionTrue,
 			Reason:             reasonTopologyTransitionInProgress,
 			LastTransitionTime: metav1.NewTime(t),

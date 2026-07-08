@@ -42,7 +42,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionCondition))
+		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 
 		updated, err := ctrl.infraClient.Get(context.TODO(), "cluster", metav1.GetOptions{})
@@ -63,7 +63,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -101,7 +101,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionCondition)
+		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
 		if !assert.NotNil(t, cond) {
 			return
 		}
@@ -127,8 +127,8 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionCondition))
-		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+		assert.True(t, v1helpers.IsOperatorConditionPresentAndEqual(status.Conditions, transitionProgressingCondition, operatorv1.ConditionTrue))
+		assert.True(t, v1helpers.IsOperatorConditionPresentAndEqual(status.Conditions, upgradeableCondition, operatorv1.ConditionFalse))
 	})
 
 	t.Run("reconciliation complete clears conditions", func(t *testing.T) {
@@ -145,7 +145,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, transitionCondition))
+		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
 	})
 
@@ -163,7 +163,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionCondition))
+		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 
@@ -274,7 +274,7 @@ func TestSync(t *testing.T) {
 				Reason: "PreflightCheckFailed",
 			},
 			{
-				Type:   transitionCondition,
+				Type:   transitionProgressingCondition,
 				Status: operatorv1.ConditionFalse,
 				Reason: "PreflightCheckFailed",
 			},
@@ -304,7 +304,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, statusErr) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionCondition))
+		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 
@@ -350,7 +350,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, statusErr) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionCondition))
+		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 }
