@@ -4,6 +4,7 @@ import (
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
+	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
@@ -17,15 +18,27 @@ type TransitionValidatorFunc func() error
 // desired Infrastructure spec. Zero-value fields act as wildcards in both
 // matchers.
 type TransitionDescriptor struct {
-	From         configv1.InfrastructureStatus
-	To           configv1.InfrastructureSpec
-	Validators   []TransitionValidatorFunc
-	UpdateStatus func(infra *configv1.Infrastructure)
+	From                 configv1.InfrastructureStatus
+	To                   configv1.InfrastructureSpec
+	PreflightValidators  []TransitionValidatorFunc
+	UpdateStatus         func(infra *configv1.Infrastructure)
+	TransitionValidators []TransitionValidatorFunc
+}
+
+type TransitionValidationListers struct {
+	NodeLister               corev1listers.NodeLister
+	EtcdConfigMapLister      corev1listers.ConfigMapNamespaceLister
+	EtcdLister               operatorv1listers.EtcdLister
+	KubeAPIServerLister      operatorv1listers.KubeAPIServerLister
+	OpenShiftAPIServerLister operatorv1listers.OpenShiftAPIServerLister
+	IngressControllerLister  operatorv1listers.IngressControllerNamespaceLister
+	MachineConfigLister      machineconfigv1listers.MachineConfigLister
+	MachineConfigPoolLister  machineconfigv1listers.MachineConfigPoolLister
 }
 
 // buildSupportedTransitions returns the set of permitted topology transitions
 // with validators wired to the necessary tools for accessing cluster information.
-func buildSupportedTransitions(nodeLister corev1listers.NodeLister, etcdConfigMapLister corev1listers.ConfigMapNamespaceLister, etcdLister operatorv1listers.EtcdLister) []TransitionDescriptor {
+func buildSupportedTransitions(listers TransitionValidationListers) []TransitionDescriptor {
 	return []TransitionDescriptor{
 		// SNO to HA Compact on platformType: None
 		{
@@ -37,18 +50,33 @@ func buildSupportedTransitions(nodeLister corev1listers.NodeLister, etcdConfigMa
 			To: configv1.InfrastructureSpec{
 				ControlPlaneTopology: configv1.HighlyAvailableTopologyMode,
 			},
-			Validators: []TransitionValidatorFunc{
-				validateControlPlaneNodeCount(3, nodeLister),
-				validateExactInfrastructureNodeCount(0, nodeLister),
-				validateControlPlaneNodesSchedulable(3, nodeLister),
-				validateControlPlaneNodesReady(3, nodeLister),
-				validateEtcdQuorum(etcdLister),
-				validateEtcdNotProgressing(etcdLister),
-				validateEtcdVotingMembers(3, etcdConfigMapLister),
+			PreflightValidators: []TransitionValidatorFunc{
+				validateControlPlaneNodeCount(3, listers.NodeLister),
+				validateExactInfrastructureNodeCount(0, listers.NodeLister),
+				validateControlPlaneNodesSchedulable(3, listers.NodeLister),
+				validateControlPlaneNodesReady(3, listers.NodeLister),
+				validateEtcdQuorum(listers.EtcdLister),
+				validateEtcdNotProgressing(listers.EtcdLister),
+				validateEtcdVotingMembers(3, listers.EtcdConfigMapLister),
 			},
 			UpdateStatus: func(infra *configv1.Infrastructure) {
 				infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
 				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+			},
+			TransitionValidators: []TransitionValidatorFunc{
+				validateControlPlaneNodesSchedulable(3, listers.NodeLister),
+				validateControlPlaneNodesReady(3, listers.NodeLister),
+				validateWorkerNodesReady(2, listers.NodeLister),
+				validateEtcdQuorum(listers.EtcdLister),
+				validateEtcdNotProgressing(listers.EtcdLister),
+				validateEtcdVotingMembers(3, listers.EtcdConfigMapLister),
+				validateMachineConfigNotPresent("50-master-dnsmasq-configuration", listers.MachineConfigLister),
+				validateNewRenderedMasterConfig(listers.MachineConfigLister),
+				validateNewRenderedWorkerConfig(listers.MachineConfigLister),
+				validateMachineConfigPoolReadyCount(3, listers.MachineConfigPoolLister),
+				validateIngressRouterCount(2, listers.IngressControllerLister),
+				validateKubeAPIServerNodeCount(3, listers.KubeAPIServerLister),
+				validateOpenShiftAPIServerReadyReplicas(3, listers.OpenShiftAPIServerLister),
 			},
 		},
 	}

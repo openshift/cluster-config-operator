@@ -1,14 +1,15 @@
 package topology_transition_controller
 
 import (
-	"context"
 	"fmt"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
+	machineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
+	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -132,6 +133,20 @@ func newTestWorkerNode(name string) *corev1.Node {
 	}
 }
 
+func newTestWorkerNodeWithConditions(name string, conditions []corev1.NodeCondition) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"node-role.kubernetes.io/worker": "",
+			},
+		},
+		Status: corev1.NodeStatus{
+			Conditions: conditions,
+		},
+	}
+}
+
 func newTestDualRoleNode(name string, unschedulable bool) *corev1.Node {
 	return &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -233,11 +248,34 @@ func noopTransitions() []TransitionDescriptor {
 			To: configv1.InfrastructureSpec{
 				ControlPlaneTopology: configv1.HighlyAvailableTopologyMode,
 			},
-			Validators: nil,
+			PreflightValidators: nil,
 			UpdateStatus: func(infra *configv1.Infrastructure) {
 				infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
 				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 			},
+			TransitionValidators: nil,
+		},
+	}
+}
+
+// noopTransitionsWithValidators returns the same transitions list as
+// noopTransitions, but with the given TransitionValidators wired in so tests
+// can control post-transition reconciliation behavior.
+func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []TransitionDescriptor {
+	transitions := noopTransitions()
+	transitions[0].TransitionValidators = validators
+	return transitions
+}
+
+// reconciliationTestTransitions returns a transitions list whose To spec is a
+// wildcard (matches any Infrastructure spec), used to control
+// checkClusterReconciliation behavior in tests independent of the infra's
+// current spec topology.
+func reconciliationTestTransitions(validators ...TransitionValidatorFunc) []TransitionDescriptor {
+	return []TransitionDescriptor{
+		{
+			To:                   configv1.InfrastructureSpec{},
+			TransitionValidators: validators,
 		},
 	}
 }
@@ -264,11 +302,11 @@ func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorConditio
 	}
 }
 
-func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor, reconciliationChecks []func(context.Context) (bool, error)) *TopologyTransitionController {
-	return newTestControllerWithClock(infra, conditions, preflightChecks, transitions, reconciliationChecks, clocktesting.NewFakePassiveClock(time.Now()))
+func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor) *TopologyTransitionController {
+	return newTestControllerWithClock(infra, conditions, preflightChecks, transitions, clocktesting.NewFakePassiveClock(time.Now()))
 }
 
-func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor, reconciliationChecks []func(context.Context) (bool, error), clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
+func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor, clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
 	fakeConfigClient := configfakeclient.NewSimpleClientset(infra)
 
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -281,24 +319,17 @@ func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []ope
 		operatorStatus.Conditions = conditions
 	}
 
-	if reconciliationChecks == nil {
-		reconciliationChecks = []func(context.Context) (bool, error){
-			func(ctx context.Context) (bool, error) { return true, nil },
-		}
-	}
-
 	return &TopologyTransitionController{
 		operatorClient: v1helpers.NewFakeOperatorClient(
 			&operatorv1.OperatorSpec{},
 			operatorStatus,
 			nil,
 		),
-		infraLister:          configlistersv1.NewInfrastructureLister(indexer),
-		infraClient:          fakeConfigClient.ConfigV1().Infrastructures(),
-		preflightChecks:      preflightChecks,
-		reconciliationChecks: reconciliationChecks,
-		transitions:          transitions,
-		clock:                clk,
+		infraLister:     configlistersv1.NewInfrastructureLister(indexer),
+		infraClient:     fakeConfigClient.ConfigV1().Infrastructures(),
+		preflightChecks: preflightChecks,
+		transitions:     transitions,
+		clock:           clk,
 	}
 }
 
@@ -308,27 +339,57 @@ type testFixture struct {
 	cmIndexer   cache.Indexer
 	etcdIndexer cache.Indexer
 	coIndexer   cache.Indexer
-	nodeLister  corev1listers.NodeLister
-	cmLister    corev1listers.ConfigMapNamespaceLister
-	etcdLister  operatorv1listers.EtcdLister
-	coLister    configlistersv1.ClusterOperatorLister
+	mcIndexer   cache.Indexer
+	mcpIndexer  cache.Indexer
+	icIndexer   cache.Indexer
+	kasIndexer  cache.Indexer
+	oasIndexer  cache.Indexer
+
+	nodeLister corev1listers.NodeLister
+	cmLister   corev1listers.ConfigMapNamespaceLister
+	etcdLister operatorv1listers.EtcdLister
+	coLister   configlistersv1.ClusterOperatorLister
+	mcLister   machineconfigv1listers.MachineConfigLister
+	mcpLister  machineconfigv1listers.MachineConfigPoolLister
+	icLister   operatorv1listers.IngressControllerNamespaceLister
+	kasLister  operatorv1listers.KubeAPIServerLister
+	oasLister  operatorv1listers.OpenShiftAPIServerLister
 }
+
+// ingressOperatorNamespace is the namespace IngressControllers live in.
+const ingressOperatorNamespace = "openshift-ingress-operator"
 
 func newTestFixture() *testFixture {
 	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	cmIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	etcdIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	coIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	mcIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	mcpIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	icIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	kasIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	oasIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
 	return &testFixture{
 		nodeIndexer: nodeIndexer,
 		cmIndexer:   cmIndexer,
 		etcdIndexer: etcdIndexer,
 		coIndexer:   coIndexer,
-		nodeLister:  corev1listers.NewNodeLister(nodeIndexer),
-		cmLister:    corev1listers.NewConfigMapLister(cmIndexer).ConfigMaps(etcdNamespace),
-		etcdLister:  operatorv1listers.NewEtcdLister(etcdIndexer),
-		coLister:    configlistersv1.NewClusterOperatorLister(coIndexer),
+		mcIndexer:   mcIndexer,
+		mcpIndexer:  mcpIndexer,
+		icIndexer:   icIndexer,
+		kasIndexer:  kasIndexer,
+		oasIndexer:  oasIndexer,
+
+		nodeLister: corev1listers.NewNodeLister(nodeIndexer),
+		cmLister:   corev1listers.NewConfigMapLister(cmIndexer).ConfigMaps(etcdNamespace),
+		etcdLister: operatorv1listers.NewEtcdLister(etcdIndexer),
+		coLister:   configlistersv1.NewClusterOperatorLister(coIndexer),
+		mcLister:   machineconfigv1listers.NewMachineConfigLister(mcIndexer),
+		mcpLister:  machineconfigv1listers.NewMachineConfigPoolLister(mcpIndexer),
+		icLister:   operatorv1listers.NewIngressControllerLister(icIndexer).IngressControllers(ingressOperatorNamespace),
+		kasLister:  operatorv1listers.NewKubeAPIServerLister(kasIndexer),
+		oasLister:  operatorv1listers.NewOpenShiftAPIServerLister(oasIndexer),
 	}
 }
 
@@ -364,8 +425,54 @@ func (f *testFixture) withClusterOperators(operators ...*configv1.ClusterOperato
 	return f
 }
 
+func (f *testFixture) withMachineConfigs(configs ...*machineconfigurationv1.MachineConfig) *testFixture {
+	for _, mc := range configs {
+		if err := f.mcIndexer.Add(mc); err != nil {
+			panic(fmt.Sprintf("failed to add MachineConfig to indexer: %v", err))
+		}
+	}
+	return f
+}
+
+func (f *testFixture) withMachineConfigPool(pool *machineconfigurationv1.MachineConfigPool) *testFixture {
+	if err := f.mcpIndexer.Add(pool); err != nil {
+		panic(fmt.Sprintf("failed to add MachineConfigPool to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withIngressController(ic *operatorv1.IngressController) *testFixture {
+	if err := f.icIndexer.Add(ic); err != nil {
+		panic(fmt.Sprintf("failed to add IngressController to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withKubeAPIServer(kas *operatorv1.KubeAPIServer) *testFixture {
+	if err := f.kasIndexer.Add(kas); err != nil {
+		panic(fmt.Sprintf("failed to add KubeAPIServer to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withOpenShiftAPIServer(oas *operatorv1.OpenShiftAPIServer) *testFixture {
+	if err := f.oasIndexer.Add(oas); err != nil {
+		panic(fmt.Sprintf("failed to add OpenShiftAPIServer to indexer: %v", err))
+	}
+	return f
+}
+
 func (f *testFixture) buildTransitions() []TransitionDescriptor {
-	return buildSupportedTransitions(f.nodeLister, f.cmLister, f.etcdLister)
+	return buildSupportedTransitions(TransitionValidationListers{
+		NodeLister:               f.nodeLister,
+		EtcdConfigMapLister:      f.cmLister,
+		EtcdLister:               f.etcdLister,
+		KubeAPIServerLister:      f.kasLister,
+		OpenShiftAPIServerLister: f.oasLister,
+		IngressControllerLister:  f.icLister,
+		MachineConfigLister:      f.mcLister,
+		MachineConfigPoolLister:  f.mcpLister,
+	})
 }
 
 func (f *testFixture) buildPreflightChecks() []TransitionValidatorFunc {
@@ -375,7 +482,7 @@ func (f *testFixture) buildPreflightChecks() []TransitionValidatorFunc {
 }
 
 func (f *testFixture) newController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition) *TopologyTransitionController {
-	return newTestController(infra, conditions, f.buildPreflightChecks(), f.buildTransitions(), nil)
+	return newTestController(infra, conditions, f.buildPreflightChecks(), f.buildTransitions())
 }
 
 func newTestClusterOperator(name string, available, progressing, degraded configv1.ConditionStatus) *configv1.ClusterOperator {
@@ -399,4 +506,52 @@ func newTestClusterOperatorLister(operators ...*configv1.ClusterOperator) config
 		}
 	}
 	return configlistersv1.NewClusterOperatorLister(indexer)
+}
+
+func newTestMachineConfig(name string) *machineconfigurationv1.MachineConfig {
+	return &machineconfigurationv1.MachineConfig{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+	}
+}
+
+func newTestMachineConfigPool(name string, machineCount, readyMachineCount int32) *machineconfigurationv1.MachineConfigPool {
+	return &machineconfigurationv1.MachineConfigPool{
+		ObjectMeta: metav1.ObjectMeta{Name: name},
+		Status: machineconfigurationv1.MachineConfigPoolStatus{
+			MachineCount:      machineCount,
+			ReadyMachineCount: readyMachineCount,
+		},
+	}
+}
+
+func newTestIngressController(name string, availableReplicas int32) *operatorv1.IngressController {
+	return &operatorv1.IngressController{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: ingressOperatorNamespace},
+		Status: operatorv1.IngressControllerStatus{
+			AvailableReplicas: availableReplicas,
+		},
+	}
+}
+
+func newTestKubeAPIServerCR(nodeCount int) *operatorv1.KubeAPIServer {
+	nodeStatuses := make([]operatorv1.NodeStatus, nodeCount)
+	return &operatorv1.KubeAPIServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		Status: operatorv1.KubeAPIServerStatus{
+			StaticPodOperatorStatus: operatorv1.StaticPodOperatorStatus{
+				NodeStatuses: nodeStatuses,
+			},
+		},
+	}
+}
+
+func newTestOpenShiftAPIServerCR(readyReplicas int32) *operatorv1.OpenShiftAPIServer {
+	return &operatorv1.OpenShiftAPIServer{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		Status: operatorv1.OpenShiftAPIServerStatus{
+			OperatorStatus: operatorv1.OperatorStatus{
+				ReadyReplicas: readyReplicas,
+			},
+		},
+	}
 }

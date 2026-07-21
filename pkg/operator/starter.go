@@ -18,6 +18,8 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned"
 	configv1informers "github.com/openshift/client-go/config/informers/externalversions"
+	machineconfigclient "github.com/openshift/client-go/machineconfiguration/clientset/versioned"
+	machineconfiginformers "github.com/openshift/client-go/machineconfiguration/informers/externalversions"
 	applyoperatorv1 "github.com/openshift/client-go/operator/applyconfigurations/operator/v1"
 	operatorclient_versioned "github.com/openshift/client-go/operator/clientset/versioned"
 	operatorinformers "github.com/openshift/client-go/operator/informers/externalversions"
@@ -278,6 +280,12 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		}
 		operatorInformers := operatorinformers.NewSharedInformerFactory(operatorConfigClient, 10*time.Minute)
 
+		machineConfigClient, err := machineconfigclient.NewForConfig(controllerContext.KubeConfig)
+		if err != nil {
+			return err
+		}
+		machineConfigInformers := machineconfiginformers.NewSharedInformerFactory(machineConfigClient, 10*time.Minute)
+
 		kubeInformersForEtcd := v1helpers.NewKubeInformersForNamespaces(kubeClient, "openshift-etcd")
 
 		topologyTransitionController := topologytransition.NewController(
@@ -293,11 +301,22 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 			operatorInformers.Operator().V1().Etcds().Informer(),
 			configInformers.Config().V1().ClusterOperators().Lister(),
 			configInformers.Config().V1().ClusterOperators().Informer(),
+			operatorInformers.Operator().V1().KubeAPIServers().Lister(),
+			operatorInformers.Operator().V1().KubeAPIServers().Informer(),
+			operatorInformers.Operator().V1().OpenShiftAPIServers().Lister(),
+			operatorInformers.Operator().V1().OpenShiftAPIServers().Informer(),
+			operatorInformers.Operator().V1().IngressControllers().Lister().IngressControllers("openshift-ingress-operator"),
+			operatorInformers.Operator().V1().IngressControllers().Informer(),
+			machineConfigInformers.Machineconfiguration().V1().MachineConfigs().Lister(),
+			machineConfigInformers.Machineconfiguration().V1().MachineConfigs().Informer(),
+			machineConfigInformers.Machineconfiguration().V1().MachineConfigPools().Lister(),
+			machineConfigInformers.Machineconfiguration().V1().MachineConfigPools().Informer(),
 			clock.RealClock{},
 			controllerContext.EventRecorder,
 		)
 
 		go operatorInformers.Start(ctx.Done())
+		go machineConfigInformers.Start(ctx.Done())
 		go kubeInformersForEtcd.Start(ctx.Done())
 		go kubeInformersForNamespaces.Start(ctx.Done())
 		go topologyTransitionController.Run(ctx, 1)

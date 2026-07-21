@@ -254,7 +254,7 @@ github.com/openshift-eng/openshift-tests-extension/pkg/ginkgo
 github.com/openshift-eng/openshift-tests-extension/pkg/junit
 github.com/openshift-eng/openshift-tests-extension/pkg/util/sets
 github.com/openshift-eng/openshift-tests-extension/pkg/version
-# github.com/openshift/api v0.0.0-20260626010240-bb02c828dc55
+# github.com/openshift/api v0.0.0-20260626094904-39631f42b31b
 ## explicit; go 1.25.0
 github.com/openshift/api
 github.com/openshift/api/annotations
@@ -295,6 +295,8 @@ github.com/openshift/api/machine
 github.com/openshift/api/machine/v1
 github.com/openshift/api/machine/v1alpha1
 github.com/openshift/api/machine/v1beta1
+github.com/openshift/api/machineconfiguration/v1
+github.com/openshift/api/machineconfiguration/v1alpha1
 github.com/openshift/api/monitoring
 github.com/openshift/api/monitoring/v1
 github.com/openshift/api/network
@@ -343,7 +345,7 @@ github.com/openshift/build-machinery-go/make/targets/golang
 github.com/openshift/build-machinery-go/make/targets/openshift
 github.com/openshift/build-machinery-go/make/targets/openshift/operator
 github.com/openshift/build-machinery-go/scripts
-# github.com/openshift/client-go v0.0.0-20260429123927-c81f86abfa6a
+# github.com/openshift/client-go v0.0.0-20260626205214-7df9f8afeb8e
 ## explicit; go 1.25.0
 github.com/openshift/client-go/config/applyconfigurations
 github.com/openshift/client-go/config/applyconfigurations/config/v1
@@ -368,6 +370,20 @@ github.com/openshift/client-go/config/informers/externalversions/internalinterfa
 github.com/openshift/client-go/config/listers/config/v1
 github.com/openshift/client-go/config/listers/config/v1alpha1
 github.com/openshift/client-go/config/listers/config/v1alpha2
+github.com/openshift/client-go/machineconfiguration/applyconfigurations/internal
+github.com/openshift/client-go/machineconfiguration/applyconfigurations/machineconfiguration/v1
+github.com/openshift/client-go/machineconfiguration/applyconfigurations/machineconfiguration/v1alpha1
+github.com/openshift/client-go/machineconfiguration/clientset/versioned
+github.com/openshift/client-go/machineconfiguration/clientset/versioned/scheme
+github.com/openshift/client-go/machineconfiguration/clientset/versioned/typed/machineconfiguration/v1
+github.com/openshift/client-go/machineconfiguration/clientset/versioned/typed/machineconfiguration/v1alpha1
+github.com/openshift/client-go/machineconfiguration/informers/externalversions
+github.com/openshift/client-go/machineconfiguration/informers/externalversions/internalinterfaces
+github.com/openshift/client-go/machineconfiguration/informers/externalversions/machineconfiguration
+github.com/openshift/client-go/machineconfiguration/informers/externalversions/machineconfiguration/v1
+github.com/openshift/client-go/machineconfiguration/informers/externalversions/machineconfiguration/v1alpha1
+github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1
+github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1alpha1
 github.com/openshift/client-go/operator/applyconfigurations/internal
 github.com/openshift/client-go/operator/applyconfigurations/operator/v1
 github.com/openshift/client-go/operator/applyconfigurations/operator/v1alpha1

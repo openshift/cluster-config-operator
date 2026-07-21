@@ -9,6 +9,7 @@ import (
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
+	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
@@ -38,13 +39,12 @@ const (
 // validates the transition, updates Infrastructure status, and monitors
 // downstream workloads to verify reconciliation.
 type TopologyTransitionController struct {
-	operatorClient       v1helpers.OperatorClient
-	infraLister          configlistersv1.InfrastructureLister
-	infraClient          configv1client.InfrastructureInterface
-	preflightChecks      []TransitionValidatorFunc
-	reconciliationChecks []func(context.Context) (bool, error)
-	transitions          []TransitionDescriptor
-	clock                clock.PassiveClock
+	operatorClient  v1helpers.OperatorClient
+	infraLister     configlistersv1.InfrastructureLister
+	infraClient     configv1client.InfrastructureInterface
+	preflightChecks []TransitionValidatorFunc
+	transitions     []TransitionDescriptor
+	clock           clock.PassiveClock
 }
 
 // NewController returns a new TopologyTransitionController.
@@ -61,9 +61,29 @@ func NewController(
 	etcdOperatorInformer cache.SharedIndexInformer,
 	clusterOperatorLister configlistersv1.ClusterOperatorLister,
 	clusterOperatorInformer cache.SharedIndexInformer,
+	kubeAPIServerLister operatorv1listers.KubeAPIServerLister,
+	kubeAPIServerInformer cache.SharedIndexInformer,
+	openShiftAPIServerLister operatorv1listers.OpenShiftAPIServerLister,
+	openShiftAPIServerInformer cache.SharedIndexInformer,
+	ingressControllerLister operatorv1listers.IngressControllerNamespaceLister,
+	ingressControllerInformer cache.SharedIndexInformer,
+	machineConfigLister machineconfigv1listers.MachineConfigLister,
+	machineConfigInformer cache.SharedIndexInformer,
+	machineConfigPoolLister machineconfigv1listers.MachineConfigPoolLister,
+	machineConfigPoolInformer cache.SharedIndexInformer,
 	clk clock.PassiveClock,
 	recorder events.Recorder,
 ) factory.Controller {
+	listers := TransitionValidationListers{
+		NodeLister:               nodeLister,
+		EtcdConfigMapLister:      etcdConfigMapLister,
+		EtcdLister:               etcdLister,
+		KubeAPIServerLister:      kubeAPIServerLister,
+		OpenShiftAPIServerLister: openShiftAPIServerLister,
+		IngressControllerLister:  ingressControllerLister,
+		MachineConfigLister:      machineConfigLister,
+		MachineConfigPoolLister:  machineConfigPoolLister,
+	}
 	c := &TopologyTransitionController{
 		operatorClient: operatorClient,
 		infraLister:    infraLister,
@@ -71,10 +91,7 @@ func NewController(
 		preflightChecks: []TransitionValidatorFunc{
 			validateClusterOperatorsStable(clusterOperatorLister),
 		},
-		reconciliationChecks: []func(context.Context) (bool, error){
-			reconcileClusterOperatorsStable(clusterOperatorLister),
-		},
-		transitions: buildSupportedTransitions(nodeLister, etcdConfigMapLister, etcdLister),
+		transitions: buildSupportedTransitions(listers),
 		clock:       clk,
 	}
 	return factory.New().
@@ -85,6 +102,11 @@ func NewController(
 			etcdConfigMapInformer,
 			etcdOperatorInformer,
 			clusterOperatorInformer,
+			kubeAPIServerInformer,
+			openShiftAPIServerInformer,
+			ingressControllerInformer,
+			machineConfigInformer,
+			machineConfigPoolInformer,
 		).
 		WithSync(c.sync).
 		WithSyncDegradedOnError(operatorClient).
@@ -127,14 +149,14 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 		return c.reconcileTransition(ctx, syncCtx, infra)
 
 	case transitionProgressing:
-		return c.checkClusterReconciliation(ctx)
+		return c.checkClusterReconciliation(ctx, infra)
 
 	case !controllerUpgradeable:
 		// Safety net: if Upgradeable is stuck False from a completed transition
 		// whose progressing condition was lost (e.g. partial failure), route
 		// through reconciliation checks before re-enabling upgrades.
 		if upgCond := v1helpers.FindOperatorCondition(status.Conditions, upgradeableCondition); upgCond != nil && upgCond.Reason == reasonTopologyTransitionInProgress {
-			return c.checkClusterReconciliation(ctx)
+			return c.checkClusterReconciliation(ctx, infra)
 		}
 
 		_, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
@@ -245,10 +267,11 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 	return nil
 }
 
-// checkClusterReconciliation runs all reconciliation checks to verify downstream
-// workloads have reconciled after a topology transition. All checks must pass
-// before the progressing condition is cleared.
-func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Context) error {
+// checkClusterReconciliation runs the post-transition TransitionValidators for
+// the transition matching the current Infrastructure spec, to verify downstream
+// workloads have reconciled after a topology transition. All validators must
+// pass before the progressing condition is cleared.
+func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Context, infra *configv1.Infrastructure) error {
 	_, status, _, err := c.operatorClient.GetOperatorState()
 	if err != nil {
 		return err
@@ -274,13 +297,17 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		return nil
 	}
 
-	for i, check := range c.reconciliationChecks {
-		reconciled, err := check(ctx)
-		if err != nil {
-			return err
+	var transitionValidators []TransitionValidatorFunc
+	for i := range c.transitions {
+		if matchesSpec(c.transitions[i].To, infra.Spec) {
+			transitionValidators = c.transitions[i].TransitionValidators
+			break
 		}
-		if !reconciled {
-			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied", i+1, len(c.reconciliationChecks))
+	}
+
+	for i, v := range transitionValidators {
+		if err := v(); err != nil {
+			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied: %v", i+1, len(transitionValidators), err)
 			return nil
 		}
 	}
