@@ -23,9 +23,11 @@ import (
 )
 
 const (
+	// TODO resuse to status changes
 	transitionProgressingCondition = "TopologyTransitionControllerProgressing"
 	upgradeableCondition           = "TopologyTransitionControllerUpgradeable"
 
+	// TODO resuse for status explanations
 	reasonTopologyTransitionInProgress = "TopologyTransitionInProgress"
 
 	// minReconciliationSoakTime is the minimum time to wait after a transition
@@ -137,12 +139,15 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 	specTopology := infra.Spec.ControlPlaneTopology
 	statusTopology := infra.Status.ControlPlaneTopology
 
+	// TODO remove this before merging
 	// Three states:
 	// 1. spec != status → a transition was requested, run reconcileTransition
 	// 2. spec == status, Progressing=True → transition applied, awaiting downstream reconciliation
 	// 3. spec == status, Progressing!=True → idle, ensure Upgradeable=True
 
 	// Get the needed operator info to progress
+
+	//TODO replace check on operator's own conditions with check on infra CR's topology status fields
 	_, status, _, err := c.operatorClient.GetOperatorState()
 	if err != nil {
 		return err
