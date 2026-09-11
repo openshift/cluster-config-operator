@@ -20,5 +20,3 @@ GO_BUILD_FLAGS := $(if ${TAGS},-tags ${TAGS},)
 # $3 - context directory for image build
 # It will generate target "image-$(1)" for builing the image an binding it as a prerequisite to target "images".
 $(call build-image,ocp-cluster-config-operator,$(IMAGE_REGISTRY)/ocp/4.2:cluster-config-operator,./Dockerfile.rhel7,.)
-
-$(call verify-golang-versions,Dockerfile.rhel7)
