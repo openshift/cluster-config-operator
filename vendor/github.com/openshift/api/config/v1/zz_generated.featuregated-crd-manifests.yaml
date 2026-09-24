@@ -6,6 +6,7 @@ apiservers.config.openshift.io:
   Capability: ""
   Category: ""
   FeatureGates:
+  - KMSEncryption
   - KMSEncryptionProvider
   FilenameOperatorName: config-operator
   FilenameOperatorOrdering: "01"
@@ -362,16 +363,19 @@ infrastructures.config.openshift.io:
   Category: ""
   FeatureGates:
   - AWSClusterHostedDNSInstall
+  - AWSDualStackInstall
   - AzureClusterHostedDNSInstall
+  - AzureDualStackInstall
   - DualReplica
   - DyanmicServiceEndpointIBMCloud
   - GCPClusterHostedDNSInstall
-  - GCPCustomAPIEndpointsInstall
   - HighlyAvailableArbiter
   - HighlyAvailableArbiter+DualReplica
   - NutanixMultiSubnets
+  - OnPremDNSRecords
   - VSphereHostVMGroupZonal
   - VSphereMultiNetworks
+  - VSphereMultiVCenterDay2
   FilenameOperatorName: config-operator
   FilenameOperatorOrdering: "01"
   FilenameRunLevel: "0000_10"
@@ -549,7 +553,7 @@ schedulers.config.openshift.io:
   Capability: ""
   Category: ""
   FeatureGates:
-  - DynamicResourceAllocation
+  - HyperShiftOnlyDynamicResourceAllocation
   FilenameOperatorName: config-operator
   FilenameOperatorOrdering: "01"
   FilenameRunLevel: "0000_10"
