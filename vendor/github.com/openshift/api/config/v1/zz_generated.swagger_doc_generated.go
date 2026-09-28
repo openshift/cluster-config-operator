@@ -2140,16 +2140,6 @@ func (PowerVSServiceEndpoint) SwaggerDoc() map[string]string {
 	return map_PowerVSServiceEndpoint
 }
 
-var map_TopologyState = map[string]string{
-	"":                       "TopologyState describes the control-plane and infrastructure topology at one end of a topology transition.",
-	"controlPlaneTopology":   "controlPlaneTopology is the topology of the control-plane nodes. Valid values are SingleReplica and HighlyAvailable. When set to SingleReplica, operators avoid spending resources for high availability. When set to HighlyAvailable, operators configure high availability as much as possible. controlPlaneTopology is required.",
-	"infrastructureTopology": "infrastructureTopology is the topology of infrastructure services. Valid values are SingleReplica and HighlyAvailable. When set to SingleReplica, operators avoid spending resources for high availability. When set to HighlyAvailable, operators configure high availability as much as possible. infrastructureTopology is required.",
-}
-
-func (TopologyState) SwaggerDoc() map[string]string {
-	return map_TopologyState
-}
-
 var map_VSphereFailureDomainHostGroup = map[string]string{
 	"":           "VSphereFailureDomainHostGroup holds the vmGroup and the hostGroup names in vCenter corresponds to a vm-host group of type Virtual Machine and Host respectively. Is also contains the vmHostRule which is an affinity vm-host rule in vCenter.",
 	"vmGroup":    "vmGroup is the name of the vm-host group of type virtual machine within vCenter for this failure domain. vmGroup is limited to 80 characters. This field is required when the VSphereFailureDomain ZoneType is HostGroup",
@@ -2281,6 +2271,16 @@ func (VSpherePlatformVCenterSpec) SwaggerDoc() map[string]string {
 	return map_VSpherePlatformVCenterSpec
 }
 
+var map_TopologyState = map[string]string{
+	"":                       "TopologyState describes the control-plane and infrastructure topology at one end of a topology transition.",
+	"controlPlaneTopology":   "controlPlaneTopology is the topology of the control-plane nodes. Valid values are SingleReplica and HighlyAvailable. When set to SingleReplica, operators avoid spending resources for high availability. When set to HighlyAvailable, operators configure high availability as much as possible. controlPlaneTopology is required.",
+	"infrastructureTopology": "infrastructureTopology is the topology of infrastructure services. Valid values are SingleReplica and HighlyAvailable. When set to SingleReplica, operators avoid spending resources for high availability. When set to HighlyAvailable, operators configure high availability as much as possible. infrastructureTopology is required.",
+}
+
+func (TopologyState) SwaggerDoc() map[string]string {
+	return map_TopologyState
+}
+
 var map_TopologyTransition = map[string]string{
 	"source":  "source is the control-plane and infrastructure topology this transition starts from. It must equal the current topology in the corresponding status fields. source is required.",
 	"target":  "target is the control-plane and infrastructure topology this transition would move to. target is required.",
@@ -2294,9 +2294,9 @@ func (TopologyTransition) SwaggerDoc() map[string]string {
 
 var map_TopologyTransitionProgress = map[string]string{
 	"":               "TopologyTransitionProgress describes a topology transition that has started.",
-	"status":         "status indicates the current state of a triggered transition. It must be between 1 and 128 characters long.",
-	"reason":         "reason indicates why the Status is in the current state. It must be between 1 and 128 characters long.",
-	"message":        "message is human-readable information about the reason for the current status. It must be between 1 and 2048 characters long.",
+	"state":          "state indicates the current state of a triggered transition. Valid values are \"Completed\" when the transition was successfully applied, \"Partial\" when it was not completely applied or is still in progress, and \"Failed\" when it failed to apply.",
+	"reason":         "reason indicates why current state is as reported. It must be between 1 and 128 characters long.",
+	"message":        "message is human-readable information about the reason for the current state. It must be between 1 and 2048 characters long.",
 	"startedTime":    "startedTime is the time at which the transition was started. When omitted, the start time is not available.",
 	"completionTime": "completionTime is when the transition was fully applied. It is omitted while a transition is being applied.",
 }
@@ -2306,8 +2306,8 @@ func (TopologyTransitionProgress) SwaggerDoc() map[string]string {
 }
 
 var map_TopologyTransitionStatus = map[string]string{
-	"conditions":           "conditions reports whether available transitions have been evaluated. TopologyTransitionsEvaluated is Unknown before evaluation, True when evaluation succeeds (even if no transitions are available), and False when evaluation fails. An absent condition means evaluation has not completed. At most one condition is present.",
-	"availableTransitions": "availableTransitions represents the transitions that are currently valid for this cluster. An empty list means that no transitions are currently available. At most one transition is supported currently (SNO to HA Compact)",
+	"conditions":           "conditions reports whether supported transitions have been evaluated. TopologyTransitionsEvaluated is Unknown before evaluation, True when evaluation succeeds (even if no transitions are supported), and False when evaluation fails. An absent condition means evaluation has not completed. At most one condition is present.",
+	"supportedTransitions": "supportedTransitions represents the transitions that are valid for this cluster. An empty list means that no transitions are currently supported from the current topology. At most one transition is supported currently (SNO to HA Compact)",
 	"currentTransition":    "currentTransition is omitted until a topology transition starts.",
 }
 
