@@ -4,10 +4,32 @@ import (
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
 
+// TopologyState describes the control-plane and infrastructure topology at one
+// end of a topology transition.
+type TopologyState struct {
+	// controlPlaneTopology is the topology of the control-plane nodes. Valid values
+	// are SingleReplica and HighlyAvailable. When set to SingleReplica, operators
+	// avoid spending resources for high availability. When set to HighlyAvailable,
+	// operators configure high availability as much as possible.
+	// controlPlaneTopology is required.
+	// +kubebuilder:validation:Enum=SingleReplica;HighlyAvailable
+	// +required
+	ControlPlaneTopology TopologyMode `json:"controlPlaneTopology,omitempty"`
+
+	// infrastructureTopology is the topology of infrastructure services. Valid
+	// values are SingleReplica and HighlyAvailable. When set to SingleReplica,
+	// operators avoid spending resources for high availability. When set to
+	// HighlyAvailable, operators configure high availability as much as possible.
+	// infrastructureTopology is required.
+	// +kubebuilder:validation:Enum=SingleReplica;HighlyAvailable
+	// +required
+	InfrastructureTopology TopologyMode `json:"infrastructureTopology,omitempty"`
+}
+
 type TopologyTransitionStatus struct {
-	// conditions reports whether available transitions have been evaluated.
+	// conditions reports whether supported transitions have been evaluated.
 	// TopologyTransitionsEvaluated is Unknown before evaluation, True when evaluation
-	// succeeds (even if no transitions are available), and False when evaluation fails.
+	// succeeds (even if no transitions are supported), and False when evaluation fails.
 	// An absent condition means evaluation has not completed.
 	// At most one condition is present.
 	// +kubebuilder:validation:MaxItems=1
@@ -16,13 +38,13 @@ type TopologyTransitionStatus struct {
 	// +listMapKey=type
 	Conditions []metav1.Condition `json:"conditions,omitempty"`
 
-	// availableTransitions represents the transitions that are currently valid for this cluster.
-	// An empty list means that no transitions are currently available.
+	// supportedTransitions represents the transitions that are valid for this cluster.
+	// An empty list means that no transitions are currently supported from the current topology.
 	// At most one transition is supported currently (SNO to HA Compact)
 	// +kubebuilder:validation:MaxItems=1
 	// +required
 	// +listType=atomic
-	AvailableTransitions []TopologyTransition `json:"availableTransitions"`
+	SupportedTransitions []TopologyTransition `json:"supportedTransitions"`
 
 	// currentTransition is omitted until a topology transition starts.
 	// +optional
@@ -36,21 +58,22 @@ const (
 
 // TopologyTransitionProgress describes a topology transition that has started.
 type TopologyTransitionProgress struct {
-	// status indicates the current state of a triggered transition.
+	// state indicates the current state of a triggered transition.
+	// Valid values are "Completed" when the transition was successfully applied,
+	// "Partial" when it was not completely applied or is still in progress, and
+	// "Failed" when it failed to apply.
+	// +kubebuilder:validation:Enum=Completed;Partial;Failed
+	// +required
+	State TransitionState `json:"state,omitempty"`
+
+	// reason indicates why current state is as reported.
 	// It must be between 1 and 128 characters long.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=128
 	// +required
-	Status TransitionState `json:"status,omitempty"`
+	Reason string `json:"reason,omitempty"`
 
-	// reason indicates why the Status is in the current state.
-	// It must be between 1 and 128 characters long.
-	// +kubebuilder:validation:MinLength=1
-	// +kubebuilder:validation:MaxLength=128
-	// +required
-	Reason TransitionStateReason `json:"reason,omitempty"`
-
-	// message is human-readable information about the reason for the current status.
+	// message is human-readable information about the reason for the current state.
 	// It must be between 1 and 2048 characters long.
 	// +kubebuilder:validation:MinLength=1
 	// +kubebuilder:validation:MaxLength=2048
@@ -78,27 +101,6 @@ const (
 	PartialTransition TransitionState = "Partial"
 	// FailedTransition indicates a transition failed to be applied.
 	FailedTransition TransitionState = "Failed"
-)
-
-// TransitionStateReason indicates why the transition is in a given state.
-type TransitionStateReason string
-
-const (
-	// UnsupportedTransition indicates that the requested
-	// transition is not supported.
-	UnsupportedTransition TransitionStateReason = "UnsupportedTransition"
-
-	// PreflightCheckFailed indicates that a preflight
-	// check for the requested transition failed.
-	PreflightCheckFailed TransitionStateReason = "PreflightCheckFailed"
-
-	// Initiated indicates that a transition is
-	// currently in progress.
-	InProgress TransitionStateReason = "TransitionInProgress"
-
-	// Complete indicates that a transition has
-	// completed successfully.
-	Complete TransitionStateReason = "TransitionComplete"
 )
 
 type TopologyTransition struct {
