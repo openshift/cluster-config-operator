@@ -23,12 +23,14 @@ import (
 )
 
 const (
-	// TODO resuse to status changes
 	transitionProgressingCondition = "TopologyTransitionControllerProgressing"
 	upgradeableCondition           = "TopologyTransitionControllerUpgradeable"
 
-	// TODO resuse for status explanations
-	reasonTopologyTransitionInProgress = "TopologyTransitionInProgress"
+	reasonTopologyTransitionInProgress            = "TopologyTransitionInProgress"
+	reasonTopologyTransitionUnsupportedTransition = "UnsupportedTransition"
+	reasonTopologyTransitionPreflightCheckFailed  = "PreflightCheckFailed"
+	reasonTopologyTransitionComplete              = "TopologyTransitionComplete"
+	reasonTopologyTransitionAsExpected            = "AsExpected"
 
 	// minReconciliationSoakTime is the minimum time to wait after a transition
 	// starts before accepting reconciliation checks as passing. This prevents
@@ -139,15 +141,6 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 	specTopology := infra.Spec.ControlPlaneTopology
 	statusTopology := infra.Status.ControlPlaneTopology
 
-	// TODO remove this before merging
-	// Three states:
-	// 1. spec != status → a transition was requested, run reconcileTransition
-	// 2. spec == status, Progressing=True → transition applied, awaiting downstream reconciliation
-	// 3. spec == status, Progressing!=True → idle, ensure Upgradeable=True
-
-	// Get the needed operator info to progress
-
-	//TODO replace check on operator's own conditions with check on infra CR's topology status fields
 	_, status, _, err := c.operatorClient.GetOperatorState()
 	if err != nil {
 		return err
@@ -180,13 +173,13 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    upgradeableCondition,
 				Status:  operatorv1.ConditionTrue,
-				Reason:  "AsExpected",
+				Reason:  reasonTopologyTransitionAsExpected,
 				Message: "No topology transition in progress",
 			}),
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    transitionProgressingCondition,
 				Status:  operatorv1.ConditionFalse,
-				Reason:  "AsExpected",
+				Reason:  reasonTopologyTransitionAsExpected,
 				Message: "No topology transition in progress",
 			}),
 		)
@@ -207,13 +200,13 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    transitionProgressingCondition,
 				Status:  operatorv1.ConditionFalse,
-				Reason:  "UnsupportedTransition",
+				Reason:  reasonTopologyTransitionUnsupportedTransition,
 				Message: err.Error(),
 			}),
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    upgradeableCondition,
 				Status:  operatorv1.ConditionFalse,
-				Reason:  "UnsupportedTransition",
+				Reason:  reasonTopologyTransitionUnsupportedTransition,
 				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is requested; revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
 			}),
 		); condErr != nil {
@@ -228,13 +221,13 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    transitionProgressingCondition,
 				Status:  operatorv1.ConditionFalse,
-				Reason:  "PreflightCheckFailed",
+				Reason:  reasonTopologyTransitionPreflightCheckFailed,
 				Message: err.Error(),
 			}),
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    upgradeableCondition,
 				Status:  operatorv1.ConditionFalse,
-				Reason:  "PreflightCheckFailed",
+				Reason:  reasonTopologyTransitionPreflightCheckFailed,
 				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is pending; resolve preflight failures or revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
 			}),
 		); condErr != nil {
@@ -339,13 +332,13 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 			Type:    upgradeableCondition,
 			Status:  operatorv1.ConditionTrue,
-			Reason:  "TopologyTransitionComplete",
+			Reason:  reasonTopologyTransitionComplete,
 			Message: "Topology transition complete, upgrades are allowed",
 		}),
 		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 			Type:    transitionProgressingCondition,
 			Status:  operatorv1.ConditionFalse,
-			Reason:  "TopologyTransitionComplete",
+			Reason:  reasonTopologyTransitionComplete,
 			Message: "Topology transition reconciliation complete",
 		}),
 	)
