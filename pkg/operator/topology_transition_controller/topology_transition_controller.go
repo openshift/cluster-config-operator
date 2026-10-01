@@ -3,6 +3,7 @@ package topology_transition_controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -15,6 +16,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1helpers "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -216,7 +218,9 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		return nil
 	}
 
-	if err := validatePreflight(c.preflightChecks, transition); err != nil {
+	if invalidMessage, err := validatePreflight(c.preflightChecks, transition); err != nil {
+		// Err is non-nil when the evaluation was prevented from completing due to failures.
+		// For example: an apiserver GET call failed. In these cases, the sync should be retried.
 		if _, _, condErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    transitionProgressingCondition,
@@ -233,6 +237,22 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		); condErr != nil {
 			return condErr
 		}
+
+		// A "completed" evaluation means that preflight ran to completion. Update the
+		// cluster infra object.
+		infraUpdatePayload := infra.DeepCopy()
+		metav1helpers.SetStatusCondition(&infraUpdatePayload.Status.TopologyTransitionStatus.Conditions,
+			metav1.Condition{
+				Type:    configv1.TopologyTransitionsEvaluatedConditionType,
+				Status:  metav1.ConditionTrue,
+				Reason:  reasonTopologyTransitionPreflightCheckFailed,
+				Message: invalidMessage,
+			},
+		)
+		if _, err := c.infraClient.UpdateStatus(ctx, infraUpdatePayload, metav1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("Failed to update infrastructure object: %w", err)
+		}
+
 		syncCtx.Recorder().Warningf("TopologyTransitionPreflightFailed", "%s", err.Error())
 		return nil
 	}
@@ -322,9 +342,9 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 	}
 
 	for i, v := range transitionValidators {
-		if err := v(); err != nil {
-			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied: %v", i+1, len(transitionValidators), err)
-			return nil
+		if invalidReason, err := v(); err != nil {
+			combinedMessage := strings.Join([]string{invalidReason, fmt.Sprintf("%v", err)}, "; ")
+			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied: %v", i+1, len(transitionValidators), combinedMessage)
 		}
 	}
 
