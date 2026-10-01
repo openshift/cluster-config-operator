@@ -29,23 +29,29 @@ const (
 )
 
 // validatePreflight runs global preflight checks followed by
-// transition-specific validators. Returns a combined error containing all
-// validation failures.
-func validatePreflight(globalChecks []TransitionValidatorFunc, transition *TransitionDescriptor) error {
+// transition-specific validators. Returns a combined string message containing all
+// validation failures. May also return an error if validations failed to execute.
+func validatePreflight(globalChecks []TransitionValidatorFunc, transition *TransitionDescriptor) (string, error) {
 	var errs []error
+	var invalidReasons []string
 	for _, v := range globalChecks {
-		if err := v(); err != nil {
+		if reason, err := v(); err != nil {
 			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
+			if len(reason) != 0 {
+				invalidReasons = append(invalidReasons, reason)
+			}
 		}
 	}
 
 	for _, v := range transition.PreflightValidators {
-		if err := v(); err != nil {
+		if reason, err := v(); err != nil {
 			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
+			if len(reason) != 0 {
+				invalidReasons = append(invalidReasons, reason)
+			}
 		}
 	}
-
-	return errors.Join(errs...)
+	return strings.Join(invalidReasons, ";"), errors.Join(errs...)
 }
 
 // isControlPlaneNode returns true if the node carries either the modern
@@ -77,30 +83,30 @@ func listControlPlaneNodes(nodeLister corev1listers.NodeLister) ([]*corev1.Node,
 // validateControlPlaneNodeCount returns a TransitionValidator that checks
 // the number of control plane nodes meets the requirement.
 func validateControlPlaneNodeCount(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return "", fmt.Errorf("failed to list control plane nodes: %w", err)
 		}
 
 		if len(nodes) < required {
-			return fmt.Errorf("insufficient control plane nodes: need %d, have %d", required, len(nodes))
+			return fmt.Sprintf("insufficient control plane nodes: need %d, have %d", required, len(nodes)), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
 // validateExactInfrastructureNodeCount returns a TransitionValidator that checks
 // the number of dedicated infrastructure (worker) nodes equals the expected count exactly.
 func validateExactInfrastructureNodeCount(expected int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		selector := labels.SelectorFromSet(labels.Set{
 			"node-role.kubernetes.io/worker": "",
 		})
 		nodes, err := nodeLister.List(selector)
 		if err != nil {
-			return fmt.Errorf("failed to list infrastructure nodes: %w", err)
+			return "", fmt.Errorf("failed to list infrastructure nodes: %w", err)
 		}
 
 		dedicatedWorkers := 0
@@ -111,10 +117,10 @@ func validateExactInfrastructureNodeCount(expected int, nodeLister corev1listers
 		}
 
 		if dedicatedWorkers != expected {
-			return fmt.Errorf("unexpected infrastructure node count: expected %d dedicated workers, have %d", expected, dedicatedWorkers)
+			return fmt.Sprintf("unexpected infrastructure node count: expected %d dedicated workers, have %d", expected, dedicatedWorkers), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
@@ -124,22 +130,22 @@ func validateExactInfrastructureNodeCount(expected int, nodeLister corev1listers
 // missing or Unknown condition is treated as progressing rather than silently
 // passing, since the absence of the condition does not confirm etcd is stable.
 func validateEtcdNotProgressing(etcdLister operatorv1listers.EtcdLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		etcd, err := etcdLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get etcd operator CR: %w", err)
+			return "", fmt.Errorf("failed to get etcd operator CR: %w", err)
 		}
 
 		cond := v1helpers.FindOperatorCondition(etcd.Status.Conditions, etcdMembersProgressingCondition)
 		if cond == nil {
-			return fmt.Errorf("etcd %s condition is missing", etcdMembersProgressingCondition)
+			return fmt.Sprintf("etcd %s condition is missing", etcdMembersProgressingCondition), nil
 		}
 
 		if cond.Status != operatorv1.ConditionFalse {
-			return fmt.Errorf("etcd is still progressing: %s", cond.Message)
+			return fmt.Sprintf("etcd is still progressing: %s", cond.Message), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
@@ -151,18 +157,18 @@ func validateEtcdNotProgressing(etcdLister operatorv1listers.EtcdLister) Transit
 // an IP address. Learner (non-voting) members and the bootstrap member are
 // excluded by that controller, so len(Data) equals the voting member count.
 func validateEtcdVotingMembers(required int, configMapLister corev1listers.ConfigMapNamespaceLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		cm, err := configMapLister.Get(etcdEndpointsConfigMapName)
 		if err != nil {
-			return fmt.Errorf("failed to get %s/%s ConfigMap: %w", etcdNamespace, etcdEndpointsConfigMapName, err)
+			return "", fmt.Errorf("failed to get %s/%s ConfigMap: %w", etcdNamespace, etcdEndpointsConfigMapName, err)
 		}
 
 		votingMembers := len(cm.Data)
 		if votingMembers < required {
-			return fmt.Errorf("insufficient etcd voting members: need %d, have %d", required, votingMembers)
+			return fmt.Sprintf("insufficient etcd voting members: need %d, have %d", required, votingMembers), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
@@ -170,27 +176,27 @@ func validateEtcdVotingMembers(required int, configMapLister corev1listers.Confi
 // EtcdMembersAvailable condition on the etcds.operator.openshift.io/cluster CR
 // to verify etcd has quorum.
 func validateEtcdQuorum(etcdLister operatorv1listers.EtcdLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		etcd, err := etcdLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get etcd operator CR: %w", err)
+			return "", fmt.Errorf("failed to get etcd operator CR: %w", err)
 		}
 
 		if !v1helpers.IsOperatorConditionTrue(etcd.Status.Conditions, etcdMembersAvailableCondition) {
-			return fmt.Errorf("etcd does not have quorum: %s condition is not True", etcdMembersAvailableCondition)
+			return fmt.Sprintf("etcd does not have quorum: %s condition is not True", etcdMembersAvailableCondition), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
 // validateControlPlaneNodesSchedulable returns a TransitionValidator that checks
 // the number of schedulable control plane nodes meets the requirement.
 func validateControlPlaneNodesSchedulable(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return "", fmt.Errorf("failed to list control plane nodes: %w", err)
 		}
 
 		schedulable := 0
@@ -201,10 +207,10 @@ func validateControlPlaneNodesSchedulable(required int, nodeLister corev1listers
 		}
 
 		if schedulable < required {
-			return fmt.Errorf("insufficient schedulable control plane nodes: need %d, have %d", required, schedulable)
+			return fmt.Sprintf("insufficient schedulable control plane nodes: need %d, have %d", required, schedulable), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
@@ -273,17 +279,17 @@ func checkClusterOperatorsStable(coLister configlistersv1.ClusterOperatorLister)
 // validateClusterOperatorsStable returns a TransitionValidatorFunc that checks
 // all ClusterOperators are stable before allowing a topology transition.
 func validateClusterOperatorsStable(coLister configlistersv1.ClusterOperatorLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		unstable, err := checkClusterOperatorsStable(coLister)
 		if err != nil {
-			return fmt.Errorf("failed to check cluster operator stability: %w", err)
+			return "", fmt.Errorf("failed to check cluster operator stability: %w", err)
 		}
 
 		if len(unstable) > 0 {
-			return fmt.Errorf("cluster operators are not stable: %s", strings.Join(unstable, "; "))
+			return fmt.Sprintf("cluster operators are not stable: %s", strings.Join(unstable, "; ")), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
@@ -291,17 +297,17 @@ func validateClusterOperatorsStable(coLister configlistersv1.ClusterOperatorList
 // that checks the ClusterVersion is not actively applying an update, since a
 // topology transition running concurrently with a cluster upgrade is unsafe.
 func validateNoClusterVersionUpgradeInProgress(clusterVersionLister configlistersv1.ClusterVersionLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		cv, err := clusterVersionLister.Get(clusterVersionName)
 		if err != nil {
-			return fmt.Errorf("failed to get clusterversions.%s/%s: %w", configv1.GroupName, clusterVersionName, err)
+			return "", fmt.Errorf("failed to get clusterversions.%s/%s: %w", configv1.GroupName, clusterVersionName, err)
 		}
 
 		if configv1helpers.IsStatusConditionTrue(cv.Status.Conditions, configv1.OperatorProgressing) {
-			return fmt.Errorf("cluster upgrade is in progress: clusterversions.%s/%s has Progressing=True", configv1.GroupName, clusterVersionName)
+			return fmt.Sprintf("cluster upgrade is in progress: clusterversions.%s/%s has Progressing=True", configv1.GroupName, clusterVersionName), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
@@ -310,10 +316,10 @@ func validateNoClusterVersionUpgradeInProgress(clusterVersionLister configlister
 // role label, confirming they are dual-role as expected in a compact HA
 // topology.
 func validateControlPlaneNodesAreWorkers(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return "", fmt.Errorf("failed to list control plane nodes: %w", err)
 		}
 
 		dualRole := 0
@@ -324,27 +330,27 @@ func validateControlPlaneNodesAreWorkers(required int, nodeLister corev1listers.
 		}
 
 		if dualRole < required {
-			return fmt.Errorf("insufficient control plane nodes marked as workers: need %d, have %d", required, dualRole)
+			return fmt.Sprintf("insufficient control plane nodes marked as workers: need %d, have %d", required, dualRole), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
 // validateControlPlaneNodesReady returns a TransitionValidatorFunc that checks
 // the required number of control plane nodes have a Ready=True condition.
 func validateControlPlaneNodesReady(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return "", fmt.Errorf("failed to list control plane nodes: %w", err)
 		}
 
 		readyCount := countReadyNodes(nodes)
 		if readyCount < required {
-			return fmt.Errorf("insufficient ready control plane nodes: need %d, have %d", required, readyCount)
+			return fmt.Sprintf("insufficient ready control plane nodes: need %d, have %d", required, readyCount), nil
 		}
-		return nil
+		return "", nil
 	}
 }
 
@@ -377,18 +383,18 @@ func countReadyNodes(nodes []*corev1.Node) int {
 // required number of worker-labeled nodes (including dual-role nodes) have a
 // Ready=True condition.
 func validateWorkerNodesReady(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		nodes, err := listWorkerNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list worker nodes: %w", err)
+			return "", fmt.Errorf("failed to list worker nodes: %w", err)
 		}
 
 		readyCount := countReadyNodes(nodes)
 		if readyCount < required {
-			return fmt.Errorf("insufficient ready worker nodes: need %d, have %d", required, readyCount)
+			return fmt.Sprintf("insufficient ready worker nodes: need %d, have %d", required, readyCount), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
@@ -402,17 +408,17 @@ func renderedConfigPrefix(pool string) string {
 // the named MachineConfig no longer exists, e.g. an SNO-only config that must be
 // removed as part of transitioning to HA.
 func validateMachineConfigNotPresent(config string, machineConfigLister machineconfigv1listers.MachineConfigLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		_, err := machineConfigLister.Get(config)
 		if apierrors.IsNotFound(err) {
-			return nil
+			return "", nil
 		}
 
 		if err != nil {
-			return fmt.Errorf("failed to get MachineConfig %s: %w", config, err)
+			return "", fmt.Errorf("failed to get MachineConfig %s: %w", config, err)
 		}
 
-		return fmt.Errorf("MachineConfig %s is still present", config)
+		return fmt.Sprintf("MachineConfig %s is still present", config), nil
 	}
 }
 
@@ -441,10 +447,10 @@ func transitionStartTime(operatorClient v1helpers.OperatorClient) (time.Time, bo
 // change rather than matching a config that predates it.
 func validateNewRenderedPoolConfig(pool string, machineConfigLister machineconfigv1listers.MachineConfigLister, operatorClient v1helpers.OperatorClient) TransitionValidatorFunc {
 	prefix := renderedConfigPrefix(pool)
-	return func() error {
+	return func() (string, error) {
 		configs, err := machineConfigLister.List(labels.Everything())
 		if err != nil {
-			return fmt.Errorf("failed to list MachineConfigs: %w", err)
+			return "", fmt.Errorf("failed to list MachineConfigs: %w", err)
 		}
 
 		since, ok := transitionStartTime(operatorClient)
@@ -454,11 +460,11 @@ func validateNewRenderedPoolConfig(pool string, machineConfigLister machineconfi
 				continue
 			}
 			if !ok || mc.CreationTimestamp.After(since) {
-				return nil
+				return "", nil
 			}
 		}
 
-		return fmt.Errorf("no rendered %s MachineConfig found since the transition began", pool)
+		return fmt.Sprintf("no rendered %s MachineConfig found since the transition began", pool), nil
 	}
 }
 
@@ -479,68 +485,68 @@ func validateNewRenderedWorkerConfig(machineConfigLister machineconfigv1listers.
 // validateMachineConfigPoolReadyCount returns a TransitionValidatorFunc that
 // checks the master MachineConfigPool has the required number of ready machines.
 func validateMachineConfigPoolReadyCount(required int, machineConfigPoolLister machineconfigv1listers.MachineConfigPoolLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		pool, err := machineConfigPoolLister.Get("master")
 		if err != nil {
-			return fmt.Errorf("failed to get master MachineConfigPool: %w", err)
+			return "", fmt.Errorf("failed to get master MachineConfigPool: %w", err)
 		}
 
 		if pool.Status.ReadyMachineCount < int32(required) {
-			return fmt.Errorf("insufficient ready master machines: need %d, have %d", required, pool.Status.ReadyMachineCount)
+			return fmt.Sprintf("insufficient ready master machines: need %d, have %d", required, pool.Status.ReadyMachineCount), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
 // validateIngressRouterCount returns a TransitionValidatorFunc that checks the
 // default IngressController has the required number of available router replicas.
 func validateIngressRouterCount(required int, ingressControllerLister operatorv1listers.IngressControllerNamespaceLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		ic, err := ingressControllerLister.Get("default")
 		if err != nil {
-			return fmt.Errorf("failed to get default IngressController: %w", err)
+			return "", fmt.Errorf("failed to get default IngressController: %w", err)
 		}
 
 		if ic.Status.AvailableReplicas < int32(required) {
-			return fmt.Errorf("insufficient available router replicas: need %d, have %d", required, ic.Status.AvailableReplicas)
+			return fmt.Sprintf("insufficient available router replicas: need %d, have %d", required, ic.Status.AvailableReplicas), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
 // validateKubeAPIServerNodeCount returns a TransitionValidatorFunc that checks
 // the kube-apiserver operator has rolled out to the required number of nodes.
 func validateKubeAPIServerNodeCount(required int, kubeAPIServerLister operatorv1listers.KubeAPIServerLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		kas, err := kubeAPIServerLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get kubeapiservers.operator.openshift.io/cluster: %w", err)
+			return "", fmt.Errorf("failed to get kubeapiservers.operator.openshift.io/cluster: %w", err)
 		}
 
 		nodeCount := len(kas.Status.NodeStatuses)
 		if nodeCount < required {
-			return fmt.Errorf("insufficient kube-apiserver node statuses: need %d, have %d", required, nodeCount)
+			return fmt.Sprintf("insufficient kube-apiserver node statuses: need %d, have %d", required, nodeCount), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }
 
 // validateOpenShiftAPIServerReadyReplicas returns a TransitionValidatorFunc that
 // checks the openshift-apiserver operator has the required number of ready replicas.
 func validateOpenShiftAPIServerReadyReplicas(required int, openShiftAPIServerLister operatorv1listers.OpenShiftAPIServerLister) TransitionValidatorFunc {
-	return func() error {
+	return func() (string, error) {
 		oas, err := openShiftAPIServerLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get openshiftapiservers.operator.openshift.io/cluster: %w", err)
+			return "", fmt.Errorf("failed to get openshiftapiservers.operator.openshift.io/cluster: %w", err)
 		}
 
 		if oas.Status.ReadyReplicas < int32(required) {
-			return fmt.Errorf("insufficient openshift-apiserver ready replicas: need %d, have %d", required, oas.Status.ReadyReplicas)
+			return fmt.Sprintf("insufficient openshift-apiserver ready replicas: need %d, have %d", required, oas.Status.ReadyReplicas), nil
 		}
 
-		return nil
+		return "", nil
 	}
 }

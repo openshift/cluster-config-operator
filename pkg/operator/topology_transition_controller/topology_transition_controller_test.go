@@ -86,7 +86,7 @@ func TestSync(t *testing.T) {
 					ControlPlaneTopology: configv1.HighlyAvailableTopologyMode,
 				},
 				PreflightValidators: []TransitionValidatorFunc{
-					func() error { return fmt.Errorf("insufficient control plane nodes") },
+					func() (string, error) { return "insufficient control plane nodes", nil },
 				},
 				UpdateStatus: func(infra *configv1.Infrastructure) {},
 			},
@@ -148,7 +148,7 @@ func TestSync(t *testing.T) {
 	t.Run("reconciliation not complete preserves conditions", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitionsWithValidators(
-			func() error { return fmt.Errorf("not yet reconciled") },
+			func() (string, error) { return "", fmt.Errorf("not yet reconciled") },
 		))
 
 		if !assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext())) {
@@ -242,7 +242,7 @@ func TestSync(t *testing.T) {
 			},
 		}
 		ctrl := newTestController(infra, staleConditions, nil, reconciliationTestTransitions(
-			func() error { return fmt.Errorf("not yet reconciled") },
+			func() (string, error) { return "", fmt.Errorf("not yet reconciled") },
 		))
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -372,9 +372,9 @@ func TestSync(t *testing.T) {
 	t.Run("reconciliation blocked when one of several transition validators fails", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitionsWithValidators(
-			func() error { return nil },
-			func() error { return fmt.Errorf("machine config pool not ready") },
-			func() error { return nil },
+			func() (string, error) { return "", nil },
+			func() (string, error) { return "", fmt.Errorf("machine config pool not ready") },
+			func() (string, error) { return "", nil },
 		))
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -390,8 +390,8 @@ func TestSync(t *testing.T) {
 	t.Run("reconciliation completes when all transition validators pass", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitionsWithValidators(
-			func() error { return nil },
-			func() error { return nil },
+			func() (string, error) { return "", nil },
+			func() (string, error) { return "", nil },
 		))
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -567,21 +567,22 @@ func TestValidatePreflight(t *testing.T) {
 	t.Run("all validators pass", func(t *testing.T) {
 		td := &TransitionDescriptor{
 			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
-				func() error { return nil },
+				func() (string, error) { return "", nil },
+				func() (string, error) { return "", nil },
 			},
 		}
-		assert.NoError(t, validatePreflight(nil, td))
+		_, err := validatePreflight(nil, td)
+		assert.NoError(t, err)
 	})
 
 	t.Run("single validator fails", func(t *testing.T) {
 		td := &TransitionDescriptor{
 			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
-				func() error { return fmt.Errorf("node count too low") },
+				func() (string, error) { return "", nil },
+				func() (string, error) { return "", fmt.Errorf("node count too low") },
 			},
 		}
-		err := validatePreflight(nil, td)
+		_, err := validatePreflight(nil, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 	})
@@ -589,12 +590,12 @@ func TestValidatePreflight(t *testing.T) {
 	t.Run("multiple failures are accumulated", func(t *testing.T) {
 		td := &TransitionDescriptor{
 			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return fmt.Errorf("node count too low") },
-				func() error { return nil },
-				func() error { return fmt.Errorf("etcd not ready") },
+				func() (string, error) { return "", fmt.Errorf("node count too low") },
+				func() (string, error) { return "", nil },
+				func() (string, error) { return "", fmt.Errorf("etcd not ready") },
 			},
 		}
-		err := validatePreflight(nil, td)
+		_, err := validatePreflight(nil, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 		assert.Contains(t, err.Error(), "etcd not ready")
@@ -602,33 +603,34 @@ func TestValidatePreflight(t *testing.T) {
 
 	t.Run("nil validators", func(t *testing.T) {
 		td := &TransitionDescriptor{}
-		assert.NoError(t, validatePreflight(nil, td))
+		_, err := validatePreflight(nil, td)
+		assert.NoError(t, err)
 	})
 
 	t.Run("global preflight checks run before transition validators", func(t *testing.T) {
 		globalChecks := []TransitionValidatorFunc{
-			func() error { return fmt.Errorf("global check failed") },
+			func() (string, error) { return "", fmt.Errorf("global check failed") },
 		}
 		td := &TransitionDescriptor{
 			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
+				func() (string, error) { return "", nil },
 			},
 		}
-		err := validatePreflight(globalChecks, td)
+		_, err := validatePreflight(globalChecks, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "global check failed")
 	})
 
 	t.Run("global and transition failures are accumulated", func(t *testing.T) {
 		globalChecks := []TransitionValidatorFunc{
-			func() error { return fmt.Errorf("operators unstable") },
+			func() (string, error) { return "", fmt.Errorf("operators unstable") },
 		}
 		td := &TransitionDescriptor{
 			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return fmt.Errorf("etcd not ready") },
+				func() (string, error) { return "", fmt.Errorf("etcd not ready") },
 			},
 		}
-		err := validatePreflight(globalChecks, td)
+		_, err := validatePreflight(globalChecks, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "operators unstable")
 		assert.Contains(t, err.Error(), "etcd not ready")
