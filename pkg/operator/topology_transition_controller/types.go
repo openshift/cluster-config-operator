@@ -11,7 +11,9 @@ import (
 )
 
 // TransitionValidatorFunc defines validation functions for transitions
-type TransitionValidatorFunc func() error
+// Return string message when check detects invalid condition.
+// Return error when validation check was unable complete.
+type TransitionValidatorFunc func() (string, error)
 
 // TransitionDescriptor describes a topology transition with its source/target
 // state, per-transition validation functions, and a status updater. From
