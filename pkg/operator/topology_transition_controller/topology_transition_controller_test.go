@@ -11,23 +11,56 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
 func TestSync(t *testing.T) {
-	t.Run("idle no-op when spec equals status", func(t *testing.T) {
+	t.Run("transition progress is recorded on Infrastructure, not the operator", func(t *testing.T) {
+		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
+		ctrl := newTestController(infra, nil, nil, noopTransitions())
+
+		assert.NoError(t, ctrl.sync(context.Background(), newTestSyncContext()))
+
+		updated := currentInfra(t, ctrl)
+		if !assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+			return
+		}
+
+		condition := meta.FindStatusCondition(updated.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+		if assert.NotNil(t, condition) {
+			assert.Equal(t, metav1.ConditionFalse, condition.Status)
+			assert.Equal(t, reasonTopologyTransitionInProgress, condition.Reason)
+		}
+
+		_, operatorStatus, _, err := ctrl.operatorClient.GetOperatorState()
+		assert.NoError(t, err)
+		assert.Nil(t, v1helpers.FindOperatorCondition(operatorStatus.Conditions, "TopologyTransitionControllerProgressing"))
+	})
+
+	t.Run("standalone evaluation publishes discovery when spec equals status", func(t *testing.T) {
 		infra := newTestInfra(configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
 		ctrl := newTestController(infra, nil, nil, noopTransitions())
 
-		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
+		assert.NoError(t, ctrl.syncEvaluation(t.Context()))
+
+		updated := currentInfra(t, ctrl)
+		if assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
+		}
 	})
 
-	t.Run("idle no-op when spec is empty", func(t *testing.T) {
+	t.Run("standalone evaluation publishes discovery when spec is empty", func(t *testing.T) {
 		infra := newTestInfra("", configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
 		ctrl := newTestController(infra, nil, nil, noopTransitions())
 
-		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
+		assert.NoError(t, ctrl.syncEvaluation(t.Context()))
+
+		updated := currentInfra(t, ctrl)
+		if assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
+		}
 	})
 
 	t.Run("transition triggered sets conditions and updates status", func(t *testing.T) {
@@ -42,7 +75,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, ctrl).Reason)
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 
 		updated, err := ctrl.infraClient.Get(context.TODO(), "cluster", metav1.GetOptions{})
@@ -63,15 +96,17 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "UnsupportedTransition", cond.Reason)
 		assert.Contains(t, cond.Message, "is not supported")
 		assert.Contains(t, cond.Message, "platform=AWS")
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+		assert.Nil(t, v1helpers.FindOperatorCondition(status.Conditions, "TopologyTransitionControllerProgressing"))
 	})
 
 	t.Run("preflight validation failure sets conditions and blocks upgrades", func(t *testing.T) {
@@ -85,8 +120,8 @@ func TestSync(t *testing.T) {
 				To: configv1.InfrastructureSpec{
 					ControlPlaneTopology: configv1.HighlyAvailableTopologyMode,
 				},
-				PreflightValidators: []TransitionValidatorFunc{
-					func() error { return fmt.Errorf("insufficient control plane nodes") },
+				PreflightValidators: []PreflightCheck{
+					{Type: "ControlPlaneNodeCountSatisfied", Validate: func() error { return fmt.Errorf("insufficient control plane nodes") }},
 				},
 				UpdateStatus: func(infra *configv1.Infrastructure) {},
 			},
@@ -101,11 +136,12 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "insufficient control plane nodes")
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
@@ -113,7 +149,7 @@ func TestSync(t *testing.T) {
 
 	t.Run("reconciliation blocked during soak period", func(t *testing.T) {
 		now := time.Now()
-		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
+		infra := withTransitionInProgress(newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType), now)
 		clk := clocktesting.NewFakePassiveClock(now)
 		ctrl := newTestControllerWithClock(infra, transitionInProgressConditionsAt(now), nil, noopTransitions(), clk)
 
@@ -125,12 +161,12 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionPresentAndEqual(status.Conditions, transitionProgressingCondition, operatorv1.ConditionTrue))
+		assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, ctrl).Reason)
 		assert.True(t, v1helpers.IsOperatorConditionPresentAndEqual(status.Conditions, upgradeableCondition, operatorv1.ConditionFalse))
 	})
 
 	t.Run("reconciliation complete clears conditions", func(t *testing.T) {
-		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
+		infra := withTransitionInProgress(newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType), time.Now().Add(-10*time.Minute))
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions())
 
 		if !assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext())) {
@@ -141,12 +177,13 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, metav1.ConditionTrue, completionCondition(t, ctrl).Status)
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
+		assert.Nil(t, v1helpers.FindOperatorCondition(status.Conditions, "TopologyTransitionControllerProgressing"))
 	})
 
 	t.Run("reconciliation not complete preserves conditions", func(t *testing.T) {
-		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
+		infra := withTransitionInProgress(newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType), time.Now().Add(-10*time.Minute))
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitionsWithValidators(
 			func() error { return fmt.Errorf("not yet reconciled") },
 		))
@@ -159,7 +196,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, ctrl).Reason)
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 
@@ -263,12 +300,8 @@ func TestSync(t *testing.T) {
 				Status: operatorv1.ConditionFalse,
 				Reason: "PreflightCheckFailed",
 			},
-			{
-				Type:   transitionProgressingCondition,
-				Status: operatorv1.ConditionFalse,
-				Reason: "PreflightCheckFailed",
-			},
 		}
+		infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse, Reason: "PreflightCheckFailed"}}}
 		ctrl := newTestController(infra, staleConditions, nil, noopTransitions())
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -279,13 +312,13 @@ func TestSync(t *testing.T) {
 		}
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
 
-		// The stale rejection reason on transitionProgressingCondition must not
+		// The stale API rejection reason must not
 		// linger once the offending spec change has been withdrawn.
-		progressingCond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		progressingCond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, progressingCond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, progressingCond.Status)
+		assert.Equal(t, metav1.ConditionUnknown, progressingCond.Status)
 		assert.NotEqual(t, "PreflightCheckFailed", progressingCond.Reason)
 		assert.Equal(t, "AsExpected", progressingCond.Reason)
 	})
@@ -298,12 +331,8 @@ func TestSync(t *testing.T) {
 				Status: operatorv1.ConditionFalse,
 				Reason: "UnsupportedTransition",
 			},
-			{
-				Type:   transitionProgressingCondition,
-				Status: operatorv1.ConditionFalse,
-				Reason: "UnsupportedTransition",
-			},
 		}
+		infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse, Reason: "UnsupportedTransition"}}}
 		ctrl := newTestController(infra, staleConditions, nil, noopTransitions())
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -314,11 +343,11 @@ func TestSync(t *testing.T) {
 		}
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
 
-		progressingCond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		progressingCond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, progressingCond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, progressingCond.Status)
+		assert.Equal(t, metav1.ConditionUnknown, progressingCond.Status)
 		assert.NotEqual(t, "UnsupportedTransition", progressingCond.Reason)
 		assert.Equal(t, "AsExpected", progressingCond.Reason)
 	})
@@ -348,6 +377,7 @@ func TestSync(t *testing.T) {
 		// Progressing=True but the infra status update never completed,
 		// so spec != status still holds.
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
+		infra = withTransitionInProgress(infra, time.Now().Add(-10*time.Minute))
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions())
 
 		if !assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext())) {
@@ -365,12 +395,12 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, statusErr) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, ctrl).Reason)
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 
 	t.Run("reconciliation blocked when one of several transition validators fails", func(t *testing.T) {
-		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
+		infra := withTransitionInProgress(newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType), time.Now().Add(-10*time.Minute))
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitionsWithValidators(
 			func() error { return nil },
 			func() error { return fmt.Errorf("machine config pool not ready") },
@@ -383,12 +413,12 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, ctrl).Reason)
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 
 	t.Run("reconciliation completes when all transition validators pass", func(t *testing.T) {
-		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
+		infra := withTransitionInProgress(newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType), time.Now().Add(-10*time.Minute))
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitionsWithValidators(
 			func() error { return nil },
 			func() error { return nil },
@@ -400,12 +430,12 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, metav1.ConditionTrue, completionCondition(t, ctrl).Status)
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
 	})
 
 	t.Run("reconciliation with no matching transition treats validators as satisfied", func(t *testing.T) {
-		infra := newTestInfra(configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
+		infra := withTransitionInProgress(newTestInfra(configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType), time.Now().Add(-10*time.Minute))
 		// noopTransitions only matches a HighlyAvailable spec, so it won't
 		// match this SingleReplica infra — there are no validators to run.
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions())
@@ -416,7 +446,7 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, metav1.ConditionTrue, completionCondition(t, ctrl).Status)
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
 	})
 }
@@ -531,6 +561,7 @@ func TestFindTransition(t *testing.T) {
 
 	t.Run("matching transition found", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
+
 		td, err := findTransition(infra, transitions)
 		if !assert.NoError(t, err) {
 			return
@@ -540,7 +571,9 @@ func TestFindTransition(t *testing.T) {
 
 	t.Run("no matching transition", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.AWSPlatformType)
+
 		td, err := findTransition(infra, transitions)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "platform=AWS")
 		assert.Nil(t, td)
@@ -557,7 +590,9 @@ func TestFindTransition(t *testing.T) {
 				InfrastructureTopology: configv1.SingleReplicaTopologyMode,
 			},
 		}
+
 		_, err := findTransition(infra, transitions)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "platform=Unknown")
 	})
@@ -566,35 +601,40 @@ func TestFindTransition(t *testing.T) {
 func TestValidatePreflight(t *testing.T) {
 	t.Run("all validators pass", func(t *testing.T) {
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
-				func() error { return nil },
+			PreflightValidators: []PreflightCheck{
+				{Type: "FirstCheck", Validate: func() error { return nil }},
+				{Type: "SecondCheck", Validate: func() error { return nil }},
 			},
 		}
+
 		assert.NoError(t, validatePreflight(nil, td))
 	})
 
 	t.Run("single validator fails", func(t *testing.T) {
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
-				func() error { return fmt.Errorf("node count too low") },
+			PreflightValidators: []PreflightCheck{
+				{Type: "FirstCheck", Validate: func() error { return nil }},
+				{Type: "SecondCheck", Validate: func() error { return fmt.Errorf("node count too low") }},
 			},
 		}
+
 		err := validatePreflight(nil, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 	})
 
 	t.Run("multiple failures are accumulated", func(t *testing.T) {
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return fmt.Errorf("node count too low") },
-				func() error { return nil },
-				func() error { return fmt.Errorf("etcd not ready") },
+			PreflightValidators: []PreflightCheck{
+				{Type: "FirstCheck", Validate: func() error { return fmt.Errorf("node count too low") }},
+				{Type: "SecondCheck", Validate: func() error { return nil }},
+				{Type: "ThirdCheck", Validate: func() error { return fmt.Errorf("etcd not ready") }},
 			},
 		}
+
 		err := validatePreflight(nil, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 		assert.Contains(t, err.Error(), "etcd not ready")
@@ -606,29 +646,33 @@ func TestValidatePreflight(t *testing.T) {
 	})
 
 	t.Run("global preflight checks run before transition validators", func(t *testing.T) {
-		globalChecks := []TransitionValidatorFunc{
-			func() error { return fmt.Errorf("global check failed") },
+		globalChecks := []PreflightCheck{
+			{Type: "GlobalCheck", Validate: func() error { return fmt.Errorf("global check failed") }},
 		}
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
+			PreflightValidators: []PreflightCheck{
+				{Type: "TransitionCheck", Validate: func() error { return nil }},
 			},
 		}
+
 		err := validatePreflight(globalChecks, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "global check failed")
 	})
 
 	t.Run("global and transition failures are accumulated", func(t *testing.T) {
-		globalChecks := []TransitionValidatorFunc{
-			func() error { return fmt.Errorf("operators unstable") },
+		globalChecks := []PreflightCheck{
+			{Type: "GlobalCheck", Validate: func() error { return fmt.Errorf("operators unstable") }},
 		}
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return fmt.Errorf("etcd not ready") },
+			PreflightValidators: []PreflightCheck{
+				{Type: "TransitionCheck", Validate: func() error { return fmt.Errorf("etcd not ready") }},
 			},
 		}
+
 		err := validatePreflight(globalChecks, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "operators unstable")
 		assert.Contains(t, err.Error(), "etcd not ready")
