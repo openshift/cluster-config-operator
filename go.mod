@@ -9,7 +9,7 @@ require (
 	github.com/onsi/ginkgo/v2 v2.27.2
 	github.com/onsi/gomega v1.38.2
 	github.com/openshift-eng/openshift-tests-extension v0.0.0-20250804142706-7b3ab438a292
-	github.com/openshift/api v0.0.0-20260715165912-72066cc9718b
+	github.com/openshift/api v0.0.0-20260929204754-616569fc417b
 	github.com/openshift/build-machinery-go v0.0.0-20260902143904-520f675c892b
 	github.com/openshift/client-go v0.0.0-20260715172546-dac61734e0ec
 	github.com/openshift/library-go v0.0.0-20260715174542-5ba1721f3f45
@@ -139,3 +139,6 @@ require (
 
 // This replace is required for we use the OCP fork of Ginkgo.
 replace github.com/onsi/ginkgo/v2 => github.com/openshift/onsi-ginkgo/v2 v2.6.1-0.20241205171354-8006f302fd12
+
+// Temporary pin to openshift/api#3029 until the topology transition status API merges.
+replace github.com/openshift/api => github.com/jeff-roche/api v0.0.0-20260929204754-616569fc417b
