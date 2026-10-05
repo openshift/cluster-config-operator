@@ -20,13 +20,15 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("passes when no operators exist", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateClusterOperatorsStable(fixture.coLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when operator progressing", func(t *testing.T) {
@@ -35,12 +37,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "kube-apiserver")
-		assert.Contains(t, err.Error(), "Progressing=True")
+		assert.Contains(t, reason, "kube-apiserver")
+		assert.Contains(t, reason, "Progressing=True")
 	})
 
 	t.Run("fails when operator degraded", func(t *testing.T) {
@@ -49,12 +52,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionTrue),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "kube-apiserver")
-		assert.Contains(t, err.Error(), "Degraded=True")
+		assert.Contains(t, reason, "kube-apiserver")
+		assert.Contains(t, reason, "Degraded=True")
 	})
 
 	t.Run("fails when operator unavailable", func(t *testing.T) {
@@ -63,12 +67,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionFalse, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "kube-apiserver")
-		assert.Contains(t, err.Error(), "Available=False")
+		assert.Contains(t, reason, "kube-apiserver")
+		assert.Contains(t, reason, "Available=False")
 	})
 
 	t.Run("fails when Available condition missing", func(t *testing.T) {
@@ -79,12 +84,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			},
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "new-operator")
-		assert.Contains(t, err.Error(), "Available condition missing")
+		assert.Contains(t, reason, "new-operator")
+		assert.Contains(t, reason, "Available condition missing")
 	})
 
 	t.Run("config-operator is excluded", func(t *testing.T) {
@@ -93,7 +99,8 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("config-operator", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionTrue),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when Progressing condition is Unknown", func(t *testing.T) {
@@ -102,12 +109,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionUnknown, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "kube-apiserver")
-		assert.Contains(t, err.Error(), "Progressing=Unknown")
+		assert.Contains(t, reason, "kube-apiserver")
+		assert.Contains(t, reason, "Progressing=Unknown")
 	})
 
 	t.Run("fails when Degraded condition is Unknown", func(t *testing.T) {
@@ -116,12 +124,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionUnknown),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "kube-apiserver")
-		assert.Contains(t, err.Error(), "Degraded=Unknown")
+		assert.Contains(t, reason, "kube-apiserver")
+		assert.Contains(t, reason, "Degraded=Unknown")
 	})
 
 	t.Run("fails when Progressing condition missing", func(t *testing.T) {
@@ -138,12 +147,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			},
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "incomplete-operator")
-		assert.Contains(t, err.Error(), "Progressing condition missing")
+		assert.Contains(t, reason, "incomplete-operator")
+		assert.Contains(t, reason, "Progressing condition missing")
 	})
 
 	t.Run("fails when Degraded condition missing", func(t *testing.T) {
@@ -160,12 +170,13 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			},
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "incomplete-operator")
-		assert.Contains(t, err.Error(), "Degraded condition missing")
+		assert.Contains(t, reason, "incomplete-operator")
+		assert.Contains(t, reason, "Degraded condition missing")
 	})
 
 	t.Run("multiple unstable operators listed", func(t *testing.T) {
@@ -175,13 +186,14 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "etcd")
-		assert.Contains(t, err.Error(), "kube-apiserver")
-		assert.NotContains(t, err.Error(), "monitoring")
+		assert.Contains(t, reason, "etcd")
+		assert.Contains(t, reason, "kube-apiserver")
+		assert.NotContains(t, reason, "monitoring")
 	})
 }
 
@@ -189,23 +201,25 @@ func TestValidateNoClusterVersionUpgradeInProgress(t *testing.T) {
 	t.Run("passes when no upgrade is in progress", func(t *testing.T) {
 		fixture := newTestFixture().withClusterVersion(false)
 		v := validateNoClusterVersionUpgradeInProgress(fixture.cvLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when an upgrade is in progress", func(t *testing.T) {
 		fixture := newTestFixture().withClusterVersion(true)
 		v := validateNoClusterVersionUpgradeInProgress(fixture.cvLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "cluster upgrade is in progress")
+		assert.Contains(t, reason, "cluster upgrade is in progress")
 	})
 
 	t.Run("fails when ClusterVersion is missing", func(t *testing.T) {
 		cvIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 		v := validateNoClusterVersionUpgradeInProgress(configlistersv1.NewClusterVersionLister(cvIndexer))
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}
@@ -221,7 +235,8 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("passes when more than required", func(t *testing.T) {
@@ -232,7 +247,8 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-3", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when insufficient nodes", func(t *testing.T) {
@@ -240,21 +256,23 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-0", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient control plane nodes: need 3, have 1")
+		assert.Contains(t, reason, "insufficient control plane nodes: need 3, have 1")
 	})
 
 	t.Run("fails when no nodes", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient control plane nodes: need 3, have 0")
+		assert.Contains(t, reason, "insufficient control plane nodes: need 3, have 0")
 	})
 
 	t.Run("counts legacy master-only nodes", func(t *testing.T) {
@@ -264,7 +282,8 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestLegacyMasterNode("master-2", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("counts mix of control-plane and legacy master nodes", func(t *testing.T) {
@@ -274,7 +293,8 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("does not count worker nodes", func(t *testing.T) {
@@ -284,11 +304,12 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-1"),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient control plane nodes: need 3, have 1")
+		assert.Contains(t, reason, "insufficient control plane nodes: need 3, have 1")
 	})
 }
 
@@ -296,7 +317,8 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 	t.Run("passes when count matches expected", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when workers present and expected zero", func(t *testing.T) {
@@ -304,11 +326,12 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-0"),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "unexpected infrastructure node count: expected 0 dedicated workers, have 1")
+		assert.Contains(t, reason, "unexpected infrastructure node count: expected 0 dedicated workers, have 1")
 	})
 
 	t.Run("fails when fewer than expected", func(t *testing.T) {
@@ -316,11 +339,12 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-0"),
 		)
 		v := validateExactInfrastructureNodeCount(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "unexpected infrastructure node count: expected 3 dedicated workers, have 1")
+		assert.Contains(t, reason, "unexpected infrastructure node count: expected 3 dedicated workers, have 1")
 	})
 
 	t.Run("does not count control plane nodes", func(t *testing.T) {
@@ -329,7 +353,8 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-1", false),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("does not count legacy master nodes as dedicated workers", func(t *testing.T) {
@@ -338,7 +363,8 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestLegacyMasterNode("master-1", false),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("dual-role nodes not counted as dedicated workers", func(t *testing.T) {
@@ -348,7 +374,8 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestDualRoleNode("master-2", false),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("dual-role nodes plus dedicated worker fails when expected zero", func(t *testing.T) {
@@ -359,11 +386,12 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-0"),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "unexpected infrastructure node count: expected 0 dedicated workers, have 1")
+		assert.Contains(t, reason, "unexpected infrastructure node count: expected 0 dedicated workers, have 1")
 	})
 }
 
@@ -375,7 +403,8 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when one unschedulable", func(t *testing.T) {
@@ -385,11 +414,12 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", true),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient schedulable control plane nodes: need 3, have 2")
+		assert.Contains(t, reason, "insufficient schedulable control plane nodes: need 3, have 2")
 	})
 
 	t.Run("fails when all unschedulable", func(t *testing.T) {
@@ -399,11 +429,12 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", true),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient schedulable control plane nodes: need 3, have 0")
+		assert.Contains(t, reason, "insufficient schedulable control plane nodes: need 3, have 0")
 	})
 
 	t.Run("counts legacy master nodes as schedulable", func(t *testing.T) {
@@ -413,7 +444,8 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 }
 
@@ -425,7 +457,8 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-2", false, readyNodeCondition()),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when one node not ready", func(t *testing.T) {
@@ -435,11 +468,12 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-2", false, notReadyNodeCondition()),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient ready control plane nodes: need 3, have 2")
+		assert.Contains(t, reason, "insufficient ready control plane nodes: need 3, have 2")
 	})
 
 	t.Run("fails when node has no Ready condition", func(t *testing.T) {
@@ -449,11 +483,12 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient ready control plane nodes: need 3, have 2")
+		assert.Contains(t, reason, "insufficient ready control plane nodes: need 3, have 2")
 	})
 
 	t.Run("counts ready legacy master nodes", func(t *testing.T) {
@@ -463,7 +498,8 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-2", false, readyNodeCondition()),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 }
 
@@ -475,7 +511,8 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestDualRoleNode("master-2", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when control plane nodes lack the worker label", func(t *testing.T) {
@@ -485,11 +522,12 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient control plane nodes marked as workers: need 3, have 1")
+		assert.Contains(t, reason, "insufficient control plane nodes marked as workers: need 3, have 1")
 	})
 
 	t.Run("fails when no control plane nodes have the worker label", func(t *testing.T) {
@@ -498,11 +536,12 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestLegacyMasterNode("master-1", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(2, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient control plane nodes marked as workers: need 2, have 0")
+		assert.Contains(t, reason, "insufficient control plane nodes marked as workers: need 2, have 0")
 	})
 
 	t.Run("counts dual-role legacy master nodes", func(t *testing.T) {
@@ -512,7 +551,8 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestDualRoleNode("master-2", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("passes when more than required", func(t *testing.T) {
@@ -523,7 +563,8 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestDualRoleNode("master-3", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("does not count dedicated worker nodes", func(t *testing.T) {
@@ -533,11 +574,12 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestWorkerNode("worker-1"),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient control plane nodes marked as workers: need 3, have 1")
+		assert.Contains(t, reason, "insufficient control plane nodes marked as workers: need 3, have 1")
 	})
 }
 
@@ -548,7 +590,8 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestWorkerNodeWithConditions("worker-1", readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("passes when enough dual-role nodes ready", func(t *testing.T) {
@@ -558,7 +601,8 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestDualRoleNodeWithConditions("master-2", false, readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when insufficient ready worker nodes", func(t *testing.T) {
@@ -567,11 +611,12 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestWorkerNodeWithConditions("worker-1", notReadyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient ready worker nodes: need 2, have 1")
+		assert.Contains(t, reason, "insufficient ready worker nodes: need 2, have 1")
 	})
 
 	t.Run("fails when no worker nodes exist", func(t *testing.T) {
@@ -579,11 +624,12 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-0", false, readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient ready worker nodes: need 2, have 0")
+		assert.Contains(t, reason, "insufficient ready worker nodes: need 2, have 0")
 	})
 
 	t.Run("does not count control-plane-only nodes", func(t *testing.T) {
@@ -593,11 +639,12 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestWorkerNodeWithConditions("worker-0", readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient ready worker nodes: need 2, have 1")
+		assert.Contains(t, reason, "insufficient ready worker nodes: need 2, have 1")
 	})
 }
 
@@ -605,23 +652,25 @@ func TestValidateEtcdNotProgressing(t *testing.T) {
 	t.Run("passes when not progressing", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdCR(true, false)
 		v := validateEtcdNotProgressing(fixture.etcdLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when progressing", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdCR(true, true)
 		v := validateEtcdNotProgressing(fixture.etcdLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "etcd is still progressing")
+		assert.Contains(t, reason, "etcd is still progressing")
 	})
 
 	t.Run("fails when etcd CR not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateEtcdNotProgressing(fixture.etcdLister)
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}
@@ -637,11 +686,12 @@ func TestValidateEtcdNotProgressing(t *testing.T) {
 			t.Fatalf("failed to add etcd CR to indexer: %v", err)
 		}
 		v := validateEtcdNotProgressing(fixture.etcdLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "condition is missing")
+		assert.Contains(t, reason, "condition is missing")
 	})
 }
 
@@ -649,29 +699,32 @@ func TestValidateEtcdVotingMembers(t *testing.T) {
 	t.Run("passes when enough voting members", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdEndpoints(3)
 		v := validateEtcdVotingMembers(3, fixture.cmLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("passes when more than required", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdEndpoints(5)
 		v := validateEtcdVotingMembers(3, fixture.cmLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when insufficient voting members", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdEndpoints(1)
 		v := validateEtcdVotingMembers(3, fixture.cmLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient etcd voting members: need 3, have 1")
+		assert.Contains(t, reason, "insufficient etcd voting members: need 3, have 1")
 	})
 
 	t.Run("fails when configmap not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateEtcdVotingMembers(3, fixture.cmLister)
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}
@@ -683,23 +736,25 @@ func TestValidateEtcdQuorum(t *testing.T) {
 	t.Run("passes when quorum available", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdCR(true, false)
 		v := validateEtcdQuorum(fixture.etcdLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when no quorum", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdCR(false, false)
 		v := validateEtcdQuorum(fixture.etcdLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "etcd does not have quorum")
+		assert.Contains(t, reason, "etcd does not have quorum")
 	})
 
 	t.Run("fails when etcd CR not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateEtcdQuorum(fixture.etcdLister)
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}
@@ -711,24 +766,27 @@ func TestValidateMachineConfigNotPresent(t *testing.T) {
 	t.Run("passes when MachineConfig absent", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateMachineConfigNotPresent("50-master-dnsmasq-configuration", fixture.mcLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when MachineConfig present", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("50-master-dnsmasq-configuration"))
 		v := validateMachineConfigNotPresent("50-master-dnsmasq-configuration", fixture.mcLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "50-master-dnsmasq-configuration")
-		assert.Contains(t, err.Error(), "still present")
+		assert.Contains(t, reason, "50-master-dnsmasq-configuration")
+		assert.Contains(t, reason, "still present")
 	})
 
 	t.Run("ignores unrelated MachineConfigs", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
 		v := validateMachineConfigNotPresent("50-master-dnsmasq-configuration", fixture.mcLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 }
 
@@ -736,24 +794,27 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 	t.Run("passes when a rendered master config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
 		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when no rendered master config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-worker-abc123"))
 		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "no rendered master MachineConfig found")
+		assert.Contains(t, reason, "no rendered master MachineConfig found")
 	})
 
 	t.Run("fails when no MachineConfigs exist", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
-		err := v()
-		assert.Error(t, err)
+		reason, err := v()
+		assert.NoError(t, err)
+		assert.NotEmpty(t, reason)
 	})
 
 	t.Run("fails when the only rendered master config predates the transition", func(t *testing.T) {
@@ -762,11 +823,12 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 			withTransitionStartTime(transitionStart).
 			withMachineConfigs(newTestMachineConfigAt("rendered-master-abc123", transitionStart.Add(-time.Hour)))
 		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "no rendered master MachineConfig found")
+		assert.Contains(t, reason, "no rendered master MachineConfig found")
 	})
 
 	t.Run("passes when a rendered master config postdates the transition", func(t *testing.T) {
@@ -778,7 +840,8 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 				newTestMachineConfigAt("rendered-master-def456", transitionStart.Add(time.Hour)),
 			)
 		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 }
 
@@ -786,24 +849,27 @@ func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 	t.Run("passes when a rendered worker config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-worker-abc123"))
 		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when no rendered worker config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
 		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "no rendered worker MachineConfig found")
+		assert.Contains(t, reason, "no rendered worker MachineConfig found")
 	})
 
 	t.Run("fails when no MachineConfigs exist", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
-		err := v()
-		assert.Error(t, err)
+		reason, err := v()
+		assert.NoError(t, err)
+		assert.NotEmpty(t, reason)
 	})
 
 	t.Run("fails when the only rendered worker config predates the transition", func(t *testing.T) {
@@ -812,11 +878,12 @@ func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 			withTransitionStartTime(transitionStart).
 			withMachineConfigs(newTestMachineConfigAt("rendered-worker-abc123", transitionStart.Add(-time.Hour)))
 		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "no rendered worker MachineConfig found")
+		assert.Contains(t, reason, "no rendered worker MachineConfig found")
 	})
 }
 
@@ -824,23 +891,25 @@ func TestValidateMachineConfigPoolReadyCount(t *testing.T) {
 	t.Run("passes when enough ready machines", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigPool(newTestMachineConfigPool("master", 3, 3))
 		v := validateMachineConfigPoolReadyCount(3, fixture.mcpLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when insufficient ready machines", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigPool(newTestMachineConfigPool("master", 3, 1))
 		v := validateMachineConfigPoolReadyCount(3, fixture.mcpLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient ready master machines: need 3, have 1")
+		assert.Contains(t, reason, "insufficient ready master machines: need 3, have 1")
 	})
 
 	t.Run("fails when master pool not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateMachineConfigPoolReadyCount(3, fixture.mcpLister)
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}
@@ -852,23 +921,25 @@ func TestValidateIngressRouterCount(t *testing.T) {
 	t.Run("passes when enough available replicas", func(t *testing.T) {
 		fixture := newTestFixture().withIngressController(newTestIngressController("default", 2))
 		v := validateIngressRouterCount(2, fixture.icLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when insufficient available replicas", func(t *testing.T) {
 		fixture := newTestFixture().withIngressController(newTestIngressController("default", 1))
 		v := validateIngressRouterCount(2, fixture.icLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient available router replicas: need 2, have 1")
+		assert.Contains(t, reason, "insufficient available router replicas: need 2, have 1")
 	})
 
 	t.Run("fails when default IngressController not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateIngressRouterCount(2, fixture.icLister)
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}
@@ -880,23 +951,25 @@ func TestValidateKubeAPIServerNodeCount(t *testing.T) {
 	t.Run("passes when enough node statuses", func(t *testing.T) {
 		fixture := newTestFixture().withKubeAPIServer(newTestKubeAPIServerCR(3))
 		v := validateKubeAPIServerNodeCount(3, fixture.kasLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when insufficient node statuses", func(t *testing.T) {
 		fixture := newTestFixture().withKubeAPIServer(newTestKubeAPIServerCR(1))
 		v := validateKubeAPIServerNodeCount(3, fixture.kasLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient kube-apiserver node statuses: need 3, have 1")
+		assert.Contains(t, reason, "insufficient kube-apiserver node statuses: need 3, have 1")
 	})
 
 	t.Run("fails when kubeapiservers/cluster not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateKubeAPIServerNodeCount(3, fixture.kasLister)
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}
@@ -908,23 +981,25 @@ func TestValidateOpenShiftAPIServerReadyReplicas(t *testing.T) {
 	t.Run("passes when enough ready replicas", func(t *testing.T) {
 		fixture := newTestFixture().withOpenShiftAPIServer(newTestOpenShiftAPIServerCR(3))
 		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasLister)
-		assert.NoError(t, v())
+		_, err := v()
+		assert.NoError(t, err)
 	})
 
 	t.Run("fails when insufficient ready replicas", func(t *testing.T) {
 		fixture := newTestFixture().withOpenShiftAPIServer(newTestOpenShiftAPIServerCR(1))
 		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasLister)
-		err := v()
-		if !assert.Error(t, err) {
+		reason, err := v()
+		assert.NoError(t, err)
+		if !assert.NotEmpty(t, reason) {
 			return
 		}
-		assert.Contains(t, err.Error(), "insufficient openshift-apiserver ready replicas: need 3, have 1")
+		assert.Contains(t, reason, "insufficient openshift-apiserver ready replicas: need 3, have 1")
 	})
 
 	t.Run("fails when openshiftapiservers/cluster not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasLister)
-		err := v()
+		_, err := v()
 		if !assert.Error(t, err) {
 			return
 		}

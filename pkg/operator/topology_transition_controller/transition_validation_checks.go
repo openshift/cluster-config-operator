@@ -35,20 +35,22 @@ func validatePreflight(globalChecks []TransitionValidatorFunc, transition *Trans
 	var errs []error
 	var invalidReasons []string
 	for _, v := range globalChecks {
-		if reason, err := v(); err != nil {
+		reason, err := v()
+		if len(reason) != 0 {
+			invalidReasons = append(invalidReasons, reason)
+		}
+		if err != nil {
 			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
-			if len(reason) != 0 {
-				invalidReasons = append(invalidReasons, reason)
-			}
 		}
 	}
 
 	for _, v := range transition.PreflightValidators {
-		if reason, err := v(); err != nil {
+		reason, err := v()
+		if len(reason) != 0 {
+			invalidReasons = append(invalidReasons, reason)
+		}
+		if err != nil {
 			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
-			if len(reason) != 0 {
-				invalidReasons = append(invalidReasons, reason)
-			}
 		}
 	}
 	return strings.Join(invalidReasons, ";"), errors.Join(errs...)
