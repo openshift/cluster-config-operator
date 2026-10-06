@@ -1,7 +1,6 @@
 package topology_transition_controller
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 	"time"
@@ -28,32 +27,39 @@ const (
 	clusterVersionName              = "version"
 )
 
+// validationMessage combines a validation reason and error into a single
+// human-readable message. When both are present, they are joined with "; ".
+// When only one is present, that value is returned.
+func validationMessage(reason string, err error) string {
+	if len(reason) > 0 && err != nil {
+		return strings.Join([]string{reason, fmt.Sprintf("%v", err)}, "; ")
+	} else if len(reason) > 0 {
+		return reason
+	} else if err != nil {
+		return fmt.Sprintf("%v", err)
+	}
+	return ""
+}
+
 // validatePreflight runs global preflight checks followed by
 // transition-specific validators. Returns a combined string message containing all
-// validation failures. May also return an error if validations failed to execute.
+// validation failures. Returns immediately on the first execution error, but includes
+// any reason string from that validator.
 func validatePreflight(globalChecks []TransitionValidatorFunc, transition *TransitionDescriptor) (string, error) {
-	var errs []error
 	var invalidReasons []string
-	for _, v := range globalChecks {
-		reason, err := v()
-		if len(reason) != 0 {
-			invalidReasons = append(invalidReasons, reason)
-		}
-		if err != nil {
-			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
-		}
-	}
 
-	for _, v := range transition.PreflightValidators {
+	allValidators := append(globalChecks, transition.PreflightValidators...)
+	for _, v := range allValidators {
 		reason, err := v()
 		if len(reason) != 0 {
 			invalidReasons = append(invalidReasons, reason)
 		}
 		if err != nil {
-			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
+			// Stop on first error
+			return strings.Join(invalidReasons, "; "), fmt.Errorf("preflight check could not run: %w", err)
 		}
 	}
-	return strings.Join(invalidReasons, ";"), errors.Join(errs...)
+	return strings.Join(invalidReasons, ";"), nil
 }
 
 // isControlPlaneNode returns true if the node carries either the modern

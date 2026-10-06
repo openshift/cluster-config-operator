@@ -88,7 +88,10 @@ func TestSync(t *testing.T) {
 				PreflightValidators: []TransitionValidatorFunc{
 					func() (string, error) { return "insufficient control plane nodes", nil },
 				},
-				UpdateStatus: func(infra *configv1.Infrastructure) {},
+				UpdateStatus: func(infra *configv1.Infrastructure) {
+					infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
+					infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+				},
 			},
 		}
 
@@ -97,6 +100,7 @@ func TestSync(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
+		// Check operator conditions
 		_, status, _, err := ctrl.operatorClient.GetOperatorState()
 		if !assert.NoError(t, err) {
 			return
@@ -109,6 +113,85 @@ func TestSync(t *testing.T) {
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "insufficient control plane nodes")
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+
+		// Check Infrastructure status
+		updated, getErr := ctrl.infraClient.Get(context.TODO(), "cluster", metav1.GetOptions{})
+		if !assert.NoError(t, getErr) {
+			return
+		}
+		if !assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+			return
+		}
+		if !assert.NotNil(t, updated.Status.TopologyTransitionStatus.Conditions) {
+			return
+		}
+		evaluatedCond := findCondition(updated.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
+		if !assert.NotNil(t, evaluatedCond) {
+			return
+		}
+		assert.Equal(t, metav1.ConditionTrue, evaluatedCond.Status)
+		assert.Equal(t, "PreflightCheckFailed", evaluatedCond.Reason)
+		assert.Contains(t, evaluatedCond.Message, "insufficient control plane nodes")
+
+		// Check Transitions array
+		if !assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1) {
+			return
+		}
+		transition := updated.Status.TopologyTransitionStatus.Transitions[0]
+		assert.Equal(t, configv1.SingleReplicaTopologyMode, transition.Source.ControlPlaneTopology)
+		assert.Equal(t, configv1.SingleReplicaTopologyMode, transition.Source.InfrastructureTopology)
+		assert.Equal(t, configv1.HighlyAvailableTopologyMode, transition.Target.ControlPlaneTopology)
+		assert.Equal(t, configv1.HighlyAvailableTopologyMode, transition.Target.InfrastructureTopology)
+		if !assert.Len(t, transition.Evaluations, 1) {
+			return
+		}
+		availableCond := transition.Evaluations[0]
+		assert.Equal(t, configv1.TopologyTransitionAvailableConditionType, availableCond.Type)
+		assert.Equal(t, metav1.ConditionFalse, availableCond.Status)
+		assert.Equal(t, "PreflightCheckFailed", availableCond.Reason)
+		assert.Contains(t, availableCond.Message, "insufficient control plane nodes")
+	})
+
+	t.Run("preflight execution error sets Evaluated=False", func(t *testing.T) {
+		executionErrorTransitions := []TransitionDescriptor{
+			{
+				From: configv1.InfrastructureStatus{
+					ControlPlaneTopology:   configv1.SingleReplicaTopologyMode,
+					InfrastructureTopology: configv1.SingleReplicaTopologyMode,
+					PlatformStatus:         &configv1.PlatformStatus{Type: configv1.NonePlatformType},
+				},
+				To: configv1.InfrastructureSpec{
+					ControlPlaneTopology: configv1.HighlyAvailableTopologyMode,
+				},
+				PreflightValidators: []TransitionValidatorFunc{
+					func() (string, error) { return "", fmt.Errorf("failed to list nodes") },
+				},
+				UpdateStatus: func(infra *configv1.Infrastructure) {
+					infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
+					infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+				},
+			},
+		}
+
+		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
+		ctrl := newTestController(infra, nil, nil, executionErrorTransitions)
+
+		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
+
+		// Check Infrastructure status - Evaluated should be False when execution fails
+		updated, getErr := ctrl.infraClient.Get(context.TODO(), "cluster", metav1.GetOptions{})
+		if !assert.NoError(t, getErr) {
+			return
+		}
+		if !assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+			return
+		}
+		evaluatedCond := findCondition(updated.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
+		if !assert.NotNil(t, evaluatedCond) {
+			return
+		}
+		assert.Equal(t, metav1.ConditionFalse, evaluatedCond.Status, "Evaluated should be False when validation fails to execute")
+		assert.Equal(t, "PreflightCheckFailed", evaluatedCond.Reason)
 	})
 
 	t.Run("reconciliation blocked during soak period", func(t *testing.T) {
@@ -587,7 +670,23 @@ func TestValidatePreflight(t *testing.T) {
 		assert.Contains(t, err.Error(), "node count too low")
 	})
 
-	t.Run("multiple failures are accumulated", func(t *testing.T) {
+	t.Run("accumulates reasons but stops on first error", func(t *testing.T) {
+		td := &TransitionDescriptor{
+			PreflightValidators: []TransitionValidatorFunc{
+				func() (string, error) { return "insufficient nodes", nil },
+				func() (string, error) { return "etcd not ready", nil },
+				func() (string, error) { return "", fmt.Errorf("api error") },
+			},
+		}
+		reasons, err := validatePreflight(nil, td)
+		assert.Error(t, err)
+		assert.Contains(t, err.Error(), "api error")
+		// Reasons from validators before the error should be accumulated
+		assert.Contains(t, reasons, "insufficient nodes")
+		assert.Contains(t, reasons, "etcd not ready")
+	})
+
+	t.Run("stops on first error", func(t *testing.T) {
 		td := &TransitionDescriptor{
 			PreflightValidators: []TransitionValidatorFunc{
 				func() (string, error) { return "", fmt.Errorf("node count too low") },
@@ -598,7 +697,8 @@ func TestValidatePreflight(t *testing.T) {
 		_, err := validatePreflight(nil, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
-		assert.Contains(t, err.Error(), "etcd not ready")
+		// Should stop on first error, not accumulate all
+		assert.NotContains(t, err.Error(), "etcd not ready")
 	})
 
 	t.Run("nil validators", func(t *testing.T) {
@@ -621,7 +721,7 @@ func TestValidatePreflight(t *testing.T) {
 		assert.Contains(t, err.Error(), "global check failed")
 	})
 
-	t.Run("global and transition failures are accumulated", func(t *testing.T) {
+	t.Run("stops on first error from global checks", func(t *testing.T) {
 		globalChecks := []TransitionValidatorFunc{
 			func() (string, error) { return "", fmt.Errorf("operators unstable") },
 		}
@@ -633,6 +733,17 @@ func TestValidatePreflight(t *testing.T) {
 		_, err := validatePreflight(globalChecks, td)
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "operators unstable")
-		assert.Contains(t, err.Error(), "etcd not ready")
+		// Should stop on first error, not run transition validators
+		assert.NotContains(t, err.Error(), "etcd not ready")
 	})
+}
+
+// findCondition searches for a condition with the given type in the slice.
+func findCondition(conditions []metav1.Condition, conditionType string) *metav1.Condition {
+	for i := range conditions {
+		if conditions[i].Type == conditionType {
+			return &conditions[i]
+		}
+	}
+	return nil
 }

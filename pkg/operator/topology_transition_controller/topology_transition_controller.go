@@ -3,7 +3,6 @@ package topology_transition_controller
 import (
 	"context"
 	"fmt"
-	"strings"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -16,7 +15,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1helpers "k8s.io/apimachinery/pkg/api/meta"
+	apimeta "k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -185,7 +184,22 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 				Message: "No topology transition in progress",
 			}),
 		)
-		return updateErr
+		if updateErr != nil {
+			return updateErr
+		}
+
+		// Clear stale topology transition status on the Infrastructure object.
+		current, getErr := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
+		if getErr != nil {
+			return getErr
+		}
+		if current.Status.TopologyTransitionStatus != nil && len(current.Status.TopologyTransitionStatus.Conditions) > 0 {
+			current.Status.TopologyTransitionStatus = nil
+			if _, err := c.infraClient.UpdateStatus(ctx, current, metav1.UpdateOptions{}); err != nil {
+				return fmt.Errorf("failed to update infrastructure object: %w", err)
+			}
+		}
+		return nil
 	}
 
 	return nil
@@ -220,10 +234,7 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 
 	if invalidMessage, err := validatePreflight(c.preflightChecks, transition); len(invalidMessage) > 0 || err != nil {
 		// Set conditions to block the transition
-		condMessage := invalidMessage
-		if err != nil {
-			condMessage = err.Error()
-		}
+		condMessage := validationMessage(invalidMessage, err)
 		if _, _, condErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 				Type:    transitionProgressingCondition,
@@ -241,21 +252,64 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 			return condErr
 		}
 
-		// Update the cluster infra object with the evaluation result
-		infraUpdatePayload := infra.DeepCopy()
-		if infraUpdatePayload.Status.TopologyTransitionStatus == nil {
-			infraUpdatePayload.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{}
+		// Update the cluster infra object with the evaluation result.
+		// Do a fresh Get to avoid stale resourceVersion causing 409 Conflict.
+		current, getErr := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
+		if getErr != nil {
+			return getErr
 		}
-		metav1helpers.SetStatusCondition(&infraUpdatePayload.Status.TopologyTransitionStatus.Conditions,
+		if current.Status.TopologyTransitionStatus == nil {
+			current.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{}
+		}
+
+		// Set parent-level condition indicating whether evaluation succeeded.
+		evaluationStatus := metav1.ConditionTrue
+		if err != nil {
+			// Evaluation failed to run
+			evaluationStatus = metav1.ConditionFalse
+		}
+		changed := apimeta.SetStatusCondition(&current.Status.TopologyTransitionStatus.Conditions,
 			metav1.Condition{
 				Type:    configv1.TopologyTransitionsEvaluatedConditionType,
-				Status:  metav1.ConditionTrue,
+				Status:  evaluationStatus,
 				Reason:  reasonTopologyTransitionPreflightCheckFailed,
 				Message: invalidMessage,
 			},
 		)
-		if _, err := c.infraClient.UpdateStatus(ctx, infraUpdatePayload, metav1.UpdateOptions{}); err != nil {
-			return fmt.Errorf("Failed to update infrastructure object: %w", err)
+
+		// Build a TopologyTransition entry with Source/Target and availability condition.
+		transitionAvailable := metav1.ConditionFalse
+		if len(invalidMessage) == 0 && err == nil {
+			transitionAvailable = metav1.ConditionTrue
+		}
+		// Infer target infrastructure topology by applying UpdateStatus to a copy.
+		infraCopy := infra.DeepCopy()
+		transition.UpdateStatus(infraCopy)
+		topologyTransition := configv1.TopologyTransition{
+			Source: configv1.TopologyState{
+				ControlPlaneTopology:   transition.From.ControlPlaneTopology,
+				InfrastructureTopology: transition.From.InfrastructureTopology,
+			},
+			Target: configv1.TopologyState{
+				ControlPlaneTopology:   infraCopy.Status.ControlPlaneTopology,
+				InfrastructureTopology: infraCopy.Status.InfrastructureTopology,
+			},
+			Evaluations: []metav1.Condition{
+				{
+					Type:    configv1.TopologyTransitionAvailableConditionType,
+					Status:  transitionAvailable,
+					Reason:  reasonTopologyTransitionPreflightCheckFailed,
+					Message: condMessage,
+				},
+			},
+		}
+		current.Status.TopologyTransitionStatus.Transitions = []configv1.TopologyTransition{topologyTransition}
+		changed = true
+
+		if changed {
+			if _, updateErr := c.infraClient.UpdateStatus(ctx, current, metav1.UpdateOptions{}); updateErr != nil {
+				return fmt.Errorf("failed to update infrastructure object: %w", updateErr)
+			}
 		}
 
 		syncCtx.Recorder().Warningf("TopologyTransitionPreflightFailed", "%s", condMessage)
@@ -348,14 +402,7 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 
 	for i, v := range transitionValidators {
 		if invalidReason, err := v(); len(invalidReason) > 0 || err != nil {
-			var combinedMessage string
-			if len(invalidReason) > 0 && err != nil {
-				combinedMessage = strings.Join([]string{invalidReason, fmt.Sprintf("%v", err)}, "; ")
-			} else if len(invalidReason) > 0 {
-				combinedMessage = invalidReason
-			} else {
-				combinedMessage = fmt.Sprintf("%v", err)
-			}
+			combinedMessage := validationMessage(invalidReason, err)
 			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied: %v", i+1, len(transitionValidators), combinedMessage)
 			return nil
 		}
@@ -375,5 +422,30 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 			Message: "Topology transition reconciliation complete",
 		}),
 	)
-	return updateErr
+	if updateErr != nil {
+		return updateErr
+	}
+
+	// Clear the topology transition status on the Infrastructure object.
+	current, getErr := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
+	if getErr != nil {
+		return getErr
+	}
+	if current.Status.TopologyTransitionStatus == nil {
+		current.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{}
+	}
+	changed := apimeta.SetStatusCondition(&current.Status.TopologyTransitionStatus.Conditions,
+		metav1.Condition{
+			Type:    configv1.TopologyTransitionCompletedConditionType,
+			Status:  metav1.ConditionTrue,
+			Reason:  reasonTopologyTransitionComplete,
+			Message: "Topology transition reconciliation complete",
+		},
+	)
+	if changed {
+		if _, err := c.infraClient.UpdateStatus(ctx, current, metav1.UpdateOptions{}); err != nil {
+			return fmt.Errorf("failed to update infrastructure object: %w", err)
+		}
+	}
+	return nil
 }
