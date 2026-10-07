@@ -13,7 +13,7 @@ package v1
 // AUTO-GENERATED FUNCTIONS START HERE
 var map_AdditionalArtifactStore = map[string]string{
 	"":     "AdditionalArtifactStore defines an additional read-only storage location for Open Container Initiative (OCI) artifacts.",
-	"path": "path specifies the absolute location of the additional artifact store. The path must exist on the node before configuration is applied. When an artifact is requested, artifacts found at this location will be used instead of retrieving from the registry. The path is required and must be between 1 and 256 characters long, begin with a forward slash, and only contain the characters a-z, A-Z, 0-9, '/', '.', '_', and '-'. Consecutive forward slashes are not permitted.",
+	"path": "path specifies the absolute location of the additional artifact store. The path must exist on the node before configuration is applied. When an artifact is requested, artifacts found at this location will be used instead of retrieving from the registry. The path is required and must be between 1 and 256 characters long, begin with a forward slash, and only contain the characters a-z, A-Z, 0-9, '/', '.', '_', and '-'. Consecutive forward slashes and '..' directory traversal components are not permitted.",
 }
 
 func (AdditionalArtifactStore) SwaggerDoc() map[string]string {
@@ -22,7 +22,7 @@ func (AdditionalArtifactStore) SwaggerDoc() map[string]string {
 
 var map_AdditionalImageStore = map[string]string{
 	"":     "AdditionalImageStore defines an additional read-only storage location for Open Container Initiative (OCI) images.",
-	"path": "path specifies the absolute location of the additional image store. The path must exist on the node before configuration is applied. When a container image is requested, images found at this location will be used instead of retrieving from the registry. The path is required and must be between 1 and 256 characters long, begin with a forward slash, and only contain the characters a-z, A-Z, 0-9, '/', '.', '_', and '-'. Consecutive forward slashes are not permitted.",
+	"path": "path specifies the absolute location of the additional image store. The path must exist on the node before configuration is applied. When a container image is requested, images found at this location will be used instead of retrieving from the registry. The path is required and must be between 1 and 256 characters long, begin with a forward slash, and only contain the characters a-z, A-Z, 0-9, '/', '.', '_', and '-'. Consecutive forward slashes and '..' directory traversal components are not permitted.",
 }
 
 func (AdditionalImageStore) SwaggerDoc() map[string]string {
@@ -31,7 +31,7 @@ func (AdditionalImageStore) SwaggerDoc() map[string]string {
 
 var map_AdditionalLayerStore = map[string]string{
 	"":     "AdditionalLayerStore defines a read-only storage location for Open Container Initiative (OCI) container image layers.",
-	"path": "path specifies the absolute location of the additional layer store. The path must exist on the node before configuration is applied. When a container image is requested, layers found at this location will be used instead of retrieving from the registry. The path is required and must be between 1 and 256 characters long, begin with a forward slash, and only contain the characters a-z, A-Z, 0-9, '/', '.', '_', and '-'. Consecutive forward slashes are not permitted.",
+	"path": "path specifies the absolute location of the additional layer store. The path must exist on the node before configuration is applied. When a container image is requested, layers found at this location will be used instead of retrieving from the registry. The path is required and must be between 1 and 256 characters long, begin with a forward slash, and only contain the characters a-z, A-Z, 0-9, '/', '.', '_', and '-'. Consecutive forward slashes and '..' directory traversal components are not permitted.",
 }
 
 func (AdditionalLayerStore) SwaggerDoc() map[string]string {
@@ -101,15 +101,16 @@ func (ContainerRuntimeConfigStatus) SwaggerDoc() map[string]string {
 }
 
 var map_ContainerRuntimeConfiguration = map[string]string{
-	"":                         "ContainerRuntimeConfiguration defines the tuneables of the container runtime",
-	"pidsLimit":                "pidsLimit specifies the maximum number of processes allowed in a container",
-	"logLevel":                 "logLevel specifies the verbosity of the logs based on the level it is set to. Options are fatal, panic, error, warn, info, and debug.",
-	"logSizeMax":               "logSizeMax specifies the Maximum size allowed for the container log file. Negative numbers indicate that no size limit is imposed. If it is positive, it must be >= 8192 to match/exceed conmon's read buffer.",
-	"overlaySize":              "overlaySize specifies the maximum size of a container image. This flag can be used to set quota on the size of container images. (default: 10GB)",
-	"defaultRuntime":           "defaultRuntime is the name of the OCI runtime to be used as the default for containers. Allowed values are `runc` and `crun`. When set to `runc`, OpenShift will use runc to execute the container When set to `crun`, OpenShift will use crun to execute the container When omitted, this means no opinion and the platform is left to choose a reasonable default, which is subject to change over time. Currently, the default is `crun`.",
-	"additionalLayerStores":    "additionalLayerStores configures additional read-only container image layer store locations for Open Container Initiative (OCI) images.\n\nLayers are checked in order: additional stores first, then the default location. Stores are read-only. Maximum of 5 stores allowed. Each path must be unique.\n\nWhen omitted, only the default layer location is used. When specified, at least one store must be provided.",
-	"additionalImageStores":    "additionalImageStores configures additional read-only container image store locations for Open Container Initiative (OCI) images.\n\nImages are checked in order: additional stores first, then the default location. Stores are read-only. Maximum of 10 stores allowed. Each path must be unique.\n\nWhen omitted, only the default image location is used. When specified, at least one store must be provided.",
-	"additionalArtifactStores": "additionalArtifactStores configures additional read-only artifact storage locations for Open Container Initiative (OCI) artifacts.\n\nArtifacts are checked in order: additional stores first, then the default location (/var/lib/containers/storage/artifacts). Stores are read-only. Maximum of 10 stores allowed. Each path must be unique.\n\nWhen omitted, only the default artifact location is used. When specified, at least one store must be provided.",
+	"":                            "ContainerRuntimeConfiguration defines the tuneables of the container runtime",
+	"pidsLimit":                   "pidsLimit specifies the maximum number of processes allowed in a container",
+	"logLevel":                    "logLevel specifies the verbosity of the logs based on the level it is set to. Options are fatal, panic, error, warn, info, and debug.",
+	"logSizeMax":                  "logSizeMax specifies the Maximum size allowed for the container log file. Negative numbers indicate that no size limit is imposed. If it is positive, it must be >= 8192 to match/exceed conmon's read buffer.",
+	"overlaySize":                 "overlaySize specifies the maximum size of a container image. This flag can be used to set quota on the size of container images. (default: 10GB)",
+	"defaultRuntime":              "defaultRuntime is the name of the OCI runtime to be used as the default for containers. Allowed values are `runc` and `crun`. When set to `runc`, OpenShift will use runc to execute the container When set to `crun`, OpenShift will use crun to execute the container When omitted, this means no opinion and the platform is left to choose a reasonable default, which is subject to change over time. Currently, the default is `crun`.",
+	"additionalLayerStores":       "additionalLayerStores configures additional read-only container image layer store locations for Open Container Initiative (OCI) images.\n\nLayers are checked in order: additional stores first, then the default location. Stores are read-only. Maximum of 5 stores allowed. Each path must be unique.\n\nWhen omitted, only the default layer location is used. When specified, at least one store must be provided.",
+	"additionalImageStores":       "additionalImageStores configures additional read-only container image store locations for Open Container Initiative (OCI) images.\n\nImages are checked in order: additional stores first, then the default location. Stores are read-only. Maximum of 10 stores allowed. Each path must be unique.\n\nWhen omitted, only the default image location is used. When specified, at least one store must be provided.",
+	"additionalArtifactStores":    "additionalArtifactStores configures additional read-only artifact storage locations for Open Container Initiative (OCI) artifacts.\n\nArtifacts are checked in order: additional stores first, then the default location (/var/lib/containers/storage/artifacts). Stores are read-only. Maximum of 10 stores allowed. Each path must be unique.\n\nWhen omitted, only the default artifact location is used. When specified, at least one store must be provided.",
+	"containerGomaxprocsBehavior": "containerGomaxprocsBehavior controls whether CRI-O automatically injects the GOMAXPROCS environment variable into containers based on their CPU resource requests. Valid values are \"Autosize\" and \"Disabled\". When set to \"Autosize\", CRI-O will automatically set GOMAXPROCS proportional to the container's CPU request, calculated as max(ceil(cpu_request_in_cores * 2), 1). This helps Go applications optimize their runtime parallelism based on the allocated CPU resources rather than the total node capacity. When set to \"Disabled\", GOMAXPROCS injection is disabled and containers will use Go's default GOMAXPROCS behavior. When omitted, this means no opinion and the platform is left to choose a reasonable default, which is subject to change over time. The current default is \"Disabled\".\n\nContainers can override the injected GOMAXPROCS value by: - Setting GOMAXPROCS in the container image Dockerfile (ENV GOMAXPROCS=...) - Setting GOMAXPROCS in the pod spec (env or envFrom) - Calling runtime.GOMAXPROCS() programmatically in Go code - Adding the skip-gomaxprocs.crio.io annotation to the pod",
 }
 
 func (ContainerRuntimeConfiguration) SwaggerDoc() map[string]string {
@@ -162,6 +163,7 @@ var map_ControllerConfigSpec = map[string]string{
 	"pullSecret":                     "pullSecret is the default pull secret that needs to be installed on all machines.",
 	"internalRegistryPullSecret":     "internalRegistryPullSecret is the pull secret for the internal registry, used by rpm-ostree to pull images from the internal registry if present",
 	"images":                         "images is map of images that are used by the controller to render templates under ./templates/",
+	"bgpVIPPeersJSON":                "bgpVIPPeersJSON carries the BGP VIP peer configuration (the config.json payload of the bgp-vip-config ConfigMap) for rendering the frr-k8s static pod peer file on control plane nodes. Only set when BGP-based VIP management is enabled. When omitted, BGP-based VIP management is not configured and no frr-k8s peer file is rendered. When set, the value must be between 1 and 65536 characters long.",
 	"baseOSContainerImage":           "baseOSContainerImage is the new-format container image for operating system updates.",
 	"baseOSExtensionsContainerImage": "baseOSExtensionsContainerImage is the matching extensions container for the new-format container",
 	"osImageURL":                     "osImageURL is the old-format container image that contains the OS update payload.",
@@ -250,6 +252,7 @@ var map_KubeletConfigSpec = map[string]string{
 	"machineConfigPoolSelector": "machineConfigPoolSelector selects which pools the KubeletConfig should apply to. When omitted or set to an empty selector {}, no pools are selected, which is equivalent to not matching any MachineConfigPool.",
 	"kubeletConfig":             "kubeletConfig contains upstream Kubernetes kubelet configuration fields. Values are validated by the kubelet itself. Invalid values may render nodes unusable. Refer to OpenShift documentation for the Kubernetes version corresponding to your OpenShift release to find valid kubelet configuration options.",
 	"tlsSecurityProfile":        "tlsSecurityProfile configures TLS settings for the kubelet. When omitted, the TLS configuration defaults to the value from apiservers.config.openshift.io/cluster. When specified, the type field can be set to either \"Old\", \"Intermediate\", \"Modern\", \"Custom\" or omitted for backward compatibility.",
+	"systemGomaxprocsBehavior":  "systemGomaxprocsBehavior controls whether the kubelet-auto-node-size service automatically configures GOMAXPROCS for kubelet and CRI-O system services based on the system reserved CPU allocation. Valid values are \"Autosize\" and \"Disabled\". When set to \"Autosize\", the GOMAXPROCS environment variable for kubelet and CRI-O is set to max(ceil(system_reserved_cpu), 1). This optimizes the runtime parallelism of these Go-based system services based on their CPU allocation rather than total node capacity. When set to \"Disabled\", automatic GOMAXPROCS configuration is disabled and the system services use Go's default GOMAXPROCS behavior. When omitted, this means no opinion and the platform is left to choose a reasonable default, which is subject to change over time. The current default is \"Disabled\".",
 }
 
 func (KubeletConfigSpec) SwaggerDoc() map[string]string {
@@ -408,6 +411,65 @@ var map_PoolSynchronizerStatus = map[string]string{
 
 func (PoolSynchronizerStatus) SwaggerDoc() map[string]string {
 	return map_PoolSynchronizerStatus
+}
+
+var map_InternalReleaseImage = map[string]string{
+	"":         "InternalReleaseImage is used to keep track and manage a set of release bundles (OCP and OLM operators images) that are stored into the control planes nodes. This is a singleton resource with 'cluster' as the only valid name.\n\nCompatibility level 1: Stable within a major release for a minimum of 12 months or 3 minor releases (whichever is longer).",
+	"metadata": "metadata is the standard object's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+	"spec":     "spec describes the configuration of this internal release image.",
+	"status":   "status describes the last observed state of this internal release image.",
+}
+
+func (InternalReleaseImage) SwaggerDoc() map[string]string {
+	return map_InternalReleaseImage
+}
+
+var map_InternalReleaseImageBundleStatus = map[string]string{
+	"":           "InternalReleaseImageBundleStatus describes the observed state of a single release bundle managed by the cluster.",
+	"conditions": "conditions represent the observations of an internal release image current state. Valid types are: Mounted, Installing, Available, Removing and Degraded.\n\nIf Mounted is true, that means that a valid ISO has been discovered and mounted on one of the cluster nodes. If Installing is true, that means that a new release bundle is currently being copied on one (or more) cluster nodes, and not yet completed. If Available is true, it means that the release has been previously installed on all the cluster nodes, and it can be used. If Removing is true, it means that a release deletion is in progress on one (or more) cluster nodes, and not yet completed. If Degraded is true, that means something has gone wrong (possibly on one or more cluster nodes).\n\nIn general, after installing a new release bundle, it is required to wait for the Conditions \"Available\" to become \"True\" (and all the other conditions to be equal to \"False\") before being able to pull its content. When present, conditions must contain at least 1 entry and must not exceed 5 entries.",
+	"name":       "name indicates the desired release bundle identifier. This field is required and must be between 1 and 64 characters long. The expected name format is ocp-release-bundle-<version>-<arch|stream>.",
+	"image":      "image is an OCP release image referenced by digest. The format of the image pull spec is: host[:port][/namespace]/name@sha256:<digest>, where the digest must be 64 characters long, and consist only of lowercase hexadecimal characters, a-f and 0-9. The length of the whole spec must be between 1 to 447 characters. The field is optional, and it will be provided after a release has been successfully installed.",
+}
+
+func (InternalReleaseImageBundleStatus) SwaggerDoc() map[string]string {
+	return map_InternalReleaseImageBundleStatus
+}
+
+var map_InternalReleaseImageList = map[string]string{
+	"":         "InternalReleaseImageList is a list of InternalReleaseImage resources\n\nCompatibility level 1: Stable within a major release for a minimum of 12 months or 3 minor releases (whichever is longer).",
+	"metadata": "metadata is the standard list's metadata. More info: https://git.k8s.io/community/contributors/devel/sig-architecture/api-conventions.md#metadata",
+}
+
+func (InternalReleaseImageList) SwaggerDoc() map[string]string {
+	return map_InternalReleaseImageList
+}
+
+var map_InternalReleaseImageRef = map[string]string{
+	"":     "InternalReleaseImageRef is used to provide a simple reference for a release bundle. Currently it contains only the name field.",
+	"name": "name indicates the desired release bundle identifier. This field is required and must be between 1 and 64 characters long. The expected name format is ocp-release-bundle-<version>-<arch|stream>.",
+}
+
+func (InternalReleaseImageRef) SwaggerDoc() map[string]string {
+	return map_InternalReleaseImageRef
+}
+
+var map_InternalReleaseImageSpec = map[string]string{
+	"":         "InternalReleaseImageSpec defines the desired state of a InternalReleaseImage.",
+	"releases": "releases is a list of release bundle identifiers that the user wants to add/remove to/from the control plane nodes. Entries must be unique, keyed on the name field. releases must contain at least one entry and must not exceed 16 entries.",
+}
+
+func (InternalReleaseImageSpec) SwaggerDoc() map[string]string {
+	return map_InternalReleaseImageSpec
+}
+
+var map_InternalReleaseImageStatus = map[string]string{
+	"":           "InternalReleaseImageStatus describes the current state of a InternalReleaseImage.",
+	"conditions": "conditions represent the observations of the InternalReleaseImage controller current state. Valid types are: Degraded. If Degraded is true, that means something has gone wrong in the controller. The conditions list must contain at most 5 entries.",
+	"releases":   "releases is a list of the release bundles currently owned and managed by the cluster. A release bundle content could be safely pulled only when its Conditions field contains at least an Available entry set to \"True\" and Degraded to \"False\". Entries must be unique, keyed on the name field. releases must contain at least one entry and must not exceed 32 entries.",
+}
+
+func (InternalReleaseImageStatus) SwaggerDoc() map[string]string {
+	return map_InternalReleaseImageStatus
 }
 
 var map_IrreconcilableChangeDiff = map[string]string{
