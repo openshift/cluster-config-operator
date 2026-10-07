@@ -4,14 +4,28 @@ import (
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
+	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
-	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
 
 // TransitionValidatorFunc defines validation functions for transitions
 type TransitionValidatorFunc func() error
+
+// PreflightCheck pairs a validator with its stable evaluation condition type.
+type PreflightCheck struct {
+	Type     string
+	Validate TransitionValidatorFunc
+}
+
+// clusterStateReadError distinguishes unreadable state from a known unmet prerequisite.
+type clusterStateReadError struct {
+	err error
+}
+
+func (e *clusterStateReadError) Error() string { return e.err.Error() }
+func (e *clusterStateReadError) Unwrap() error { return e.err }
 
 // TransitionDescriptor describes a topology transition with its source/target
 // state, per-transition validation functions, and a status updater. From
@@ -21,7 +35,7 @@ type TransitionValidatorFunc func() error
 type TransitionDescriptor struct {
 	From                 configv1.InfrastructureStatus
 	To                   configv1.InfrastructureSpec
-	PreflightValidators  []TransitionValidatorFunc
+	PreflightValidators  []PreflightCheck
 	UpdateStatus         func(infra *configv1.Infrastructure)
 	TransitionValidators []TransitionValidatorFunc
 }
@@ -35,7 +49,7 @@ type TransitionValidationListers struct {
 	IngressControllerLister  operatorv1listers.IngressControllerNamespaceLister
 	MachineConfigLister      machineconfigv1listers.MachineConfigLister
 	MachineConfigPoolLister  machineconfigv1listers.MachineConfigPoolLister
-	OperatorClient           v1helpers.OperatorClient
+	InfraClient              configv1client.InfrastructureInterface
 }
 
 // buildSupportedTransitions returns the set of permitted topology transitions
@@ -52,15 +66,15 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 			To: configv1.InfrastructureSpec{
 				ControlPlaneTopology: configv1.HighlyAvailableTopologyMode,
 			},
-			PreflightValidators: []TransitionValidatorFunc{
-				validateControlPlaneNodeCount(3, listers.NodeLister),
-				validateExactInfrastructureNodeCount(0, listers.NodeLister),
-				validateControlPlaneNodesSchedulable(3, listers.NodeLister),
-				validateControlPlaneNodesReady(3, listers.NodeLister),
-				validateControlPlaneNodesAreWorkers(3, listers.NodeLister),
-				validateEtcdQuorum(listers.EtcdLister),
-				validateEtcdNotProgressing(listers.EtcdLister),
-				validateEtcdVotingMembers(3, listers.EtcdConfigMapLister),
+			PreflightValidators: []PreflightCheck{
+				{Type: "ControlPlaneNodeCountSatisfied", Validate: validateControlPlaneNodeCount(3, listers.NodeLister)},
+				{Type: "InfrastructureNodeCountSatisfied", Validate: validateExactInfrastructureNodeCount(0, listers.NodeLister)},
+				{Type: "ControlPlaneNodesSchedulable", Validate: validateControlPlaneNodesSchedulable(3, listers.NodeLister)},
+				{Type: "ControlPlaneNodesReady", Validate: validateControlPlaneNodesReady(3, listers.NodeLister)},
+				{Type: "ControlPlaneNodesAreWorkers", Validate: validateControlPlaneNodesAreWorkers(3, listers.NodeLister)},
+				{Type: "EtcdQuorumAvailable", Validate: validateEtcdQuorum(listers.EtcdLister)},
+				{Type: "EtcdNotProgressing", Validate: validateEtcdNotProgressing(listers.EtcdLister)},
+				{Type: "EtcdVotingMembersSatisfied", Validate: validateEtcdVotingMembers(3, listers.EtcdConfigMapLister)},
 			},
 			UpdateStatus: func(infra *configv1.Infrastructure) {
 				infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
@@ -74,8 +88,8 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 				validateEtcdNotProgressing(listers.EtcdLister),
 				validateEtcdVotingMembers(3, listers.EtcdConfigMapLister),
 				validateMachineConfigNotPresent("50-master-dnsmasq-configuration", listers.MachineConfigLister),
-				validateNewRenderedMasterConfig(listers.MachineConfigLister, listers.OperatorClient),
-				validateNewRenderedWorkerConfig(listers.MachineConfigLister, listers.OperatorClient),
+				validateNewRenderedMasterConfig(listers.MachineConfigLister, listers.InfraClient),
+				validateNewRenderedWorkerConfig(listers.MachineConfigLister, listers.InfraClient),
 				validateMachineConfigPoolReadyCount(3, listers.MachineConfigPoolLister),
 				validateIngressRouterCount(2, listers.IngressControllerLister),
 				validateKubeAPIServerNodeCount(3, listers.KubeAPIServerLister),
@@ -91,14 +105,17 @@ func matchesStatus(descriptor, actual configv1.InfrastructureStatus) bool {
 	if descriptor.ControlPlaneTopology != "" && descriptor.ControlPlaneTopology != actual.ControlPlaneTopology {
 		return false
 	}
+
 	if descriptor.InfrastructureTopology != "" && descriptor.InfrastructureTopology != actual.InfrastructureTopology {
 		return false
 	}
+
 	if descriptor.PlatformStatus != nil && descriptor.PlatformStatus.Type != "" {
 		if actual.PlatformStatus == nil || descriptor.PlatformStatus.Type != actual.PlatformStatus.Type {
 			return false
 		}
 	}
+
 	return true
 }
 
@@ -120,10 +137,12 @@ func findTransition(infra *configv1.Infrastructure, transitions []TransitionDesc
 			return transition, nil
 		}
 	}
+
 	platformType := configv1.PlatformType("Unknown")
 	if infra.Status.PlatformStatus != nil {
 		platformType = infra.Status.PlatformStatus.Type
 	}
+
 	return nil, fmt.Errorf("transition from {controlPlane=%s, infrastructure=%s, platform=%s} to {controlPlane=%s} is not supported",
 		infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology,
 		platformType, infra.Spec.ControlPlaneTopology)

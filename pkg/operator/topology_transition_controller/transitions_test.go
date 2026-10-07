@@ -7,7 +7,6 @@ import (
 	"github.com/stretchr/testify/assert"
 
 	configv1 "github.com/openshift/api/config/v1"
-	operatorv1 "github.com/openshift/api/operator/v1"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -53,7 +52,7 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.Equal(t, configv1.HighlyAvailableTopologyMode, updated.Status.InfrastructureTopology)
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
+		assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, ctrl).Reason)
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 
@@ -67,12 +66,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "insufficient control plane nodes: need 3, have 1")
 	})
@@ -92,12 +90,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "unexpected infrastructure node count: expected 0 dedicated workers, have 1")
 	})
@@ -139,12 +136,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "insufficient schedulable control plane nodes: need 3, have 2")
 	})
@@ -163,12 +159,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "insufficient ready control plane nodes: need 3, have 2")
 	})
@@ -187,12 +182,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "etcd does not have quorum")
 	})
@@ -211,12 +205,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "etcd is still progressing")
 	})
@@ -235,12 +228,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "insufficient etcd voting members: need 3, have 1")
 	})
@@ -263,12 +255,11 @@ func TestSNOToHACompact(t *testing.T) {
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "PreflightCheckFailed", cond.Reason)
 		assert.Contains(t, cond.Message, "kube-apiserver")
 		assert.Contains(t, cond.Message, "Progressing=True")
@@ -282,16 +273,16 @@ func TestSNOToHACompact(t *testing.T) {
 			configv1.SingleReplicaTopologyMode,
 			configv1.AWSPlatformType,
 		)
+
 		ctrl := fixture.newController(infra, nil)
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
-		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
+		cond := completionCondition(t, ctrl)
 		if !assert.NotNil(t, cond) {
 			return
 		}
-		assert.Equal(t, operatorv1.ConditionFalse, cond.Status)
+		assert.Equal(t, metav1.ConditionFalse, cond.Status)
 		assert.Equal(t, "UnsupportedTransition", cond.Reason)
 		assert.Contains(t, cond.Message, "is not supported")
 		assert.Contains(t, cond.Message, "platform=AWS")

@@ -1,13 +1,16 @@
 package topology_transition_controller
 
 import (
+	"context"
 	"fmt"
+	"testing"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
 	machineconfigurationv1 "github.com/openshift/api/machineconfiguration/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
+	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
@@ -15,6 +18,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -39,12 +43,14 @@ func newTestInfra(specTopology, statusTopology, statusInfraTopology configv1.Top
 			InfrastructureTopology: statusInfraTopology,
 		},
 	}
+
 	if specTopology != "" {
 		infra.Spec.ControlPlaneTopology = specTopology
 	}
 	if platformType != "" {
 		infra.Status.PlatformStatus = &configv1.PlatformStatus{Type: platformType}
 	}
+
 	return infra
 }
 
@@ -200,6 +206,7 @@ func newTestEtcdEndpointsConfigMap(memberCount int) *corev1.ConfigMap {
 	for i := 0; i < memberCount; i++ {
 		data[fmt.Sprintf("member-%d", i)] = fmt.Sprintf("10.0.0.%d", i+1)
 	}
+
 	return &corev1.ConfigMap{
 		ObjectMeta: metav1.ObjectMeta{
 			Name:      etcdEndpointsConfigMapName,
@@ -224,6 +231,7 @@ func newTestEtcdCR(membersAvailable bool, progressing bool) *operatorv1.Etcd {
 			Reason: "NoQuorum",
 		})
 	}
+
 	if progressing {
 		conditions = append(conditions, operatorv1.OperatorCondition{
 			Type:    etcdMembersProgressingCondition,
@@ -238,6 +246,7 @@ func newTestEtcdCR(membersAvailable bool, progressing bool) *operatorv1.Etcd {
 			Reason: "AsExpected",
 		})
 	}
+
 	return &operatorv1.Etcd{
 		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
 		Status: operatorv1.EtcdStatus{
@@ -287,27 +296,20 @@ func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []Tran
 // checkClusterReconciliation behavior in tests independent of the infra's
 // current spec topology.
 func reconciliationTestTransitions(validators ...TransitionValidatorFunc) []TransitionDescriptor {
-	return []TransitionDescriptor{
-		{
-			To:                   configv1.InfrastructureSpec{},
-			TransitionValidators: validators,
-		},
-	}
+	transitions := noopTransitionsWithValidators(validators...)
+	transitions[0].To = configv1.InfrastructureSpec{}
+	transitions[0].UpdateStatus = func(*configv1.Infrastructure) {}
+
+	return transitions
 }
 
-// transitionProgressingConditions returns the standard in-progress operator conditions.
+// transitionInProgressConditions returns the operator's upgrade block.
 func transitionInProgressConditions() []operatorv1.OperatorCondition {
 	return transitionInProgressConditionsAt(time.Now().Add(-10 * time.Minute))
 }
 
 func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorCondition {
 	return []operatorv1.OperatorCondition{
-		{
-			Type:               transitionProgressingCondition,
-			Status:             operatorv1.ConditionTrue,
-			Reason:             reasonTopologyTransitionInProgress,
-			LastTransitionTime: metav1.NewTime(t),
-		},
 		{
 			Type:               upgradeableCondition,
 			Status:             operatorv1.ConditionFalse,
@@ -317,11 +319,32 @@ func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorConditio
 	}
 }
 
-func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor) *TopologyTransitionController {
+func withTransitionInProgress(infra *configv1.Infrastructure, since time.Time) *configv1.Infrastructure {
+	infra = infra.DeepCopy()
+	infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
+		Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse,
+		Reason: reasonTopologyTransitionInProgress, LastTransitionTime: metav1.NewTime(since),
+	}}}
+	return infra
+}
+
+func completionCondition(t *testing.T, c *TopologyTransitionController) *metav1.Condition {
+	t.Helper()
+
+	status := currentInfra(t, c).Status.TopologyTransitionStatus
+	condition := meta.FindStatusCondition(status.Conditions, configv1.TopologyTransitionCompletedConditionType)
+	if condition == nil {
+		t.Fatal("missing topology transition completion condition")
+	}
+
+	return condition
+}
+
+func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []PreflightCheck, transitions []TransitionDescriptor) *TopologyTransitionController {
 	return newTestControllerWithClock(infra, conditions, preflightChecks, transitions, clocktesting.NewFakePassiveClock(time.Now()))
 }
 
-func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor, clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
+func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []PreflightCheck, transitions []TransitionDescriptor, clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
 	fakeConfigClient := configfakeclient.NewSimpleClientset(infra)
 
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -350,6 +373,7 @@ func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []ope
 
 // testFixture provides fake listers for building real transition descriptors.
 type testFixture struct {
+	infraClient configv1client.InfrastructureInterface
 	nodeIndexer cache.Indexer
 	cmIndexer   cache.Indexer
 	etcdIndexer cache.Indexer
@@ -371,8 +395,6 @@ type testFixture struct {
 	icLister   operatorv1listers.IngressControllerNamespaceLister
 	kasLister  operatorv1listers.KubeAPIServerLister
 	oasLister  operatorv1listers.OpenShiftAPIServerLister
-
-	operatorClient v1helpers.OperatorClient
 }
 
 // ingressOperatorNamespace is the namespace IngressControllers live in.
@@ -397,6 +419,7 @@ func newTestFixture() *testFixture {
 	}
 
 	return &testFixture{
+		infraClient: configfakeclient.NewSimpleClientset(snoInfra("")).ConfigV1().Infrastructures(),
 		nodeIndexer: nodeIndexer,
 		cmIndexer:   cmIndexer,
 		etcdIndexer: etcdIndexer,
@@ -418,23 +441,20 @@ func newTestFixture() *testFixture {
 		icLister:   operatorv1listers.NewIngressControllerLister(icIndexer).IngressControllers(ingressOperatorNamespace),
 		kasLister:  operatorv1listers.NewKubeAPIServerLister(kasIndexer),
 		oasLister:  operatorv1listers.NewOpenShiftAPIServerLister(oasIndexer),
-
-		operatorClient: v1helpers.NewFakeOperatorClient(&operatorv1.OperatorSpec{}, &operatorv1.OperatorStatus{}, nil),
 	}
 }
 
-// withTransitionStartTime sets the transitionProgressingCondition's
-// LastTransitionTime, simulating a transition that began at t.
+// withTransitionStartTime sets the API completion condition's start time.
 func (f *testFixture) withTransitionStartTime(t time.Time) *testFixture {
-	f.operatorClient = v1helpers.NewFakeOperatorClient(&operatorv1.OperatorSpec{}, &operatorv1.OperatorStatus{
-		Conditions: []operatorv1.OperatorCondition{
-			{
-				Type:               transitionProgressingCondition,
-				Status:             operatorv1.ConditionTrue,
-				LastTransitionTime: metav1.NewTime(t),
-			},
-		},
-	}, nil)
+	infra, err := f.infraClient.Get(context.Background(), "cluster", metav1.GetOptions{})
+	if err != nil {
+		panic(err)
+	}
+
+	if _, err := f.infraClient.UpdateStatus(context.Background(), withTransitionInProgress(infra, t), metav1.UpdateOptions{}); err != nil {
+		panic(err)
+	}
+
 	return f
 }
 
@@ -526,19 +546,20 @@ func (f *testFixture) buildTransitions() []TransitionDescriptor {
 		IngressControllerLister:  f.icLister,
 		MachineConfigLister:      f.mcLister,
 		MachineConfigPoolLister:  f.mcpLister,
-		OperatorClient:           f.operatorClient,
+		InfraClient:              f.infraClient,
 	})
 }
 
-func (f *testFixture) buildPreflightChecks() []TransitionValidatorFunc {
-	return []TransitionValidatorFunc{
-		validateClusterOperatorsStable(f.coLister),
-		validateNoClusterVersionUpgradeInProgress(f.cvLister),
-	}
+func (f *testFixture) buildPreflightChecks() []PreflightCheck {
+	return buildGlobalPreflightChecks(f.coLister, f.cvLister)
 }
 
 func (f *testFixture) newController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition) *TopologyTransitionController {
-	return newTestController(infra, conditions, f.buildPreflightChecks(), f.buildTransitions())
+	c := newTestController(infra, conditions, f.buildPreflightChecks(), nil)
+	f.infraClient = c.infraClient
+	c.transitions = f.buildTransitions()
+
+	return c
 }
 
 func newTestClusterOperator(name string, available, progressing, degraded configv1.ConditionStatus) *configv1.ClusterOperator {
@@ -559,6 +580,7 @@ func newTestClusterVersion(progressing bool) *configv1.ClusterVersion {
 	if progressing {
 		status = configv1.ConditionTrue
 	}
+
 	return &configv1.ClusterVersion{
 		ObjectMeta: metav1.ObjectMeta{Name: clusterVersionName},
 		Status: configv1.ClusterVersionStatus{
@@ -576,6 +598,7 @@ func newTestClusterOperatorLister(operators ...*configv1.ClusterOperator) config
 			panic(fmt.Sprintf("failed to add cluster operator to indexer: %v", err))
 		}
 	}
+
 	return configlistersv1.NewClusterOperatorLister(indexer)
 }
 

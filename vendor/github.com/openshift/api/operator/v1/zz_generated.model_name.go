@@ -66,8 +66,18 @@ func (in Authentication) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
+func (in AuthenticationConfigMapReference) OpenAPIModelName() string {
+	return "com.github.openshift.api.operator.v1.AuthenticationConfigMapReference"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in AuthenticationList) OpenAPIModelName() string {
 	return "com.github.openshift.api.operator.v1.AuthenticationList"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in AuthenticationProxyConfig) OpenAPIModelName() string {
+	return "com.github.openshift.api.operator.v1.AuthenticationProxyConfig"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
@@ -238,6 +248,11 @@ func (in ConsoleConfigRoute) OpenAPIModelName() string {
 // OpenAPIModelName returns the OpenAPI model name for this type.
 func (in ConsoleCustomization) OpenAPIModelName() string {
 	return "com.github.openshift.api.operator.v1.ConsoleCustomization"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in ConsoleIngress) OpenAPIModelName() string {
+	return "com.github.openshift.api.operator.v1.ConsoleIngress"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
@@ -491,11 +506,6 @@ func (in IPv6OVNKubernetesConfig) OpenAPIModelName() string {
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
-func (in Ingress) OpenAPIModelName() string {
-	return "com.github.openshift.api.operator.v1.Ingress"
-}
-
-// OpenAPIModelName returns the OpenAPI model name for this type.
 func (in IngressController) OpenAPIModelName() string {
 	return "com.github.openshift.api.operator.v1.IngressController"
 }
@@ -613,6 +623,16 @@ func (in KMSEncryptionStatus) OpenAPIModelName() string {
 // OpenAPIModelName returns the OpenAPI model name for this type.
 func (in KMSPluginHealthReport) OpenAPIModelName() string {
 	return "com.github.openshift.api.operator.v1.KMSPluginHealthReport"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KMSPreflightCheck) OpenAPIModelName() string {
+	return "com.github.openshift.api.operator.v1.KMSPreflightCheck"
+}
+
+// OpenAPIModelName returns the OpenAPI model name for this type.
+func (in KMSPreflightResult) OpenAPIModelName() string {
+	return "com.github.openshift.api.operator.v1.KMSPreflightResult"
 }
 
 // OpenAPIModelName returns the OpenAPI model name for this type.
