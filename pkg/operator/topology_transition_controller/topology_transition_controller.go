@@ -164,10 +164,7 @@ func (c *TopologyTransitionController) reconcileInfrastructure(ctx context.Conte
 		return err
 	}
 
-	var completion *metav1.Condition
-	if infra.Status.TopologyTransitionStatus != nil {
-		completion = meta.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
-	}
+	completion := meta.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
 
 	transitionInProgress := completion != nil && completion.Status == metav1.ConditionFalse && completion.Reason == reasonTopologyTransitionInProgress
 	controllerUpgradeable := v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition)
@@ -331,10 +328,7 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 	// fall back to the Upgradeable condition — both are set at transition
 	// start, so either provides a valid lower bound.
 	var soakAnchor time.Time
-	var completion *metav1.Condition
-	if infra.Status.TopologyTransitionStatus != nil {
-		completion = meta.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
-	}
+	completion := meta.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
 
 	if completion != nil && completion.Reason == reasonTopologyTransitionInProgress && !completion.LastTransitionTime.IsZero() {
 		soakAnchor = completion.LastTransitionTime.Time
@@ -350,14 +344,25 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		return nil
 	}
 
-	var transitionValidators []TransitionValidatorFunc
+	var transition *TransitionDescriptor
 	for i := range c.transitions {
 		if matchesSpec(c.transitions[i].To, infra.Spec) {
-			transitionValidators = c.transitions[i].TransitionValidators
+			transition = &c.transitions[i]
 			break
 		}
 	}
 
+	if transition == nil || transition.UpdateStatus == nil {
+		return nil
+	}
+
+	target := infra.DeepCopy()
+	transition.UpdateStatus(target)
+	if topologyState(infra.Status) != topologyState(target.Status) {
+		return nil
+	}
+
+	transitionValidators := transition.TransitionValidators
 	for i, v := range transitionValidators {
 		if err := v(); err != nil {
 			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied: %v", i+1, len(transitionValidators), err)

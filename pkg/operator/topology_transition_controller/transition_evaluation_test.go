@@ -299,7 +299,7 @@ func TestEvaluateTransitionsReadFailureAndRecovery(t *testing.T) {
 				if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
 					return
 				}
-				infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Transitions: transitions, Conditions: []metav1.Condition{condition}}
+				infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Transitions: transitions, Conditions: []metav1.Condition{condition}}
 			}
 			if tc.mixed {
 				fixture.withEtcdCR(false, true).withClusterVersion(true)

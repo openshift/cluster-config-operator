@@ -439,10 +439,6 @@ func transitionStartTime(infraClient configv1client.InfrastructureInterface) (ti
 		return time.Time{}, false, fmt.Errorf("failed to read Infrastructure transition start time: %w", err)
 	}
 
-	if infra.Status.TopologyTransitionStatus == nil {
-		return time.Time{}, false, nil
-	}
-
 	cond := meta.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
 	if cond == nil || cond.Reason != reasonTopologyTransitionInProgress || cond.LastTransitionTime.IsZero() {
 		return time.Time{}, false, nil

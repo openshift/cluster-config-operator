@@ -164,5 +164,5 @@ func validTopologyState(state configv1.TopologyState) bool {
 		return mode == configv1.SingleReplicaTopologyMode || mode == configv1.HighlyAvailableTopologyMode
 	}
 
-	return valid(state.ControlPlaneTopology) && valid(state.InfrastructureTopology)
+	return (valid(state.ControlPlaneTopology) || state.ControlPlaneTopology == configv1.HighlyAvailableArbiterMode) && valid(state.InfrastructureTopology)
 }

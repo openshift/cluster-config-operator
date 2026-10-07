@@ -298,6 +298,8 @@ func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []Tran
 func reconciliationTestTransitions(validators ...TransitionValidatorFunc) []TransitionDescriptor {
 	transitions := noopTransitionsWithValidators(validators...)
 	transitions[0].To = configv1.InfrastructureSpec{}
+	transitions[0].UpdateStatus = func(*configv1.Infrastructure) {}
+
 	return transitions
 }
 
@@ -319,7 +321,7 @@ func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorConditio
 
 func withTransitionInProgress(infra *configv1.Infrastructure, since time.Time) *configv1.Infrastructure {
 	infra = infra.DeepCopy()
-	infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
+	infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
 		Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse,
 		Reason: reasonTopologyTransitionInProgress, LastTransitionTime: metav1.NewTime(since),
 	}}}
@@ -330,10 +332,6 @@ func completionCondition(t *testing.T, c *TopologyTransitionController) *metav1.
 	t.Helper()
 
 	status := currentInfra(t, c).Status.TopologyTransitionStatus
-	if status == nil {
-		t.Fatal("missing topology transition status")
-	}
-
 	condition := meta.FindStatusCondition(status.Conditions, configv1.TopologyTransitionCompletedConditionType)
 	if condition == nil {
 		t.Fatal("missing topology transition completion condition")

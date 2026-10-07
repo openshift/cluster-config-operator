@@ -45,13 +45,13 @@ func (c failingOperatorStatusClient) UpdateOperatorStatus(context.Context, strin
 func TestDiscoveryFailureDoesNotStopReconciliation(t *testing.T) {
 	for _, writeFails := range []bool{false, true} {
 		t.Run(map[bool]string{false: "read error", true: "read and write errors"}[writeFails], func(t *testing.T) {
-			c, client, _ := statusTestController(snoInfra(configv1.SingleReplicaTopologyMode))
+			c, client, _ := statusTestController(newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType))
 			c.operatorClient = v1helpers.NewFakeOperatorClient(&operatorv1.OperatorSpec{}, &operatorv1.OperatorStatus{Conditions: transitionInProgressConditionsAt(evaluationTime.Add(-time.Hour))}, nil)
 			readErr := errors.New("node API unavailable")
 			writeErr := errors.New("infrastructure status unavailable")
 			c.preflightChecks = []PreflightCheck{{Type: "NodesReadable", Validate: validateControlPlaneNodeCount(3, failingNodeLister{err: readErr})}}
 			checked := 0
-			c.transitions[0].To = configv1.InfrastructureSpec{}
+			c.transitions[0].From = configv1.InfrastructureStatus{}
 			c.transitions[0].TransitionValidators = []TransitionValidatorFunc{func() error { checked++; return nil }}
 			if writeFails {
 				client.PrependReactor("update", "infrastructures", func(clienttesting.Action) (bool, runtime.Object, error) {
@@ -62,13 +62,17 @@ func TestDiscoveryFailureDoesNotStopReconciliation(t *testing.T) {
 			evaluationErr := c.syncEvaluation(t.Context())
 			err := c.sync(t.Context(), newTestSyncContext())
 
-			assert.ErrorIs(t, evaluationErr, readErr)
+			if writeFails {
+				assert.ErrorIs(t, evaluationErr, writeErr)
+			} else {
+				assert.ErrorIs(t, evaluationErr, readErr)
+			}
 			assert.Equal(t, 1, checked, "discovery failure must not skip active checks")
 			if writeFails {
 				assert.ErrorIs(t, err, writeErr)
 			} else {
 				status := currentInfra(t, c).Status.TopologyTransitionStatus
-				if assert.NotNil(t, status) {
+				if assert.NotEmpty(t, status.Conditions) {
 					assert.Equal(t, metav1.ConditionFalse, status.Conditions[0].Status)
 					assert.Empty(t, status.Transitions)
 				}
@@ -146,7 +150,7 @@ func TestDiscoveryConditionTimesAndRecovery(t *testing.T) {
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 
 	first := currentInfra(t, c)
-	if !assert.NotNil(t, first.Status.TopologyTransitionStatus) {
+	if !assert.NotEmpty(t, first.Status.TopologyTransitionStatus.Conditions) {
 		return
 	}
 
@@ -160,7 +164,7 @@ func TestDiscoveryConditionTimesAndRecovery(t *testing.T) {
 		return
 	}
 	assert.Equal(t, metav1.ConditionTrue, blocked.Conditions[0].Status)
-	assert.Equal(t, metav1.NewTime(evaluationTime), blocked.Conditions[0].LastTransitionTime)
+	assert.Equal(t, metav1.NewTime(clk.Now()), blocked.Conditions[0].LastTransitionTime)
 	for _, condition := range blocked.Transitions[0].Evaluations {
 		if condition.Type == "StableCheck" {
 			assert.Equal(t, metav1.NewTime(evaluationTime), condition.LastTransitionTime)
@@ -184,7 +188,7 @@ func TestDiscoveryConditionTimesAndRecovery(t *testing.T) {
 		assert.Equal(t, blocked.Transitions[0].Evaluations[i].LastTransitionTime, condition.LastTransitionTime)
 		assert.Equal(t, int64(9), condition.ObservedGeneration)
 	}
-	assert.Equal(t, blocked.Conditions[0].LastTransitionTime, reasonOnly.Conditions[0].LastTransitionTime)
+	assert.Equal(t, metav1.NewTime(clk.Now()), reasonOnly.Conditions[0].LastTransitionTime)
 
 	clk.SetTime(evaluationTime.Add(3 * time.Minute))
 	readErr := errors.New("cannot read nodes")
@@ -200,7 +204,8 @@ func TestDiscoveryConditionTimesAndRecovery(t *testing.T) {
 	writes := statusWrites(client)
 	clk.SetTime(evaluationTime.Add(4 * time.Minute))
 	assert.ErrorIs(t, c.syncEvaluation(t.Context()), readErr)
-	assert.Equal(t, writes, statusWrites(client), "unchanged read failures must not churn")
+	assert.Equal(t, writes+2, statusWrites(client), "each refresh reports pending before its result")
+	failed.Conditions[0].LastTransitionTime = metav1.NewTime(clk.Now())
 	assert.Equal(t, failed, currentInfra(t, c).Status.TopologyTransitionStatus)
 
 	failure = &clusterStateReadError{err: errors.New("another read error")}
@@ -267,7 +272,7 @@ func TestDiscoveryConflictReevaluatesAndPreservesOtherFields(t *testing.T) {
 					newer.Generation = 5
 					newer.Spec.CloudConfig.Name = "concurrent-config"
 					newer.Status.APIServerURL = "https://concurrent.example"
-					newer.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{completion}}
+					newer.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{completion}}
 					if changeSource {
 						newer.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
 						newer.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
@@ -287,7 +292,7 @@ func TestDiscoveryConflictReevaluatesAndPreservesOtherFields(t *testing.T) {
 			assert.Equal(t, "https://concurrent.example", updated.Status.APIServerURL)
 
 			status := updated.Status.TopologyTransitionStatus
-			if !assert.NotNil(t, status) {
+			if !assert.NotEmpty(t, status.Conditions) {
 				return
 			}
 			assert.Equal(t, &completion, meta.FindStatusCondition(status.Conditions, completion.Type))
@@ -329,7 +334,7 @@ func TestDiscoveryReadFailurePreservesCompletionAndOtherFields(t *testing.T) {
 			}
 			serverURL := "https://original.example"
 			seed.Status.APIServerURL = serverURL
-			seed.Status.TopologyTransitionStatus.Conditions = append(seed.Status.TopologyTransitionStatus.Conditions, completion)
+			*meta.FindStatusCondition(seed.Status.TopologyTransitionStatus.Conditions, completion.Type) = completion
 			if _, err := c.infraClient.UpdateStatus(context.Background(), seed, metav1.UpdateOptions{}); !assert.NoError(t, err) {
 				return
 			}
@@ -363,10 +368,10 @@ func TestDiscoveryReadFailurePreservesCompletionAndOtherFields(t *testing.T) {
 			clk.SetTime(evaluationTime.Add(time.Minute))
 
 			assert.ErrorIs(t, c.syncEvaluation(t.Context()), readErr)
-			assert.Equal(t, map[bool]int{false: 1, true: 2}[conflict], attempts)
+			assert.Equal(t, map[bool]int{false: 2, true: 3}[conflict], attempts)
 
 			failed := currentInfra(t, c)
-			if !assert.NotNil(t, failed.Status.TopologyTransitionStatus) {
+			if !assert.NotEmpty(t, failed.Status.TopologyTransitionStatus.Conditions) {
 				return
 			}
 			assert.Empty(t, failed.Status.TopologyTransitionStatus.Transitions)
@@ -384,7 +389,7 @@ func TestDiscoveryReadFailurePreservesCompletionAndOtherFields(t *testing.T) {
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 
 			recovered := currentInfra(t, c)
-			if !assert.NotNil(t, recovered.Status.TopologyTransitionStatus) || !assert.Len(t, recovered.Status.TopologyTransitionStatus.Transitions, 1) {
+			if !assert.NotEmpty(t, recovered.Status.TopologyTransitionStatus.Conditions) || !assert.Len(t, recovered.Status.TopologyTransitionStatus.Transitions, 1) {
 				return
 			}
 			evaluated = meta.FindStatusCondition(recovered.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
@@ -539,7 +544,7 @@ func TestEvaluationPublishesDiscoveryIdle(t *testing.T) {
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 
 			first := currentInfra(t, c)
-			if !assert.NotNil(t, first.Status.TopologyTransitionStatus) {
+			if !assert.NotEmpty(t, first.Status.TopologyTransitionStatus.Conditions) {
 				return
 			}
 			assert.Len(t, first.Status.TopologyTransitionStatus.Transitions, 1)
@@ -554,13 +559,14 @@ func TestEvaluationPublishesDiscoveryIdle(t *testing.T) {
 			assert.Equal(t, before.Spec, first.Spec)
 			assert.Equal(t, before.Status.ControlPlaneTopology, first.Status.ControlPlaneTopology)
 			assert.Equal(t, before.Status.InfrastructureTopology, first.Status.InfrastructureTopology)
-			assert.Equal(t, 1, statusWrites(client))
+			assert.Equal(t, 2, statusWrites(client))
 
 			clk.SetTime(evaluationTime.Add(minReconciliationSoakTime))
 			// Fake clients do not update the lister cache. Evaluation must use fresh status.
 			assert.NoError(t, c.syncEvaluation(t.Context()))
+			first.Status.TopologyTransitionStatus.Conditions[0].LastTransitionTime = metav1.NewTime(clk.Now())
 			assert.Equal(t, first.Status, currentInfra(t, c).Status)
-			assert.Equal(t, 1, statusWrites(client))
+			assert.Equal(t, 4, statusWrites(client))
 		})
 	}
 }
@@ -587,7 +593,7 @@ func TestDiscoveryRealBlockersRemainStableAndRecover(t *testing.T) {
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 
 			first := currentInfra(t, c).Status.TopologyTransitionStatus
-			if !assert.NotNil(t, first) || !assert.Len(t, first.Transitions, 1) {
+			if !assert.NotEmpty(t, first.Conditions) || !assert.Len(t, first.Transitions, 1) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, first.Conditions[0].Status)
@@ -599,7 +605,8 @@ func TestDiscoveryRealBlockersRemainStableAndRecover(t *testing.T) {
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 
 			blocked := currentInfra(t, c).Status.TopologyTransitionStatus
-			assert.Equal(t, first.Conditions, blocked.Conditions)
+			assert.Equal(t, first.Conditions[1], blocked.Conditions[1])
+			assert.Equal(t, metav1.NewTime(clk.Now()), blocked.Conditions[0].LastTransitionTime)
 			if !assert.Len(t, blocked.Transitions, 1) {
 				return
 			}
@@ -620,10 +627,11 @@ func TestDiscoveryRealBlockersRemainStableAndRecover(t *testing.T) {
 			}
 
 			writes := statusWrites(client)
-			assert.Equal(t, 2, writes)
+			assert.Equal(t, 4, writes)
 			clk.SetTime(evaluationTime.Add(2 * time.Minute))
 			assert.NoError(t, c.syncEvaluation(t.Context()))
-			assert.Equal(t, writes, statusWrites(client), "unchanged blockers must not churn")
+			assert.Equal(t, writes+2, statusWrites(client), "each refresh reports pending before its result")
+			blocked.Conditions[0].LastTransitionTime = metav1.NewTime(clk.Now())
 			assert.Equal(t, blocked, currentInfra(t, c).Status.TopologyTransitionStatus)
 
 			fixture.withNodes(newTestDualRoleNodeWithConditions("master-2", false, readyNodeCondition())).
@@ -633,14 +641,15 @@ func TestDiscoveryRealBlockersRemainStableAndRecover(t *testing.T) {
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 
 			recovered := currentInfra(t, c).Status.TopologyTransitionStatus
-			assert.Equal(t, first.Conditions, recovered.Conditions)
+			assert.Equal(t, first.Conditions[1], recovered.Conditions[1])
+			assert.Equal(t, metav1.NewTime(clk.Now()), recovered.Conditions[0].LastTransitionTime)
 			if !assert.Len(t, recovered.Transitions, 1) {
 				return
 			}
 			assert.Len(t, recovered.Transitions[0].Evaluations, len(first.Transitions[0].Evaluations))
 			assert.NotNil(t, meta.FindStatusCondition(recovered.Transitions[0].Evaluations, tc.checkType))
 			assert.NotNil(t, meta.FindStatusCondition(recovered.Transitions[0].Evaluations, configv1.TopologyTransitionAvailableConditionType))
-			assert.Equal(t, writes+1, statusWrites(client))
+			assert.Equal(t, writes+4, statusWrites(client))
 			for _, condition := range recovered.Transitions[0].Evaluations {
 				assert.Equal(t, metav1.ConditionTrue, condition.Status)
 				if condition.Type == configv1.TopologyTransitionAvailableConditionType || condition.Type == tc.checkType {
@@ -663,7 +672,7 @@ func TestDiscoveryNewTransitionAndConditionGetNewTimes(t *testing.T) {
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 
 	status := currentInfra(t, c).Status.TopologyTransitionStatus
-	if !assert.NotNil(t, status) || !assert.Len(t, status.Transitions, 1) {
+	if !assert.NotEmpty(t, status.Conditions) || !assert.Len(t, status.Transitions, 1) {
 		return
 	}
 	assert.Equal(t, metav1.NewTime(evaluationTime), status.Transitions[0].Evaluations[0].LastTransitionTime)
@@ -677,7 +686,7 @@ func TestDiscoveryNewTransitionAndConditionGetNewTimes(t *testing.T) {
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 
 	status = currentInfra(t, c).Status.TopologyTransitionStatus
-	assert.Equal(t, metav1.NewTime(evaluationTime), status.Conditions[0].LastTransitionTime)
+	assert.Equal(t, metav1.NewTime(clk.Now()), status.Conditions[0].LastTransitionTime)
 	for _, condition := range status.Transitions[0].Evaluations {
 		assert.Equal(t, metav1.NewTime(clk.Now()), condition.LastTransitionTime, "same condition type under a new target is a new condition")
 	}
@@ -708,7 +717,7 @@ func TestDiscoveryNotFoundHandling(t *testing.T) {
 		assert.ErrorIs(t, c.syncEvaluation(t.Context()), readErr)
 
 		status := currentInfra(t, c).Status.TopologyTransitionStatus
-		if assert.NotNil(t, status) {
+		if assert.NotEmpty(t, status.Conditions) {
 			assert.Equal(t, metav1.ConditionFalse, status.Conditions[0].Status)
 			assert.Empty(t, status.Transitions)
 		}
@@ -735,7 +744,7 @@ func TestTransitionWriteInvalidatesDiscoveryAndRetries(t *testing.T) {
 					newer := object.(*configv1.Infrastructure).DeepCopy()
 					newer.ResourceVersion = "2"
 					newer.Status.APIServerInternalURL = "https://preserved.example"
-					newer.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{completion}}
+					newer.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{completion}}
 					assert.NoError(t, client.Tracker().Update(configv1.SchemeGroupVersion.WithResource("infrastructures"), newer, ""))
 					return true, nil, apierrors.NewConflict(schema.GroupResource{Resource: "infrastructures"}, "cluster", errors.New("transition conflict"))
 				}
@@ -750,7 +759,7 @@ func TestTransitionWriteInvalidatesDiscoveryAndRetries(t *testing.T) {
 			updated := currentInfra(t, c)
 			assert.Equal(t, configv1.HighlyAvailableTopologyMode, updated.Status.ControlPlaneTopology)
 			assert.Equal(t, configv1.HighlyAvailableTopologyMode, updated.Status.InfrastructureTopology)
-			if assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+			if assert.NotEmpty(t, updated.Status.TopologyTransitionStatus.Conditions) {
 				assert.Empty(t, updated.Status.TopologyTransitionStatus.Transitions)
 				condition := meta.FindStatusCondition(updated.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
 				if assert.NotNil(t, condition) {
@@ -782,7 +791,7 @@ func TestTransitionWriteInvalidatesDiscoveryAndRetries(t *testing.T) {
 func TestBlockedRequestStartsNewSoakPeriodWhenItBecomesAvailable(t *testing.T) {
 	infra := snoInfra(configv1.HighlyAvailableTopologyMode)
 	oldTime := metav1.NewTime(evaluationTime.Add(-time.Hour))
-	infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
+	infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
 		Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse,
 		Reason: "PreflightCheckFailed", LastTransitionTime: oldTime,
 	}}}
@@ -847,13 +856,13 @@ func TestDiscoveryWriteFailureRecovers(t *testing.T) {
 			clk.SetTime(evaluationTime.Add(2 * time.Minute))
 
 			assert.NoError(t, c.syncEvaluation(t.Context()))
-			assert.Equal(t, wantAttempts+1, attempts)
+			assert.Equal(t, wantAttempts+2, attempts)
 
 			recovered := currentInfra(t, c)
 			assert.Equal(t, baseline.Status.ControlPlaneTopology, recovered.Status.ControlPlaneTopology)
 			assert.Equal(t, baseline.Status.InfrastructureTopology, recovered.Status.InfrastructureTopology)
 			status := recovered.Status.TopologyTransitionStatus
-			if !assert.NotNil(t, status) || !assert.Len(t, status.Transitions, 1) {
+			if !assert.NotEmpty(t, status.Conditions) || !assert.Len(t, status.Transitions, 1) {
 				return
 			}
 			evaluated := meta.FindStatusCondition(status.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
@@ -915,13 +924,13 @@ func TestTransitionWriteFailureRecovers(t *testing.T) {
 			failed := currentInfra(t, c)
 			assert.Equal(t, infra.Status.ControlPlaneTopology, failed.Status.ControlPlaneTopology)
 			assert.Equal(t, infra.Status.InfrastructureTopology, failed.Status.InfrastructureTopology)
-			if !assert.NotNil(t, failed.Status.TopologyTransitionStatus) {
+			if !assert.NotEmpty(t, failed.Status.TopologyTransitionStatus.Conditions) {
 				return
 			}
 			assert.Len(t, failed.Status.TopologyTransitionStatus.Transitions, 1)
 			_, operatorStatus, _, err := c.operatorClient.GetOperatorState()
 			assert.NoError(t, err)
-			assert.Nil(t, meta.FindStatusCondition(failed.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType), "failed topology write must not report a started transition")
+			assert.Equal(t, metav1.ConditionUnknown, completionCondition(t, c).Status, "failed topology write must not report a started transition")
 			assert.True(t, v1helpers.IsOperatorConditionFalse(operatorStatus.Conditions, upgradeableCondition))
 
 			fault = false
@@ -933,7 +942,7 @@ func TestTransitionWriteFailureRecovers(t *testing.T) {
 			assert.Equal(t, configv1.HighlyAvailableTopologyMode, recovered.Status.InfrastructureTopology)
 			assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, c).Reason)
 			status := recovered.Status.TopologyTransitionStatus
-			if !assert.NotNil(t, status) {
+			if !assert.NotEmpty(t, status.Conditions) {
 				return
 			}
 			assert.Empty(t, status.Transitions, "do not advertise the old source after recovery applies the transition")
@@ -992,7 +1001,7 @@ func TestTransitionWriteGuardsConcurrentSpecAndSource(t *testing.T) {
 			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1, "skipped starts do not evaluate inline")
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 			updated = currentInfra(t, c)
-			if assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+			if assert.NotEmpty(t, updated.Status.TopologyTransitionStatus.Conditions) {
 				if change == "spec" {
 					assert.Equal(t, configv1.SingleReplicaTopologyMode, updated.Spec.ControlPlaneTopology)
 					assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)

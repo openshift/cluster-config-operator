@@ -41,7 +41,7 @@ func TestTransitionSyncDoesNotEvaluateIdleInfrastructure(t *testing.T) {
 	assert.NoError(t, c.sync(t.Context(), newTestSyncContext()))
 
 	assert.Zero(t, statusWrites(client))
-	assert.Nil(t, currentInfra(t, c).Status.TopologyTransitionStatus)
+	assert.Equal(t, configv1.TopologyTransitionStatus{}, currentInfra(t, c).Status.TopologyTransitionStatus)
 }
 
 func TestEvaluationStartsWithoutTransitionQueueWork(t *testing.T) {
@@ -54,7 +54,7 @@ func TestEvaluationStartsWithoutTransitionQueueWork(t *testing.T) {
 	}()
 	defer func() { cancel(); <-done }()
 
-	updated := receiveEvaluation(t, ctx, controller.writes)
+	updated := receiveCompletedEvaluation(t, ctx, controller.writes)
 	assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
 }
 
@@ -263,7 +263,7 @@ func TestEvaluationRetriesListenerFailureInsteadOfStoppingHook(t *testing.T) {
 	assert.Equal(t, 1, statusWrites(client))
 }
 
-func TestEvaluationDoesNotRewriteUnchangedReportOrDegradedCondition(t *testing.T) {
+func TestEvaluationRefreshesReportWithoutRewritingUnchangedDegradedCondition(t *testing.T) {
 	c, client, _ := statusTestController(snoInfra(""))
 	operatorClient := &lockedEvaluationOperatorClient{OperatorClient: c.operatorClient, applies: make(chan string, 10)}
 	c.operatorClient = operatorClient
@@ -273,19 +273,19 @@ func TestEvaluationDoesNotRewriteUnchangedReportOrDegradedCondition(t *testing.T
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 	assert.Equal(t, 1, len(operatorClient.applies))
-	assert.Equal(t, 1, statusWrites(client))
+	assert.Equal(t, 4, statusWrites(client))
 
 	failure = &clusterStateReadError{err: errors.New("node cache unavailable")}
 	assert.Error(t, c.syncEvaluation(t.Context()))
 	assert.Error(t, c.syncEvaluation(t.Context()))
 	assert.Equal(t, 2, len(operatorClient.applies), "stable failure must not rewrite the degraded condition")
-	assert.Equal(t, 2, statusWrites(client))
+	assert.Equal(t, 8, statusWrites(client))
 
 	failure = nil
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 	assert.Equal(t, 3, len(operatorClient.applies))
-	assert.Equal(t, 3, statusWrites(client))
+	assert.Equal(t, 12, statusWrites(client))
 }
 
 func TestEvaluationCoalescesBurstAndRunsPendingPassThenPeriodicRefresh(t *testing.T) {
@@ -314,12 +314,12 @@ func TestEvaluationCoalescesBurstAndRunsPendingPassThenPeriodicRefresh(t *testin
 	assert.Equal(t, int32(1), calls.Load(), "events must not start concurrent evaluations")
 	release <- struct{}{}
 	assert.Equal(t, int32(2), receiveEvaluation(t, ctx, started), "one pending follow-up must run")
-	assert.Equal(t, 1, statusWrites(client))
+	assert.Equal(t, 3, statusWrites(client))
 	receiveEvaluation(t, ctx, operatorClient.reads)
 	release <- struct{}{}
 	receiveEvaluation(t, ctx, operatorClient.reads)
 	assert.Equal(t, int32(2), calls.Load(), "a burst should yield only one follow-up")
-	assert.Equal(t, 1, statusWrites(client), "unchanged follow-up must not churn report writes")
+	assert.Equal(t, 4, statusWrites(client), "each pass reports pending before its result")
 
 	receiveEvaluation(t, ctx, clk.timers)
 	clk.Step(time.Minute)
@@ -389,7 +389,11 @@ func TestEvaluationRetriesReportAndDegradedWriteFailures(t *testing.T) {
 					assert.Equal(t, "current blocker", check.Message, "retry must evaluate current state")
 				}
 			}
-			assert.Equal(t, int32(2), checks.Load(), "failed writes must cause another evaluation")
+			wantChecks := int32(2)
+			if fault == "report write" {
+				wantChecks = 1 // pending write failed before checks could start
+			}
+			assert.Equal(t, wantChecks, checks.Load(), "retry must evaluate after pending status can be written")
 		})
 	}
 }
@@ -451,6 +455,7 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	revision.Store(2)
 	var conflicts atomic.Int32
 	resource := configv1.SchemeGroupVersion.WithResource("infrastructures")
+	reports := make(chan *configv1.Infrastructure, 1)
 	client.PrependReactor("update", "infrastructures", func(action clienttesting.Action) (bool, runtime.Object, error) {
 		update := action.(clienttesting.UpdateAction).GetObject().(*configv1.Infrastructure).DeepCopy()
 		live, err := client.Tracker().Get(resource, "", "cluster")
@@ -462,7 +467,18 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 			return true, nil, apierrors.NewConflict(schema.GroupResource{Resource: "infrastructures"}, "cluster", errors.New("source changed"))
 		}
 		update.ResourceVersion = strconv.Itoa(int(revision.Add(1)))
-		return true, update, client.Tracker().Update(resource, update, "")
+		if err := client.Tracker().Update(resource, update, ""); err != nil {
+			return true, nil, err
+		}
+
+		if meta.IsStatusConditionTrue(update.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType) {
+			select {
+			case reports <- update.DeepCopy():
+			default:
+			}
+		}
+
+		return true, update, nil
 	})
 	ctx, _, _, _, clk := startTestEvaluation(t, c)
 	t.Cleanup(func() { close(release) })
@@ -483,12 +499,18 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	assert.Equal(t, int32(1), targetChecks.Load(), "both main syncs completed while evaluation was paused")
 
 	release <- struct{}{}
-	receiveEvaluation(t, ctx, c.operatorClient.(*lockedEvaluationOperatorClient).applies)
-	stored := currentInfra(t, c)
+	// Check the finished report; the next periodic pass can already be pending.
+	stored := receiveCompletedEvaluation(t, ctx, reports)
+
 	assert.Equal(t, int32(1), conflicts.Load())
 	assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.ControlPlaneTopology)
-	assert.Equal(t, metav1.ConditionTrue, completionCondition(t, c).Status, "conflicted evaluation must preserve completion")
-	assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
+	completion := meta.FindStatusCondition(stored.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+	if assert.NotNil(t, completion) {
+		assert.Equal(t, metav1.ConditionTrue, completion.Status, "conflicted evaluation must preserve completion")
+	}
+	if assert.Len(t, stored.Status.TopologyTransitionStatus.Transitions, 1) {
+		assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
+	}
 }
 
 func TestEvaluationRelevantEventsEnqueueAddUpdateAndDelete(t *testing.T) {
@@ -560,7 +582,7 @@ func TestEvaluationWaitsForAllCachesAndDoesNotStartWhenStoppedEarly(t *testing.T
 			}
 
 			close(gate)
-			updated := receiveEvaluation(t, ctx, controller.writes)
+			updated := receiveCompletedEvaluation(t, ctx, controller.writes)
 			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
 			cancel()
 			receiveEvaluation(t, t.Context(), done)
@@ -644,7 +666,7 @@ func TestInitialLiveInfrastructureReadFailurePreventsNewStart(t *testing.T) {
 func TestEvaluationEventsIgnoreReportsAndUnrelatedStatus(t *testing.T) {
 	infra := snoInfra("")
 	report := infra.DeepCopy()
-	report.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
+	report.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
 		Type: configv1.TopologyTransitionsEvaluatedConditionType, Status: metav1.ConditionTrue,
 	}}}
 	node := newTestControlPlaneNodeWithConditions("master", false, readyNodeCondition())
@@ -709,4 +731,15 @@ func TestTopologyWriteInvalidatesEvaluationWithoutRunningTargetChecks(t *testing
 		assert.Equal(t, "EvaluationPending", evaluated.Reason)
 	}
 	assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, c).Reason)
+}
+
+func receiveCompletedEvaluation(t *testing.T, ctx context.Context, reports <-chan *configv1.Infrastructure) *configv1.Infrastructure {
+	t.Helper()
+
+	for {
+		report := receiveEvaluation(t, ctx, reports)
+		if !meta.IsStatusConditionPresentAndEqual(report.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType, metav1.ConditionUnknown) {
+			return report
+		}
+	}
 }

@@ -24,7 +24,7 @@ func TestSync(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.Background(), newTestSyncContext()))
 
 		updated := currentInfra(t, ctrl)
-		if !assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+		if !assert.NotEmpty(t, updated.Status.TopologyTransitionStatus.Conditions) {
 			return
 		}
 
@@ -46,7 +46,7 @@ func TestSync(t *testing.T) {
 		assert.NoError(t, ctrl.syncEvaluation(t.Context()))
 
 		updated := currentInfra(t, ctrl)
-		if assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+		if assert.NotEmpty(t, updated.Status.TopologyTransitionStatus.Conditions) {
 			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
 		}
 	})
@@ -58,7 +58,7 @@ func TestSync(t *testing.T) {
 		assert.NoError(t, ctrl.syncEvaluation(t.Context()))
 
 		updated := currentInfra(t, ctrl)
-		if assert.NotNil(t, updated.Status.TopologyTransitionStatus) {
+		if assert.NotEmpty(t, updated.Status.TopologyTransitionStatus.Conditions) {
 			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
 		}
 	})
@@ -301,7 +301,7 @@ func TestSync(t *testing.T) {
 				Reason: "PreflightCheckFailed",
 			},
 		}
-		infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse, Reason: "PreflightCheckFailed"}}}
+		infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse, Reason: "PreflightCheckFailed"}}}
 		ctrl := newTestController(infra, staleConditions, nil, noopTransitions())
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -332,7 +332,7 @@ func TestSync(t *testing.T) {
 				Reason: "UnsupportedTransition",
 			},
 		}
-		infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse, Reason: "UnsupportedTransition"}}}
+		infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse, Reason: "UnsupportedTransition"}}}
 		ctrl := newTestController(infra, staleConditions, nil, noopTransitions())
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -434,10 +434,10 @@ func TestSync(t *testing.T) {
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
 	})
 
-	t.Run("reconciliation with no matching transition treats validators as satisfied", func(t *testing.T) {
+	t.Run("reconciliation with no matching transition keeps upgrades blocked", func(t *testing.T) {
 		infra := withTransitionInProgress(newTestInfra(configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType), time.Now().Add(-10*time.Minute))
 		// noopTransitions only matches a HighlyAvailable spec, so it won't
-		// match this SingleReplica infra — there are no validators to run.
+		// match this SingleReplica infra; the target cannot be verified.
 		ctrl := newTestController(infra, transitionInProgressConditions(), nil, noopTransitions())
 
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
@@ -446,8 +446,8 @@ func TestSync(t *testing.T) {
 		if !assert.NoError(t, err) {
 			return
 		}
-		assert.Equal(t, metav1.ConditionTrue, completionCondition(t, ctrl).Status)
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
+		assert.Equal(t, metav1.ConditionFalse, completionCondition(t, ctrl).Status)
+		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
 	})
 }
 

@@ -16,6 +16,7 @@ import (
 func (c *TopologyTransitionController) refreshDiscovery(ctx context.Context) (*configv1.Infrastructure, error) {
 	var latest *configv1.Infrastructure
 	var evaluationErr error
+	var previousTransitions []configv1.TopologyTransition
 
 	writeErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
 		current, err := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
@@ -24,8 +25,29 @@ func (c *TopologyTransitionController) refreshDiscovery(ctx context.Context) (*c
 		}
 		latest = current
 
+		// Keep only nested condition times locally while pending status clears
+		// the reported options. Each retry still merges into freshly read status.
+		if len(current.Status.TopologyTransitionStatus.Transitions) > 0 {
+			previousTransitions = current.Status.TopologyTransitionStatus.Transitions
+		}
+
+		if c.discoveryNeedsChecks(current) {
+			pending := current.DeepCopy()
+			c.mergeTransitionCondition(pending, metav1.Condition{
+				Type: configv1.TopologyTransitionsEvaluatedConditionType, Status: metav1.ConditionUnknown,
+				Reason: "EvaluationPending", Message: "Supported topology transitions await evaluation",
+			})
+			if !equality.Semantic.DeepEqual(current.Status, pending.Status) {
+				current, err = c.infraClient.UpdateStatus(ctx, pending, metav1.UpdateOptions{})
+				if err != nil {
+					return err
+				}
+			}
+		}
+
 		updated := current.DeepCopy()
 		evaluationErr = c.mergeDiscovery(updated)
+		preserveEvaluationTimes(updated.Status.TopologyTransitionStatus.Transitions, previousTransitions)
 		if equality.Semantic.DeepEqual(current.Status, updated.Status) {
 			return nil
 		}
@@ -90,16 +112,12 @@ func (c *TopologyTransitionController) applyTransitionStatus(ctx context.Context
 	return applied, writeErr
 }
 
-// mergeTransitionCondition patches the completion condition in infra's
+// mergeTransitionCondition patches the supplied condition in infra's
 // in-memory status and sets ObservedGeneration to infra.Generation. It preserves
 // LastTransitionTime when the status is unchanged, except when entering the
 // in-progress phase, which restarts the reconciliation soak timer.
 // It does not persist the change to the API.
 func (c *TopologyTransitionController) mergeTransitionCondition(infra *configv1.Infrastructure, condition metav1.Condition) {
-	if infra.Status.TopologyTransitionStatus == nil {
-		infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{}
-	}
-
 	conditions := &infra.Status.TopologyTransitionStatus.Conditions
 	old := meta.FindStatusCondition(*conditions, condition.Type)
 
@@ -118,6 +136,8 @@ func (c *TopologyTransitionController) mergeTransitionCondition(infra *configv1.
 	} else {
 		*conditions = append(*conditions, condition)
 	}
+
+	c.ensureTransitionConditions(infra)
 }
 
 // mergeDiscovery owns only evaluation status; transition completion is written
@@ -125,24 +145,10 @@ func (c *TopologyTransitionController) mergeTransitionCondition(infra *configv1.
 func (c *TopologyTransitionController) mergeDiscovery(infra *configv1.Infrastructure) error {
 	transitions, condition, err := c.evaluateTransitions(infra)
 
-	if infra.Status.TopologyTransitionStatus == nil {
-		infra.Status.TopologyTransitionStatus = &configv1.TopologyTransitionStatus{}
-	}
-
-	status := infra.Status.TopologyTransitionStatus
+	status := &infra.Status.TopologyTransitionStatus
 	preserveConditionTime(&condition, status.Conditions)
 
-	for i := range transitions {
-		for _, old := range status.Transitions {
-			if old.Source != transitions[i].Source || old.Target != transitions[i].Target {
-				continue
-			}
-
-			for j := range transitions[i].Evaluations {
-				preserveConditionTime(&transitions[i].Evaluations[j], old.Evaluations)
-			}
-		}
-	}
+	preserveEvaluationTimes(transitions, status.Transitions)
 
 	// Do not use SetStatusCondition: it supplies wall time when a new timestamp
 	// is zero. All timestamps here come from the injected clock or old status.
@@ -155,6 +161,7 @@ func (c *TopologyTransitionController) mergeDiscovery(infra *configv1.Infrastruc
 	// Semantic.DeepEqual treats nil and empty slices alike. Keep the emitted
 	// empty list nil so omitempty removes it on an API round trip.
 	status.Transitions = transitions
+	c.ensureTransitionConditions(infra)
 
 	return err
 }
@@ -162,5 +169,52 @@ func (c *TopologyTransitionController) mergeDiscovery(infra *configv1.Infrastruc
 func preserveConditionTime(condition *metav1.Condition, previous []metav1.Condition) {
 	if old := meta.FindStatusCondition(previous, condition.Type); old != nil && old.Status == condition.Status {
 		condition.LastTransitionTime = old.LastTransitionTime
+	}
+}
+
+// ensureTransitionConditions repairs older reports without resetting conditions
+// already owned by the other status writer.
+func (c *TopologyTransitionController) ensureTransitionConditions(infra *configv1.Infrastructure) {
+	status := &infra.Status.TopologyTransitionStatus
+	for _, condition := range []metav1.Condition{
+		{Type: configv1.TopologyTransitionsEvaluatedConditionType, Reason: "EvaluationPending", Message: "Supported topology transitions await evaluation"},
+		{Type: configv1.TopologyTransitionCompletedConditionType, Reason: "TransitionStatusUnknown", Message: "Topology transition completion has not been evaluated"},
+	} {
+		if meta.FindStatusCondition(status.Conditions, condition.Type) != nil {
+			continue
+		}
+
+		condition.Status = metav1.ConditionUnknown
+		condition.ObservedGeneration = infra.Generation
+		condition.LastTransitionTime = metav1.NewTime(c.clock.Now())
+		status.Conditions = append(status.Conditions, condition)
+	}
+
+	if !meta.IsStatusConditionTrue(status.Conditions, configv1.TopologyTransitionsEvaluatedConditionType) {
+		status.Transitions = nil
+	}
+}
+
+func (c *TopologyTransitionController) discoveryNeedsChecks(infra *configv1.Infrastructure) bool {
+	for _, transition := range c.transitions {
+		if matchesStatus(transition.From, infra.Status) && (len(c.preflightChecks) > 0 || len(transition.PreflightValidators) > 0) {
+			return true
+		}
+	}
+
+	return false
+}
+
+func preserveEvaluationTimes(transitions, previous []configv1.TopologyTransition) {
+	for i := range transitions {
+		for _, old := range previous {
+			if old.Source != transitions[i].Source || old.Target != transitions[i].Target {
+				continue
+			}
+
+			for j := range transitions[i].Evaluations {
+				preserveConditionTime(&transitions[i].Evaluations[j], old.Evaluations)
+			}
+		}
 	}
 }
