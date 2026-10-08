@@ -31,7 +31,7 @@ func (c *TopologyTransitionController) refreshDiscovery(ctx context.Context) (*c
 			previousTransitions = current.Status.TopologyTransitionStatus.Transitions
 		}
 
-		if c.discoveryNeedsChecks(current) {
+		if c.discoveryNeedsChecks() {
 			pending := current.DeepCopy()
 			c.mergeTransitionCondition(pending, metav1.Condition{
 				Type: configv1.TopologyTransitionsEvaluatedConditionType, Status: metav1.ConditionUnknown,
@@ -195,9 +195,9 @@ func (c *TopologyTransitionController) ensureTransitionConditions(infra *configv
 	}
 }
 
-func (c *TopologyTransitionController) discoveryNeedsChecks(infra *configv1.Infrastructure) bool {
+func (c *TopologyTransitionController) discoveryNeedsChecks() bool {
 	for _, transition := range c.transitions {
-		if matchesStatus(transition.From, infra.Status) && (len(c.preflightChecks) > 0 || len(transition.PreflightValidators) > 0) {
+		if len(c.preflightChecks) > 0 || len(transition.PreflightValidators) > 0 {
 			return true
 		}
 	}

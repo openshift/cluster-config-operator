@@ -227,15 +227,15 @@ func TestDiscoveryConditionTimesAndRecovery(t *testing.T) {
 
 func TestDiscoveryNormalizesEmptyTransitions(t *testing.T) {
 	infra := snoInfra("")
-	infra.Status.PlatformStatus.Type = configv1.AWSPlatformType
 	c, client, clk := statusTestController(infra)
+	c.transitions = nil
 
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 
 	first := currentInfra(t, c)
 	data, err := json.Marshal(first.Status.TopologyTransitionStatus)
 	assert.NoError(t, err)
-	assert.NotContains(t, string(data), "transitions")
+	assert.NotContains(t, string(data), `"transitions"`)
 	assert.NotEqual(t, "{}", string(data))
 	assert.Contains(t, string(data), configv1.TopologyTransitionsEvaluatedConditionType)
 
@@ -301,11 +301,14 @@ func TestDiscoveryConflictReevaluatesAndPreservesOtherFields(t *testing.T) {
 			if assert.NotNil(t, condition) {
 				assert.Equal(t, int64(5), condition.ObservedGeneration)
 			}
-			if changeSource {
-				assert.Empty(t, status.Transitions)
-				assert.Equal(t, "NoSupportedTransitions", condition.Reason)
-			} else {
-				assert.Len(t, status.Transitions, 1)
+			if assert.Len(t, status.Transitions, 1) {
+				available := status.Transitions[0].Evaluations[0]
+				if changeSource {
+					assert.Equal(t, metav1.ConditionFalse, available.Status)
+					assert.Equal(t, "SourceTopologyMismatch", available.Reason)
+				} else {
+					assert.Equal(t, metav1.ConditionTrue, available.Status)
+				}
 			}
 		})
 	}
@@ -1006,7 +1009,11 @@ func TestTransitionWriteGuardsConcurrentSpecAndSource(t *testing.T) {
 					assert.Equal(t, configv1.SingleReplicaTopologyMode, updated.Spec.ControlPlaneTopology)
 					assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
 				} else {
-					assert.Empty(t, updated.Status.TopologyTransitionStatus.Transitions, "standalone evaluation refreshes the changed source")
+					if assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1) {
+						available := updated.Status.TopologyTransitionStatus.Transitions[0].Evaluations[0]
+						assert.Equal(t, metav1.ConditionFalse, available.Status)
+						assert.Equal(t, "SourceTopologyMismatch", available.Reason)
+					}
 				}
 			}
 		})

@@ -489,7 +489,7 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	requested.ResourceVersion = "2"
 	assert.NoError(t, client.Tracker().Update(resource, requested, ""))
 	assert.NoError(t, c.sync(t.Context(), newTestSyncContext()))
-	assert.Equal(t, int32(1), requestChecks.Load(), "request checks must remain mandatory")
+	assert.Equal(t, int32(2), requestChecks.Load(), "discovery and request must each run source checks")
 	assert.Equal(t, configv1.HighlyAvailableTopologyMode, currentInfra(t, c).Status.ControlPlaneTopology)
 	assert.Equal(t, reasonTopologyTransitionInProgress, completionCondition(t, c).Reason)
 	clk.Step(minReconciliationSoakTime)
@@ -508,8 +508,10 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	if assert.NotNil(t, completion) {
 		assert.Equal(t, metav1.ConditionTrue, completion.Status, "conflicted evaluation must preserve completion")
 	}
-	if assert.Len(t, stored.Status.TopologyTransitionStatus.Transitions, 1) {
-		assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
+	if assert.Len(t, stored.Status.TopologyTransitionStatus.Transitions, 2) {
+		assert.Equal(t, configv1.SingleReplicaTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
+		assert.Equal(t, metav1.ConditionFalse, stored.Status.TopologyTransitionStatus.Transitions[0].Evaluations[0].Status)
+		assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[1].Source.ControlPlaneTopology)
 	}
 }
 

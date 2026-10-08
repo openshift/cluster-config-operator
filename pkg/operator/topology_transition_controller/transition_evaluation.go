@@ -11,9 +11,9 @@ import (
 
 const maxEvaluationMessageCharacters = 32768
 
-// evaluateTransitions discovers transitions from current status, independently of
-// any spec request. It returns only the evaluation condition; callers must merge
-// it with any completion condition when writing status. No input is changed.
+// evaluateTransitions reports each registered transition, independently of any
+// spec request. It returns only the evaluation condition; callers merge it with
+// the completion condition when writing status. No input is changed.
 func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infrastructure) ([]configv1.TopologyTransition, metav1.Condition, error) {
 	now := metav1.NewTime(c.clock.Now())
 	condition := metav1.Condition{
@@ -22,93 +22,111 @@ func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infra
 		ObservedGeneration: infra.Generation, LastTransitionTime: now,
 	}
 
-	var descriptor *TransitionDescriptor
-	for i := range c.transitions {
-		if !matchesStatus(c.transitions[i].From, infra.Status) {
-			continue
-		}
-
-		if descriptor != nil {
-			return failedTransitionEvaluation(condition, fmt.Errorf("more than one supported transition matches the current topology"))
-		}
-
-		descriptor = &c.transitions[i]
-	}
-
-	if descriptor == nil {
-		platformType := configv1.PlatformType("Unknown")
-		if infra.Status.PlatformStatus != nil {
-			platformType = infra.Status.PlatformStatus.Type
-		}
-
+	if len(c.transitions) == 0 {
 		condition.Reason = "NoSupportedTransitions"
-		condition.Message = limitEvaluationMessage(fmt.Sprintf("No supported topology transition matches {controlPlane=%s, infrastructure=%s, platform=%s}",
-			infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology, platformType))
+		condition.Message = "No supported topology transitions are registered"
 		return nil, condition, nil
 	}
-
-	if descriptor.UpdateStatus == nil {
-		return failedTransitionEvaluation(condition, fmt.Errorf("supported transition has no status updater"))
+	if len(c.transitions) > 8 {
+		return failedTransitionEvaluation(condition, fmt.Errorf("at most 8 supported transitions may be reported"))
 	}
 
-	checks := append(append([]PreflightCheck{}, c.preflightChecks...), descriptor.PreflightValidators...)
-	if err := validateEvaluationChecks(checks); err != nil {
-		return failedTransitionEvaluation(condition, err)
-	}
-
-	target := infra.DeepCopy()
-	descriptor.UpdateStatus(target)
-	transition := configv1.TopologyTransition{Source: topologyState(infra.Status), Target: topologyState(target.Status)}
-	if !validTopologyState(transition.Source) || !validTopologyState(transition.Target) {
-		return failedTransitionEvaluation(condition, fmt.Errorf("supported transition has invalid source or target topology"))
-	}
-
-	available := metav1.Condition{
-		Type: configv1.TopologyTransitionAvailableConditionType, Status: metav1.ConditionTrue,
-		Reason: "PreflightChecksPassed", Message: "All preflight checks passed",
-		ObservedGeneration: infra.Generation, LastTransitionTime: now,
-	}
-
-	var hasBlockers bool
+	var transitions []configv1.TopologyTransition
 	var readErrors []error
-	var evaluations []metav1.Condition
-	for _, check := range checks {
-		result := metav1.Condition{
-			Type: check.Type, Status: metav1.ConditionTrue,
-			Reason: "PreflightCheckPassed", Message: "Preflight check passed",
-			ObservedGeneration: infra.Generation, LastTransitionTime: now,
+	for i := range c.transitions {
+		descriptor := &c.transitions[i]
+		if descriptor.UpdateStatus == nil {
+			return failedTransitionEvaluation(condition, fmt.Errorf("supported transition has no status updater"))
 		}
 
-		if err := check.Validate(); err != nil {
-			result.Status = metav1.ConditionFalse
-			result.Reason = "PreflightCheckFailed"
-			result.Message = limitEvaluationMessage(err.Error())
+		checks := append(append([]PreflightCheck{}, c.preflightChecks...), descriptor.PreflightValidators...)
+		if err := validateEvaluationChecks(checks); err != nil {
+			return failedTransitionEvaluation(condition, err)
+		}
 
-			if _, ok := errors.AsType[*clusterStateReadError](err); ok {
-				readErrors = append(readErrors, fmt.Errorf("%s: %w", check.Type, err))
-			} else {
-				hasBlockers = true
+		// Use the descriptor's source even when the cluster has already moved to
+		// another topology. Resolve wildcard fields from current status.
+		source := infra.DeepCopy()
+		if descriptor.From.ControlPlaneTopology != "" {
+			source.Status.ControlPlaneTopology = descriptor.From.ControlPlaneTopology
+		}
+		if descriptor.From.InfrastructureTopology != "" {
+			source.Status.InfrastructureTopology = descriptor.From.InfrastructureTopology
+		}
+		if descriptor.From.PlatformStatus != nil && descriptor.From.PlatformStatus.Type != "" {
+			source.Status.PlatformStatus = descriptor.From.PlatformStatus.DeepCopy()
+		}
+		target := source.DeepCopy()
+		descriptor.UpdateStatus(target)
+		transition := configv1.TopologyTransition{Source: topologyState(source.Status), Target: topologyState(target.Status)}
+		if !validTopologyState(transition.Source) || !validTopologyState(transition.Target) {
+			return failedTransitionEvaluation(condition, fmt.Errorf("supported transition has invalid source or target topology"))
+		}
+		for _, previous := range transitions {
+			if previous.Source == transition.Source && previous.Target == transition.Target {
+				return failedTransitionEvaluation(condition, fmt.Errorf("duplicate supported transition source and target"))
 			}
 		}
 
-		evaluations = append(evaluations, result)
+		available := metav1.Condition{
+			Type: configv1.TopologyTransitionAvailableConditionType, Status: metav1.ConditionTrue,
+			Reason: "PreflightChecksPassed", Message: "All preflight checks passed",
+			ObservedGeneration: infra.Generation, LastTransitionTime: now,
+		}
+
+		var hasBlockers bool
+		var evaluations []metav1.Condition
+		for _, check := range checks {
+			result := metav1.Condition{
+				Type: check.Type, Status: metav1.ConditionTrue,
+				Reason: "PreflightCheckPassed", Message: "Preflight check passed",
+				ObservedGeneration: infra.Generation, LastTransitionTime: now,
+			}
+
+			if err := check.Validate(); err != nil {
+				result.Status = metav1.ConditionFalse
+				result.Reason = "PreflightCheckFailed"
+				result.Message = limitEvaluationMessage(err.Error())
+
+				if _, ok := errors.AsType[*clusterStateReadError](err); ok {
+					readErrors = append(readErrors, fmt.Errorf("transition %d %s: %w", i, check.Type, err))
+				} else {
+					hasBlockers = true
+				}
+			}
+			evaluations = append(evaluations, result)
+		}
+
+		if !matchesStatus(descriptor.From, infra.Status) {
+			available.Status = metav1.ConditionFalse
+			available.Reason = "SourceTopologyMismatch"
+			available.Message = limitEvaluationMessage(fmt.Sprintf("Current cluster state {controlPlane=%s, infrastructure=%s, platform=%s} does not match transition source {controlPlane=%s, infrastructure=%s, platform=%s}",
+				infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology, topologyPlatform(infra.Status),
+				source.Status.ControlPlaneTopology, source.Status.InfrastructureTopology, topologyPlatform(source.Status)))
+		} else if hasBlockers {
+			available.Status = metav1.ConditionFalse
+			available.Reason = "PreflightCheckFailed"
+			available.Message = "One or more preflight checks failed. See the other evaluation conditions with status False for details."
+		}
+
+		transition.Evaluations = append([]metav1.Condition{available}, evaluations...)
+		transitions = append(transitions, transition)
 	}
 
-	// Required read failures take precedence over known blockers. Never publish
-	// a partial evaluation, but run all checks so every read failure is returned.
+	// Required read failures invalidate the whole report. Run every transition's
+	// checks first, then clear all options rather than publish partial results.
 	if err := errors.Join(readErrors...); err != nil {
 		return failedTransitionEvaluation(condition, err)
 	}
 
-	if hasBlockers {
-		available.Status = metav1.ConditionFalse
-		available.Reason = "PreflightCheckFailed"
-		available.Message = "One or more preflight checks failed. See the other evaluation conditions with status False for details."
+	return transitions, condition, nil
+}
+
+func topologyPlatform(status configv1.InfrastructureStatus) configv1.PlatformType {
+	if status.PlatformStatus == nil {
+		return "Unknown"
 	}
-
-	transition.Evaluations = append([]metav1.Condition{available}, evaluations...)
-
-	return []configv1.TopologyTransition{transition}, condition, nil
+	return status.PlatformStatus.Type
 }
 
 func failedTransitionEvaluation(condition metav1.Condition, err error) ([]configv1.TopologyTransition, metav1.Condition, error) {
