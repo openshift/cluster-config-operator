@@ -286,7 +286,10 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		}
 		machineConfigInformers := machineconfiginformers.NewSharedInformerFactory(machineConfigClient, 10*time.Minute)
 
+		const openShiftAPIServerNamespace = "openshift-apiserver"
 		kubeInformersForEtcd := v1helpers.NewKubeInformersForNamespaces(kubeClient, "openshift-etcd")
+		kubeInformersForOpenShiftAPIServer := v1helpers.NewKubeInformersForNamespaces(kubeClient, openShiftAPIServerNamespace)
+		openShiftAPIServerDeploymentInformer := kubeInformersForOpenShiftAPIServer.InformersFor(openShiftAPIServerNamespace).Apps().V1().Deployments()
 
 		topologyTransitionController := topologytransition.NewController(
 			operatorClient,
@@ -305,8 +308,8 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 			configInformers.Config().V1().ClusterVersions().Informer(),
 			operatorInformers.Operator().V1().KubeAPIServers().Lister(),
 			operatorInformers.Operator().V1().KubeAPIServers().Informer(),
-			operatorInformers.Operator().V1().OpenShiftAPIServers().Lister(),
-			operatorInformers.Operator().V1().OpenShiftAPIServers().Informer(),
+			openShiftAPIServerDeploymentInformer.Lister().Deployments(openShiftAPIServerNamespace),
+			openShiftAPIServerDeploymentInformer.Informer(),
 			operatorInformers.Operator().V1().IngressControllers().Lister().IngressControllers("openshift-ingress-operator"),
 			operatorInformers.Operator().V1().IngressControllers().Informer(),
 			machineConfigInformers.Machineconfiguration().V1().MachineConfigs().Lister(),
@@ -320,6 +323,7 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		go operatorInformers.Start(ctx.Done())
 		go machineConfigInformers.Start(ctx.Done())
 		go kubeInformersForEtcd.Start(ctx.Done())
+		go kubeInformersForOpenShiftAPIServer.Start(ctx.Done())
 		go kubeInformersForNamespaces.Start(ctx.Done())
 		go topologyTransitionController.Run(ctx, 1)
 	}

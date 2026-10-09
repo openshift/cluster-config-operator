@@ -9,6 +9,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
+	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/tools/cache"
 )
@@ -905,29 +906,35 @@ func TestValidateKubeAPIServerNodeCount(t *testing.T) {
 }
 
 func TestValidateOpenShiftAPIServerReadyReplicas(t *testing.T) {
-	t.Run("passes when enough ready replicas", func(t *testing.T) {
-		fixture := newTestFixture().withOpenShiftAPIServer(newTestOpenShiftAPIServerCR(3))
-		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasLister)
-		assert.NoError(t, v())
-	})
+	for _, tc := range []struct {
+		name          string
+		readyReplicas int32
+		wantErr       string
+	}{
+		{name: "fails below required count", readyReplicas: 2, wantErr: "insufficient openshift-apiserver ready replicas: need 3, have 2"},
+		{name: "passes at required count", readyReplicas: 3},
+		{name: "passes above required count", readyReplicas: 4},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newTestFixture().withOpenShiftAPIServerDeployment(newTestOpenShiftAPIServerDeployment(tc.readyReplicas))
+			v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasDeploymentLister)
+			err := v()
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tc.wantErr)
+		})
+	}
 
-	t.Run("fails when insufficient ready replicas", func(t *testing.T) {
-		fixture := newTestFixture().withOpenShiftAPIServer(newTestOpenShiftAPIServerCR(1))
-		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasLister)
-		err := v()
-		if !assert.Error(t, err) {
-			return
-		}
-		assert.Contains(t, err.Error(), "insufficient openshift-apiserver ready replicas: need 3, have 1")
-	})
-
-	t.Run("fails when openshiftapiservers/cluster not found", func(t *testing.T) {
+	t.Run("fails when deployment is not found", func(t *testing.T) {
 		fixture := newTestFixture()
-		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasLister)
+		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasDeploymentLister)
 		err := v()
 		if !assert.Error(t, err) {
 			return
 		}
-		assert.Contains(t, err.Error(), "failed to get openshiftapiservers.operator.openshift.io/cluster")
+		assert.Contains(t, err.Error(), "failed to get deployments.apps/openshift-apiserver/apiserver")
+		assert.True(t, apierrors.IsNotFound(err), "expected wrapped NotFound error")
 	})
 }
