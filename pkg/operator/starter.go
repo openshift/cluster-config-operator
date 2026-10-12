@@ -2,6 +2,7 @@ package operator
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"os"
 	"path/filepath"
@@ -24,19 +25,22 @@ import (
 	"github.com/openshift/cluster-config-operator/pkg/operator/migration_platform_status"
 	"github.com/openshift/cluster-config-operator/pkg/operator/operatorclient"
 	"github.com/openshift/cluster-config-operator/pkg/operator/removelatencysensitive"
+	"github.com/openshift/cluster-config-operator/pkg/util"
 	"github.com/openshift/library-go/pkg/controller/controllercmd"
 	"github.com/openshift/library-go/pkg/controller/factory"
+	featuregatelib "github.com/openshift/library-go/pkg/operator/configobserver/featuregates"
 	"github.com/openshift/library-go/pkg/operator/genericoperatorclient"
 	"github.com/openshift/library-go/pkg/operator/loglevel"
 	"github.com/openshift/library-go/pkg/operator/staleconditions"
 	"github.com/openshift/library-go/pkg/operator/status"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"github.com/spf13/pflag"
-	"k8s.io/apimachinery/pkg/api/errors"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
 	"k8s.io/client-go/kubernetes"
+	"k8s.io/klog/v2"
 	"k8s.io/utils/clock"
 )
 
@@ -89,10 +93,21 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		return err
 	}
 
+	desiredVersion := util.GetReleaseVersion()
+	missingVersion := "0.0.1-snapshot"
+
+	// By default, this will exit(0) if the featuregates change
+	featureGateAccessor := featuregatelib.NewFeatureGateAccess(
+		desiredVersion, missingVersion,
+		configInformers.Config().V1().ClusterVersions(),
+		configInformers.Config().V1().FeatureGates(),
+		controllerContext.EventRecorder,
+	)
+
 	// don't change any versions until we sync
 	versionRecorder := status.NewVersionGetter()
 	clusterOperator, err := configClient.ConfigV1().ClusterOperators().Get(ctx, "config-operator", metav1.GetOptions{})
-	if err != nil && !errors.IsNotFound(err) {
+	if err != nil && !k8serrors.IsNotFound(err) {
 		return err
 	}
 	for _, version := range clusterOperator.Status.Versions {
@@ -137,17 +152,6 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		controllerContext.EventRecorder,
 	)
 
-	kubeCloudConfigController := kubecloudconfig.NewController(
-		operatorClient,
-		configClient.ConfigV1(),
-		configInformers.Config().V1().Infrastructures().Lister(),
-		configInformers.Config().V1().Infrastructures().Informer(),
-		v1helpers.CachedConfigMapGetter(kubeClient.CoreV1(), kubeInformersForNamespaces),
-		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalUserSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
-		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalMachineSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
-		controllerContext.EventRecorder,
-	)
-
 	migrationPlatformStatusController := migration_platform_status.NewController(
 		operatorClient,
 		configClient.ConfigV1(),
@@ -171,6 +175,18 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		versionRecorder,
 		controllerContext.EventRecorder,
 		controllerContext.Clock,
+	)
+
+	kubeCloudConfigController := kubecloudconfig.NewController(
+		operatorClient,
+		configClient.ConfigV1(),
+		configInformers.Config().V1().Infrastructures().Lister(),
+		configInformers.Config().V1().Infrastructures().Informer(),
+		v1helpers.CachedConfigMapGetter(kubeClient.CoreV1(), kubeInformersForNamespaces),
+		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalUserSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
+		kubeInformersForNamespaces.InformersFor(operatorclient.GlobalMachineSpecifiedConfigNamespace).Core().V1().ConfigMaps().Informer(),
+		featureGateAccessor,
+		controllerContext.EventRecorder,
 	)
 
 	logLevelController := loglevel.NewClusterOperatorLoggingController(operatorClient, controllerContext.EventRecorder)
@@ -211,9 +227,30 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		controllerContext.EventRecorder,
 	)
 
+	// Start informers before waiting for feature gates - the feature gate accessor needs them running
 	go dynamicInformers.Start(ctx.Done())
 	go configInformers.Start(ctx.Done())
 	go kubeInformersForNamespaces.Start(ctx.Done())
+
+	// The featuregate controller must never be featuregated. It is responsible for ensuring the featuregate
+	// object status contains the correct feature gate states for the current release.  During upgrades, FGC will set
+	// the version field that the accessor will be checking; therefore, it must run before the featuregeate accessor
+	// as the accessor will fail to start if its version isn't updated.
+	go featureGateController.Run(ctx, 1)
+
+	// Start the feature gate accessor and wait for it to observe initial feature gates
+	// This must happen before creating controllers that depend on feature gates (such as kube cloud config controller)
+	go featureGateAccessor.Run(ctx)
+
+	klog.Info("Started feature gate accessor")
+	select {
+	case <-featureGateAccessor.InitialFeatureGatesObserved():
+		klog.Info("FeatureGates initialized")
+	case <-time.After(5 * time.Minute):
+		accessError := errors.New("timed out waiting for FeatureGate detection")
+		klog.Error(accessError, "unable to start operator")
+		return accessError
+	}
 
 	go infraController.Run(ctx, 1)
 	go kubeCloudConfigController.Run(ctx, 1)
@@ -222,7 +259,6 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 	go operatorController.Run(ctx, 1)
 	go migrationPlatformStatusController.Run(ctx, 1)
 	go staleConditionsController.Run(ctx, 1)
-	go featureGateController.Run(ctx, 1)
 	go latencySensitiveRemover.Run(ctx, 1)
 	go featureUpgradeableController.Run(ctx, 1)
 
