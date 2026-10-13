@@ -16,6 +16,7 @@ import (
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	klog "k8s.io/klog/v2"
@@ -65,8 +66,8 @@ func NewController(
 	clusterVersionInformer cache.SharedIndexInformer,
 	kubeAPIServerLister operatorv1listers.KubeAPIServerLister,
 	kubeAPIServerInformer cache.SharedIndexInformer,
-	openShiftAPIServerLister operatorv1listers.OpenShiftAPIServerLister,
-	openShiftAPIServerInformer cache.SharedIndexInformer,
+	openShiftAPIServerDeploymentLister appsv1listers.DeploymentNamespaceLister,
+	openShiftAPIServerDeploymentInformer cache.SharedIndexInformer,
 	ingressControllerLister operatorv1listers.IngressControllerNamespaceLister,
 	ingressControllerInformer cache.SharedIndexInformer,
 	machineConfigLister machineconfigv1listers.MachineConfigLister,
@@ -77,15 +78,15 @@ func NewController(
 	recorder events.Recorder,
 ) factory.Controller {
 	listers := TransitionValidationListers{
-		NodeLister:               nodeLister,
-		EtcdConfigMapLister:      etcdConfigMapLister,
-		EtcdLister:               etcdLister,
-		KubeAPIServerLister:      kubeAPIServerLister,
-		OpenShiftAPIServerLister: openShiftAPIServerLister,
-		IngressControllerLister:  ingressControllerLister,
-		MachineConfigLister:      machineConfigLister,
-		MachineConfigPoolLister:  machineConfigPoolLister,
-		OperatorClient:           operatorClient,
+		NodeLister:                         nodeLister,
+		EtcdConfigMapLister:                etcdConfigMapLister,
+		EtcdLister:                         etcdLister,
+		KubeAPIServerLister:                kubeAPIServerLister,
+		OpenShiftAPIServerDeploymentLister: openShiftAPIServerDeploymentLister,
+		IngressControllerLister:            ingressControllerLister,
+		MachineConfigLister:                machineConfigLister,
+		MachineConfigPoolLister:            machineConfigPoolLister,
+		OperatorClient:                     operatorClient,
 	}
 	c := &TopologyTransitionController{
 		operatorClient: operatorClient,
@@ -108,7 +109,7 @@ func NewController(
 			clusterOperatorInformer,
 			clusterVersionInformer,
 			kubeAPIServerInformer,
-			openShiftAPIServerInformer,
+			openShiftAPIServerDeploymentInformer,
 			ingressControllerInformer,
 			machineConfigInformer,
 			machineConfigPoolInformer,

@@ -14,8 +14,10 @@ import (
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
+	appsv1 "k8s.io/api/apps/v1"
 	corev1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	clocktesting "k8s.io/utils/clock/testing"
@@ -350,27 +352,27 @@ func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []ope
 
 // testFixture provides fake listers for building real transition descriptors.
 type testFixture struct {
-	nodeIndexer cache.Indexer
-	cmIndexer   cache.Indexer
-	etcdIndexer cache.Indexer
-	coIndexer   cache.Indexer
-	cvIndexer   cache.Indexer
-	mcIndexer   cache.Indexer
-	mcpIndexer  cache.Indexer
-	icIndexer   cache.Indexer
-	kasIndexer  cache.Indexer
-	oasIndexer  cache.Indexer
+	nodeIndexer          cache.Indexer
+	cmIndexer            cache.Indexer
+	etcdIndexer          cache.Indexer
+	coIndexer            cache.Indexer
+	cvIndexer            cache.Indexer
+	mcIndexer            cache.Indexer
+	mcpIndexer           cache.Indexer
+	icIndexer            cache.Indexer
+	kasIndexer           cache.Indexer
+	oasDeploymentIndexer cache.Indexer
 
-	nodeLister corev1listers.NodeLister
-	cmLister   corev1listers.ConfigMapNamespaceLister
-	etcdLister operatorv1listers.EtcdLister
-	coLister   configlistersv1.ClusterOperatorLister
-	cvLister   configlistersv1.ClusterVersionLister
-	mcLister   machineconfigv1listers.MachineConfigLister
-	mcpLister  machineconfigv1listers.MachineConfigPoolLister
-	icLister   operatorv1listers.IngressControllerNamespaceLister
-	kasLister  operatorv1listers.KubeAPIServerLister
-	oasLister  operatorv1listers.OpenShiftAPIServerLister
+	nodeLister          corev1listers.NodeLister
+	cmLister            corev1listers.ConfigMapNamespaceLister
+	etcdLister          operatorv1listers.EtcdLister
+	coLister            configlistersv1.ClusterOperatorLister
+	cvLister            configlistersv1.ClusterVersionLister
+	mcLister            machineconfigv1listers.MachineConfigLister
+	mcpLister           machineconfigv1listers.MachineConfigPoolLister
+	icLister            operatorv1listers.IngressControllerNamespaceLister
+	kasLister           operatorv1listers.KubeAPIServerLister
+	oasDeploymentLister appsv1listers.DeploymentNamespaceLister
 
 	operatorClient v1helpers.OperatorClient
 }
@@ -388,7 +390,7 @@ func newTestFixture() *testFixture {
 	mcpIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	icIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	kasIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
-	oasIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	oasDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
 	// Default to no upgrade in progress, so fixtures that don't care about this
 	// check don't have to opt in to a passing ClusterVersion.
@@ -397,27 +399,27 @@ func newTestFixture() *testFixture {
 	}
 
 	return &testFixture{
-		nodeIndexer: nodeIndexer,
-		cmIndexer:   cmIndexer,
-		etcdIndexer: etcdIndexer,
-		coIndexer:   coIndexer,
-		cvIndexer:   cvIndexer,
-		mcIndexer:   mcIndexer,
-		mcpIndexer:  mcpIndexer,
-		icIndexer:   icIndexer,
-		kasIndexer:  kasIndexer,
-		oasIndexer:  oasIndexer,
+		nodeIndexer:          nodeIndexer,
+		cmIndexer:            cmIndexer,
+		etcdIndexer:          etcdIndexer,
+		coIndexer:            coIndexer,
+		cvIndexer:            cvIndexer,
+		mcIndexer:            mcIndexer,
+		mcpIndexer:           mcpIndexer,
+		icIndexer:            icIndexer,
+		kasIndexer:           kasIndexer,
+		oasDeploymentIndexer: oasDeploymentIndexer,
 
-		nodeLister: corev1listers.NewNodeLister(nodeIndexer),
-		cmLister:   corev1listers.NewConfigMapLister(cmIndexer).ConfigMaps(etcdNamespace),
-		etcdLister: operatorv1listers.NewEtcdLister(etcdIndexer),
-		coLister:   configlistersv1.NewClusterOperatorLister(coIndexer),
-		cvLister:   configlistersv1.NewClusterVersionLister(cvIndexer),
-		mcLister:   machineconfigv1listers.NewMachineConfigLister(mcIndexer),
-		mcpLister:  machineconfigv1listers.NewMachineConfigPoolLister(mcpIndexer),
-		icLister:   operatorv1listers.NewIngressControllerLister(icIndexer).IngressControllers(ingressOperatorNamespace),
-		kasLister:  operatorv1listers.NewKubeAPIServerLister(kasIndexer),
-		oasLister:  operatorv1listers.NewOpenShiftAPIServerLister(oasIndexer),
+		nodeLister:          corev1listers.NewNodeLister(nodeIndexer),
+		cmLister:            corev1listers.NewConfigMapLister(cmIndexer).ConfigMaps(etcdNamespace),
+		etcdLister:          operatorv1listers.NewEtcdLister(etcdIndexer),
+		coLister:            configlistersv1.NewClusterOperatorLister(coIndexer),
+		cvLister:            configlistersv1.NewClusterVersionLister(cvIndexer),
+		mcLister:            machineconfigv1listers.NewMachineConfigLister(mcIndexer),
+		mcpLister:           machineconfigv1listers.NewMachineConfigPoolLister(mcpIndexer),
+		icLister:            operatorv1listers.NewIngressControllerLister(icIndexer).IngressControllers(ingressOperatorNamespace),
+		kasLister:           operatorv1listers.NewKubeAPIServerLister(kasIndexer),
+		oasDeploymentLister: appsv1listers.NewDeploymentLister(oasDeploymentIndexer).Deployments(openShiftAPIServerNamespace),
 
 		operatorClient: v1helpers.NewFakeOperatorClient(&operatorv1.OperatorSpec{}, &operatorv1.OperatorStatus{}, nil),
 	}
@@ -509,24 +511,24 @@ func (f *testFixture) withKubeAPIServer(kas *operatorv1.KubeAPIServer) *testFixt
 	return f
 }
 
-func (f *testFixture) withOpenShiftAPIServer(oas *operatorv1.OpenShiftAPIServer) *testFixture {
-	if err := f.oasIndexer.Add(oas); err != nil {
-		panic(fmt.Sprintf("failed to add OpenShiftAPIServer to indexer: %v", err))
+func (f *testFixture) withOpenShiftAPIServerDeployment(deployment *appsv1.Deployment) *testFixture {
+	if err := f.oasDeploymentIndexer.Add(deployment); err != nil {
+		panic(fmt.Sprintf("failed to add OpenShiftAPIServer Deployment to indexer: %v", err))
 	}
 	return f
 }
 
 func (f *testFixture) buildTransitions() []TransitionDescriptor {
 	return buildSupportedTransitions(TransitionValidationListers{
-		NodeLister:               f.nodeLister,
-		EtcdConfigMapLister:      f.cmLister,
-		EtcdLister:               f.etcdLister,
-		KubeAPIServerLister:      f.kasLister,
-		OpenShiftAPIServerLister: f.oasLister,
-		IngressControllerLister:  f.icLister,
-		MachineConfigLister:      f.mcLister,
-		MachineConfigPoolLister:  f.mcpLister,
-		OperatorClient:           f.operatorClient,
+		NodeLister:                         f.nodeLister,
+		EtcdConfigMapLister:                f.cmLister,
+		EtcdLister:                         f.etcdLister,
+		KubeAPIServerLister:                f.kasLister,
+		OpenShiftAPIServerDeploymentLister: f.oasDeploymentLister,
+		IngressControllerLister:            f.icLister,
+		MachineConfigLister:                f.mcLister,
+		MachineConfigPoolLister:            f.mcpLister,
+		OperatorClient:                     f.operatorClient,
 	})
 }
 
@@ -622,13 +624,11 @@ func newTestKubeAPIServerCR(nodeCount int) *operatorv1.KubeAPIServer {
 	}
 }
 
-func newTestOpenShiftAPIServerCR(readyReplicas int32) *operatorv1.OpenShiftAPIServer {
-	return &operatorv1.OpenShiftAPIServer{
-		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
-		Status: operatorv1.OpenShiftAPIServerStatus{
-			OperatorStatus: operatorv1.OperatorStatus{
-				ReadyReplicas: readyReplicas,
-			},
+func newTestOpenShiftAPIServerDeployment(readyReplicas int32) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: openShiftAPIServerDeploymentName, Namespace: openShiftAPIServerNamespace},
+		Status: appsv1.DeploymentStatus{
+			ReadyReplicas: readyReplicas,
 		},
 	}
 }
