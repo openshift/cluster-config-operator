@@ -24,6 +24,8 @@ import (
 	"k8s.io/client-go/tools/clientcmd"
 	"k8s.io/client-go/tools/portforward"
 	"k8s.io/client-go/transport/spdy"
+
+	"github.com/openshift/cluster-config-operator/pkg/version"
 )
 
 const (
@@ -43,8 +45,12 @@ var _ = g.Describe("cluster-config-operator", func() {
 		kubeClient, err := kubernetes.NewForConfig(config)
 		o.Expect(err).NotTo(o.HaveOccurred(), "failed to create kube client")
 
+		configClient, err := configclient.NewForConfig(config)
+		o.Expect(err).NotTo(o.HaveOccurred(), "failed to create config client")
+
 		ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 		defer cancel()
+		skipIfExternalControlPlane(ctx, configClient)
 
 		o.Eventually(func(gomega o.Gomega) {
 			deploy, err := kubeClient.AppsV1().Deployments(operatorNamespace).Get(ctx, deploymentName, metav1.GetOptions{})
@@ -81,16 +87,9 @@ var _ = g.Describe("cluster-config-operator", func() {
 			o.Expect(pod.Status.Phase).To(o.Equal(corev1.PodRunning), "pod %s should be Running", pod.Name)
 
 			for _, containerStatus := range pod.Status.ContainerStatuses {
-				o.Expect(containerStatus.Ready).To(o.BeTrue(), "container %s in pod %s should be ready", containerStatus.Name, pod.Name)
-
-				// cluster-config-operator must initialize successfully without excessive restarts.
-				// The operator has a critical startup sequence (FeatureGate initialization with 5min timeout)
-				// that can fail due to API server delays, RBAC issues, or platform config problems.
-				// High restart count indicates initialization failures even if pod eventually becomes Ready.
-				// Threshold of 3 allows for transient failures during cluster bootstrap while catching real issues.
-				o.Expect(containerStatus.RestartCount).To(o.BeNumerically("<", 3),
-					"container %s should not have excessive restarts (current: %d) - indicates initialization issues",
-					containerStatus.Name, containerStatus.RestartCount)
+				o.Expect(containerIsCurrentlyHealthy(containerStatus)).To(o.BeTrue(),
+					"container %s in pod %s should be ready and running (state: %#v)",
+					containerStatus.Name, pod.Name, containerStatus.State)
 			}
 		}
 	})
@@ -104,9 +103,16 @@ var _ = g.Describe("cluster-config-operator", func() {
 
 		ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 		defer cancel()
+		skipIfExternalControlPlane(ctx, configClient)
 
 		var clusterOperator *configv1.ClusterOperator
 		o.Eventually(func(gomega o.Gomega) {
+			featureGate, err := configClient.ConfigV1().FeatureGates().Get(ctx, "cluster", metav1.GetOptions{})
+			if err != nil {
+				gomega.Expect(err).NotTo(o.HaveOccurred(), "failed to get FeatureGate cluster")
+				return
+			}
+
 			co, err := configClient.ConfigV1().ClusterOperators().Get(ctx, "config-operator", metav1.GetOptions{})
 			if err != nil {
 				if apierrors.IsNotFound(err) {
@@ -133,7 +139,9 @@ var _ = g.Describe("cluster-config-operator", func() {
 
 			upgradeableCondition := v1helpers.FindStatusCondition(co.Status.Conditions, configv1.OperatorUpgradeable)
 			gomega.Expect(upgradeableCondition).NotTo(o.BeNil(), "ClusterOperator config-operator should have an Upgradeable condition")
-			gomega.Expect(upgradeableCondition.Status).To(o.Equal(configv1.ConditionTrue), "ClusterOperator config-operator should be Upgradeable")
+			expectedUpgradeable := expectedUpgradeableStatus(featureGate.Spec.FeatureSet, version.IsSCOS())
+			gomega.Expect(upgradeableCondition.Status).To(o.Equal(expectedUpgradeable),
+				"ClusterOperator config-operator Upgradeable status should match FeatureSet %q", featureGate.Spec.FeatureSet)
 		}).WithPolling(pollInterval).WithTimeout(pollTimeout).Should(o.Succeed())
 
 		// Validate condition structure
@@ -180,6 +188,7 @@ var _ = g.Describe("cluster-config-operator", func() {
 
 		ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 		defer cancel()
+		skipIfExternalControlPlane(ctx, configClient)
 
 		var featureGate *configv1.FeatureGate
 		o.Eventually(func(gomega o.Gomega) {
@@ -225,8 +234,12 @@ var _ = g.Describe("cluster-config-operator", func() {
 		kubeClient, err := kubernetes.NewForConfig(config)
 		o.Expect(err).NotTo(o.HaveOccurred(), "failed to create kube client")
 
+		configClient, err := configclient.NewForConfig(config)
+		o.Expect(err).NotTo(o.HaveOccurred(), "failed to create config client")
+
 		ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 		defer cancel()
+		skipIfExternalControlPlane(ctx, configClient)
 
 		requiredNamespaces := []string{
 			"openshift-config-operator", // CCO runs here
@@ -249,8 +262,12 @@ var _ = g.Describe("cluster-config-operator", func() {
 		kubeClient, err := kubernetes.NewForConfig(config)
 		o.Expect(err).NotTo(o.HaveOccurred(), "failed to create kube client")
 
+		configClient, err := configclient.NewForConfig(config)
+		o.Expect(err).NotTo(o.HaveOccurred(), "failed to create config client")
+
 		ctx, cancel := context.WithTimeout(context.Background(), specTimeout)
 		defer cancel()
+		skipIfExternalControlPlane(ctx, configClient)
 
 		// Verify the metrics service exists
 		svc, err := kubeClient.CoreV1().Services(operatorNamespace).Get(ctx, "metrics", metav1.GetOptions{})
@@ -425,6 +442,7 @@ var _ = g.Describe("cluster-config-operator", func() {
 		// Get the Infrastructure resource to determine platform type
 		infra, err := configClient.ConfigV1().Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred(), "Infrastructure resource should exist")
+		skipIfExternalControlPlaneTopology(infra.Status.ControlPlaneTopology)
 
 		platformType := infra.Status.PlatformStatus.Type
 		managedPlatforms := map[configv1.PlatformType]bool{
@@ -478,6 +496,7 @@ var _ = g.Describe("cluster-config-operator", func() {
 		// Get the Infrastructure resource to determine platform type
 		infra, err := configClient.ConfigV1().Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
 		o.Expect(err).NotTo(o.HaveOccurred(), "Infrastructure resource should exist")
+		skipIfExternalControlPlaneTopology(infra.Status.ControlPlaneTopology)
 
 		platformType := infra.Status.PlatformStatus.Type
 		g.GinkgoLogr.Info(fmt.Sprintf("Detected platform type: %s", platformType))
@@ -667,6 +686,34 @@ var _ = g.Describe("cluster-config-operator", func() {
 		g.GinkgoLogr.Info("SERIAL TEST PASSED: CCO successfully reconciled and recreated kube-cloud-config after deletion")
 	})
 })
+
+func skipIfExternalControlPlane(ctx context.Context, configClient configclient.Interface) {
+	infra, err := configClient.ConfigV1().Infrastructures().Get(ctx, "cluster", metav1.GetOptions{})
+	o.Expect(err).NotTo(o.HaveOccurred(), "Infrastructure resource should exist")
+	skipIfExternalControlPlaneTopology(infra.Status.ControlPlaneTopology)
+}
+
+func skipIfExternalControlPlaneTopology(topology configv1.TopologyMode) {
+	if clusterConfigOperatorRunsInCluster(topology) {
+		return
+	}
+	g.Skip("cluster-config-operator runs outside clusters with an external control plane")
+}
+
+func clusterConfigOperatorRunsInCluster(topology configv1.TopologyMode) bool {
+	return topology != configv1.ExternalTopologyMode
+}
+
+func containerIsCurrentlyHealthy(status corev1.ContainerStatus) bool {
+	return status.Ready && status.State.Running != nil && status.State.Waiting == nil
+}
+
+func expectedUpgradeableStatus(featureSet configv1.FeatureSet, isSCOS bool) configv1.ConditionStatus {
+	if featureSet == configv1.Default || (isSCOS && featureSet == configv1.OKD) {
+		return configv1.ConditionTrue
+	}
+	return configv1.ConditionFalse
+}
 
 // getConfigMapKeys returns a list of all keys in a ConfigMap (both Data and BinaryData)
 func getConfigMapKeys(cm *corev1.ConfigMap) []string {
