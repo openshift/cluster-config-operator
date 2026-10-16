@@ -1,6 +1,7 @@
 package topology_transition_controller
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -8,11 +9,73 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
+	"k8s.io/apimachinery/pkg/runtime"
+	clienttesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 )
+
+type testClusterOperatorLister struct {
+	configlistersv1.ClusterOperatorLister
+	operators []*configv1.ClusterOperator
+	err       error
+}
+
+func (l testClusterOperatorLister) List(labels.Selector) ([]*configv1.ClusterOperator, error) {
+	return l.operators, l.err
+}
+
+func TestValidateClusterOperatorsStableDeterministicMessage(t *testing.T) {
+	a := newTestClusterOperator("a", configv1.ConditionFalse, configv1.ConditionTrue, configv1.ConditionTrue)
+	z := newTestClusterOperator("z", configv1.ConditionFalse, configv1.ConditionTrue, configv1.ConditionTrue)
+	z.Status.Conditions[0], z.Status.Conditions[2] = z.Status.Conditions[2], z.Status.Conditions[0]
+
+	for _, operators := range [][]*configv1.ClusterOperator{{z, a}, {a, z}} {
+		validator := validateClusterOperatorsStable(testClusterOperatorLister{operators: operators})
+		assert.EqualError(t, validator(), "cluster operators are not stable: a: Available=False, Degraded=True, Progressing=True; z: Available=False, Degraded=True, Progressing=True")
+	}
+}
+
+func TestPreflightChecksDistinguishReadErrors(t *testing.T) {
+	fixture := newTestFixture()
+	readErr := errors.New("cache unavailable")
+	fixture.nodeLister = failingNodeLister{NodeLister: fixture.nodeLister, err: readErr}
+	fixture.coLister = testClusterOperatorLister{err: readErr}
+	assert.NoError(t, fixture.cvIndexer.Delete(newTestClusterVersion(false)))
+
+	checks := append(fixture.buildPreflightChecks(), fixture.buildTransitions()[0].PreflightValidators...)
+	assert.Len(t, checks, 10)
+	for _, check := range checks {
+		t.Run(check.Type, func(t *testing.T) {
+			err := check.Validate()
+			var typed *clusterStateReadError
+			assert.ErrorAs(t, err, &typed)
+			if check.Type == "ClusterOperatorsStable" || check.Type == "InfrastructureNodeCountSatisfied" || check.Type == "ControlPlaneNodeCountSatisfied" || check.Type == "ControlPlaneNodesSchedulable" || check.Type == "ControlPlaneNodesReady" || check.Type == "ControlPlaneNodesAreWorkers" {
+				assert.ErrorIs(t, err, readErr)
+			}
+		})
+	}
+
+	fixture = newTestFixture().withEtcdCR(false, true).withEtcdEndpoints(1).withClusterVersion(true).
+		withClusterOperators(newTestClusterOperator("etcd", configv1.ConditionFalse, configv1.ConditionTrue, configv1.ConditionTrue)).
+		withNodes(newTestWorkerNode("worker-0"))
+
+	checks = append(fixture.buildPreflightChecks(), fixture.buildTransitions()[0].PreflightValidators...)
+	for _, check := range checks {
+		t.Run("blocked "+check.Type, func(t *testing.T) {
+			err := check.Validate()
+			if !assert.Error(t, err) {
+				return
+			}
+			var typed *clusterStateReadError
+			assert.False(t, errors.As(err, &typed), "known blockers must not be read errors")
+		})
+	}
+}
 
 func TestValidateClusterOperatorsStable(t *testing.T) {
 	t.Run("passes when all operators stable", func(t *testing.T) {
@@ -21,6 +84,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -36,6 +100,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -50,6 +115,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionTrue),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -64,6 +130,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionFalse, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -80,6 +147,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			},
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -94,6 +162,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("config-operator", configv1.ConditionTrue, configv1.ConditionTrue, configv1.ConditionTrue),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -103,6 +172,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionUnknown, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -117,6 +187,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("kube-apiserver", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionUnknown),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -139,6 +210,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			},
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -161,6 +233,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			},
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -176,6 +249,7 @@ func TestValidateClusterOperatorsStable(t *testing.T) {
 			newTestClusterOperator("monitoring", configv1.ConditionTrue, configv1.ConditionFalse, configv1.ConditionFalse),
 		)
 		v := validateClusterOperatorsStable(fixture.coLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -196,6 +270,7 @@ func TestValidateNoClusterVersionUpgradeInProgress(t *testing.T) {
 	t.Run("fails when an upgrade is in progress", func(t *testing.T) {
 		fixture := newTestFixture().withClusterVersion(true)
 		v := validateNoClusterVersionUpgradeInProgress(fixture.cvLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -206,6 +281,7 @@ func TestValidateNoClusterVersionUpgradeInProgress(t *testing.T) {
 	t.Run("fails when ClusterVersion is missing", func(t *testing.T) {
 		cvIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 		v := validateNoClusterVersionUpgradeInProgress(configlistersv1.NewClusterVersionLister(cvIndexer))
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -222,6 +298,7 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -233,6 +310,7 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-3", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -241,6 +319,7 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-0", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -251,6 +330,7 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 	t.Run("fails when no nodes", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -265,6 +345,7 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestLegacyMasterNode("master-2", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -275,6 +356,7 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -285,6 +367,7 @@ func TestValidateControlPlaneNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-1"),
 		)
 		v := validateControlPlaneNodeCount(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -305,6 +388,7 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-0"),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -317,6 +401,7 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-0"),
 		)
 		v := validateExactInfrastructureNodeCount(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -330,6 +415,7 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestControlPlaneNode("master-1", false),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -339,6 +425,7 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestLegacyMasterNode("master-1", false),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -349,6 +436,7 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestDualRoleNode("master-2", false),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -360,6 +448,7 @@ func TestValidateExactInfrastructureNodeCount(t *testing.T) {
 			newTestWorkerNode("worker-0"),
 		)
 		v := validateExactInfrastructureNodeCount(0, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -376,6 +465,7 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -386,6 +476,7 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", true),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -400,6 +491,7 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", true),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -414,6 +506,7 @@ func TestValidateControlPlaneNodesSchedulable(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesSchedulable(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 }
@@ -426,6 +519,7 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-2", false, readyNodeCondition()),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -436,6 +530,7 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-2", false, notReadyNodeCondition()),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -450,6 +545,7 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -464,6 +560,7 @@ func TestValidateControlPlaneNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-2", false, readyNodeCondition()),
 		)
 		v := validateControlPlaneNodesReady(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 }
@@ -476,6 +573,7 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestDualRoleNode("master-2", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -486,6 +584,7 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestControlPlaneNode("master-2", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -499,6 +598,7 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestLegacyMasterNode("master-1", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(2, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -513,6 +613,7 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestDualRoleNode("master-2", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -524,6 +625,7 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestDualRoleNode("master-3", false),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -534,6 +636,7 @@ func TestValidateControlPlaneNodesAreWorkers(t *testing.T) {
 			newTestWorkerNode("worker-1"),
 		)
 		v := validateControlPlaneNodesAreWorkers(3, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -549,6 +652,7 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestWorkerNodeWithConditions("worker-1", readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -559,6 +663,7 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestDualRoleNodeWithConditions("master-2", false, readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
+
 		assert.NoError(t, v())
 	})
 
@@ -568,6 +673,7 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestWorkerNodeWithConditions("worker-1", notReadyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -580,6 +686,7 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestControlPlaneNodeWithConditions("master-0", false, readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -594,6 +701,7 @@ func TestValidateWorkerNodesReady(t *testing.T) {
 			newTestWorkerNodeWithConditions("worker-0", readyNodeCondition()),
 		)
 		v := validateWorkerNodesReady(2, fixture.nodeLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -612,6 +720,7 @@ func TestValidateEtcdNotProgressing(t *testing.T) {
 	t.Run("fails when progressing", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdCR(true, true)
 		v := validateEtcdNotProgressing(fixture.etcdLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -622,6 +731,7 @@ func TestValidateEtcdNotProgressing(t *testing.T) {
 	t.Run("fails when etcd CR not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateEtcdNotProgressing(fixture.etcdLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -638,6 +748,7 @@ func TestValidateEtcdNotProgressing(t *testing.T) {
 			t.Fatalf("failed to add etcd CR to indexer: %v", err)
 		}
 		v := validateEtcdNotProgressing(fixture.etcdLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -662,6 +773,7 @@ func TestValidateEtcdVotingMembers(t *testing.T) {
 	t.Run("fails when insufficient voting members", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdEndpoints(1)
 		v := validateEtcdVotingMembers(3, fixture.cmLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -672,6 +784,7 @@ func TestValidateEtcdVotingMembers(t *testing.T) {
 	t.Run("fails when configmap not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateEtcdVotingMembers(3, fixture.cmLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -690,6 +803,7 @@ func TestValidateEtcdQuorum(t *testing.T) {
 	t.Run("fails when no quorum", func(t *testing.T) {
 		fixture := newTestFixture().withEtcdCR(false, false)
 		v := validateEtcdQuorum(fixture.etcdLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -700,6 +814,7 @@ func TestValidateEtcdQuorum(t *testing.T) {
 	t.Run("fails when etcd CR not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateEtcdQuorum(fixture.etcdLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -718,6 +833,7 @@ func TestValidateMachineConfigNotPresent(t *testing.T) {
 	t.Run("fails when MachineConfig present", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("50-master-dnsmasq-configuration"))
 		v := validateMachineConfigNotPresent("50-master-dnsmasq-configuration", fixture.mcLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -734,15 +850,28 @@ func TestValidateMachineConfigNotPresent(t *testing.T) {
 }
 
 func TestValidateNewRenderedMasterConfig(t *testing.T) {
+	t.Run("does not accept old config when Infrastructure read fails", func(t *testing.T) {
+		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
+		readErr := errors.New("infrastructure unavailable")
+		client := configfakeclient.NewSimpleClientset(snoInfra(""))
+		client.PrependReactor("get", "infrastructures", func(clienttesting.Action) (bool, runtime.Object, error) {
+			return true, nil, readErr
+		})
+		fixture.infraClient = client.ConfigV1().Infrastructures()
+
+		assert.ErrorIs(t, validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)(), readErr)
+	})
+
 	t.Run("passes when a rendered master config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
 		assert.NoError(t, v())
 	})
 
 	t.Run("fails when no rendered master config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-worker-abc123"))
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -752,7 +881,7 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 
 	t.Run("fails when no MachineConfigs exist", func(t *testing.T) {
 		fixture := newTestFixture()
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
 		err := v()
 		assert.Error(t, err)
 	})
@@ -762,7 +891,8 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 		fixture := newTestFixture().
 			withTransitionStartTime(transitionStart).
 			withMachineConfigs(newTestMachineConfigAt("rendered-master-abc123", transitionStart.Add(-time.Hour)))
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -778,7 +908,8 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 				newTestMachineConfigAt("rendered-master-abc123", transitionStart.Add(-time.Hour)),
 				newTestMachineConfigAt("rendered-master-def456", transitionStart.Add(time.Hour)),
 			)
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
+
 		assert.NoError(t, v())
 	})
 }
@@ -786,13 +917,14 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 	t.Run("passes when a rendered worker config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-worker-abc123"))
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
 		assert.NoError(t, v())
 	})
 
 	t.Run("fails when no rendered worker config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -802,7 +934,7 @@ func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 
 	t.Run("fails when no MachineConfigs exist", func(t *testing.T) {
 		fixture := newTestFixture()
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
 		err := v()
 		assert.Error(t, err)
 	})
@@ -812,7 +944,8 @@ func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 		fixture := newTestFixture().
 			withTransitionStartTime(transitionStart).
 			withMachineConfigs(newTestMachineConfigAt("rendered-worker-abc123", transitionStart.Add(-time.Hour)))
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -831,6 +964,7 @@ func TestValidateMachineConfigPoolReadyCount(t *testing.T) {
 	t.Run("fails when insufficient ready machines", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigPool(newTestMachineConfigPool("master", 3, 1))
 		v := validateMachineConfigPoolReadyCount(3, fixture.mcpLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -841,6 +975,7 @@ func TestValidateMachineConfigPoolReadyCount(t *testing.T) {
 	t.Run("fails when master pool not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateMachineConfigPoolReadyCount(3, fixture.mcpLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -859,6 +994,7 @@ func TestValidateIngressRouterCount(t *testing.T) {
 	t.Run("fails when insufficient available replicas", func(t *testing.T) {
 		fixture := newTestFixture().withIngressController(newTestIngressController("default", 1))
 		v := validateIngressRouterCount(2, fixture.icLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -869,6 +1005,7 @@ func TestValidateIngressRouterCount(t *testing.T) {
 	t.Run("fails when default IngressController not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateIngressRouterCount(2, fixture.icLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -887,6 +1024,7 @@ func TestValidateKubeAPIServerNodeCount(t *testing.T) {
 	t.Run("fails when insufficient node statuses", func(t *testing.T) {
 		fixture := newTestFixture().withKubeAPIServer(newTestKubeAPIServerCR(1))
 		v := validateKubeAPIServerNodeCount(3, fixture.kasLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -897,6 +1035,7 @@ func TestValidateKubeAPIServerNodeCount(t *testing.T) {
 	t.Run("fails when kubeapiservers/cluster not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateKubeAPIServerNodeCount(3, fixture.kasLister)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -918,7 +1057,9 @@ func TestValidateOpenShiftAPIServerReadyReplicas(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			fixture := newTestFixture().withOpenShiftAPIServerDeployment(newTestOpenShiftAPIServerDeployment(tc.readyReplicas))
 			v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasDeploymentLister)
+
 			err := v()
+
 			if tc.wantErr == "" {
 				assert.NoError(t, err)
 				return
@@ -930,7 +1071,9 @@ func TestValidateOpenShiftAPIServerReadyReplicas(t *testing.T) {
 	t.Run("fails when deployment is not found", func(t *testing.T) {
 		fixture := newTestFixture()
 		v := validateOpenShiftAPIServerReadyReplicas(3, fixture.oasDeploymentLister)
+
 		err := v()
+
 		if !assert.Error(t, err) {
 			return
 		}
