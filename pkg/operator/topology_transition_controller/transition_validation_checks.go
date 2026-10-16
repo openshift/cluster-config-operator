@@ -21,16 +21,19 @@ import (
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
+	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
 
 const (
-	etcdEndpointsConfigMapName      = "etcd-endpoints"
-	etcdNamespace                   = "openshift-etcd"
-	etcdMembersAvailableCondition   = "EtcdMembersAvailable"
-	etcdMembersProgressingCondition = "EtcdMembersProgressing"
-	selfClusterOperatorName         = "config-operator"
-	clusterVersionName              = "version"
+	etcdEndpointsConfigMapName       = "etcd-endpoints"
+	etcdNamespace                    = "openshift-etcd"
+	etcdMembersAvailableCondition    = "EtcdMembersAvailable"
+	etcdMembersProgressingCondition  = "EtcdMembersProgressing"
+	selfClusterOperatorName          = "config-operator"
+	clusterVersionName               = "version"
+	openShiftAPIServerNamespace      = "openshift-apiserver"
+	openShiftAPIServerDeploymentName = "apiserver"
 )
 
 // validatePreflight runs global preflight checks followed by
@@ -546,16 +549,16 @@ func validateKubeAPIServerNodeCount(required int, kubeAPIServerLister operatorv1
 }
 
 // validateOpenShiftAPIServerReadyReplicas returns a TransitionValidatorFunc that
-// checks the openshift-apiserver operator has the required number of ready replicas.
-func validateOpenShiftAPIServerReadyReplicas(required int, openShiftAPIServerLister operatorv1listers.OpenShiftAPIServerLister) TransitionValidatorFunc {
+// checks the openshift-apiserver operand Deployment has the required number of ready replicas.
+func validateOpenShiftAPIServerReadyReplicas(required int, deploymentLister appsv1listers.DeploymentNamespaceLister) TransitionValidatorFunc {
 	return func() error {
-		oas, err := openShiftAPIServerLister.Get("cluster")
+		deployment, err := deploymentLister.Get(openShiftAPIServerDeploymentName)
 		if err != nil {
-			return fmt.Errorf("failed to get openshiftapiservers.operator.openshift.io/cluster: %w", err)
+			return fmt.Errorf("failed to get deployments.apps/%s/%s: %w", openShiftAPIServerNamespace, openShiftAPIServerDeploymentName, err)
 		}
 
-		if oas.Status.ReadyReplicas < int32(required) {
-			return fmt.Errorf("insufficient openshift-apiserver ready replicas: need %d, have %d", required, oas.Status.ReadyReplicas)
+		if deployment.Status.ReadyReplicas < int32(required) {
+			return fmt.Errorf("insufficient openshift-apiserver ready replicas: need %d, have %d", required, deployment.Status.ReadyReplicas)
 		}
 
 		return nil

@@ -79,7 +79,7 @@ func newPublicEvaluationTestController(t *testing.T, informer cache.SharedIndexI
 	})
 	controller := NewController(operatorClient, client.ConfigV1(), configlistersv1.NewInfrastructureLister(indexer), informer,
 		f.nodeLister, informer, f.cmLister, informer, f.etcdLister, informer, f.coLister, informer, f.cvLister, informer,
-		f.kasLister, informer, f.oasLister, informer, f.icLister, informer, f.mcLister, informer, f.mcpLister, informer,
+		f.kasLister, informer, f.oasDeploymentLister, informer, f.icLister, informer, f.mcLister, informer, f.mcpLister, informer,
 		clocktesting.NewFakeClock(evaluationTime), newTestSyncContext().Recorder())
 
 	return publicEvaluationTestController{controller, writes}, client

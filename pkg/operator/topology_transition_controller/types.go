@@ -7,6 +7,7 @@ import (
 	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
+	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
 
@@ -41,15 +42,15 @@ type TransitionDescriptor struct {
 }
 
 type TransitionValidationListers struct {
-	NodeLister               corev1listers.NodeLister
-	EtcdConfigMapLister      corev1listers.ConfigMapNamespaceLister
-	EtcdLister               operatorv1listers.EtcdLister
-	KubeAPIServerLister      operatorv1listers.KubeAPIServerLister
-	OpenShiftAPIServerLister operatorv1listers.OpenShiftAPIServerLister
-	IngressControllerLister  operatorv1listers.IngressControllerNamespaceLister
-	MachineConfigLister      machineconfigv1listers.MachineConfigLister
-	MachineConfigPoolLister  machineconfigv1listers.MachineConfigPoolLister
-	InfraClient              configv1client.InfrastructureInterface
+	NodeLister                         corev1listers.NodeLister
+	EtcdConfigMapLister                corev1listers.ConfigMapNamespaceLister
+	EtcdLister                         operatorv1listers.EtcdLister
+	KubeAPIServerLister                operatorv1listers.KubeAPIServerLister
+	OpenShiftAPIServerDeploymentLister appsv1listers.DeploymentNamespaceLister
+	IngressControllerLister            operatorv1listers.IngressControllerNamespaceLister
+	MachineConfigLister                machineconfigv1listers.MachineConfigLister
+	MachineConfigPoolLister            machineconfigv1listers.MachineConfigPoolLister
+	InfraClient                        configv1client.InfrastructureInterface
 }
 
 // buildSupportedTransitions returns the set of permitted topology transitions
@@ -93,7 +94,7 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 				validateMachineConfigPoolReadyCount(3, listers.MachineConfigPoolLister),
 				validateIngressRouterCount(2, listers.IngressControllerLister),
 				validateKubeAPIServerNodeCount(3, listers.KubeAPIServerLister),
-				validateOpenShiftAPIServerReadyReplicas(3, listers.OpenShiftAPIServerLister),
+				validateOpenShiftAPIServerReadyReplicas(3, listers.OpenShiftAPIServerDeploymentLister),
 			},
 		},
 	}

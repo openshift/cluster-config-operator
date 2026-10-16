@@ -18,6 +18,7 @@ import (
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
 	klog "k8s.io/klog/v2"
@@ -67,8 +68,8 @@ func NewController(
 	clusterVersionInformer cache.SharedIndexInformer,
 	kubeAPIServerLister operatorv1listers.KubeAPIServerLister,
 	kubeAPIServerInformer cache.SharedIndexInformer,
-	openShiftAPIServerLister operatorv1listers.OpenShiftAPIServerLister,
-	openShiftAPIServerInformer cache.SharedIndexInformer,
+	openShiftAPIServerDeploymentLister appsv1listers.DeploymentNamespaceLister,
+	openShiftAPIServerDeploymentInformer cache.SharedIndexInformer,
 	ingressControllerLister operatorv1listers.IngressControllerNamespaceLister,
 	ingressControllerInformer cache.SharedIndexInformer,
 	machineConfigLister machineconfigv1listers.MachineConfigLister,
@@ -79,15 +80,15 @@ func NewController(
 	recorder events.Recorder,
 ) factory.Controller {
 	listers := TransitionValidationListers{
-		NodeLister:               nodeLister,
-		EtcdConfigMapLister:      etcdConfigMapLister,
-		EtcdLister:               etcdLister,
-		KubeAPIServerLister:      kubeAPIServerLister,
-		OpenShiftAPIServerLister: openShiftAPIServerLister,
-		IngressControllerLister:  ingressControllerLister,
-		MachineConfigLister:      machineConfigLister,
-		MachineConfigPoolLister:  machineConfigPoolLister,
-		InfraClient:              infraClient.Infrastructures(),
+		NodeLister:                         nodeLister,
+		EtcdConfigMapLister:                etcdConfigMapLister,
+		EtcdLister:                         etcdLister,
+		KubeAPIServerLister:                kubeAPIServerLister,
+		OpenShiftAPIServerDeploymentLister: openShiftAPIServerDeploymentLister,
+		IngressControllerLister:            ingressControllerLister,
+		MachineConfigLister:                machineConfigLister,
+		MachineConfigPoolLister:            machineConfigPoolLister,
+		InfraClient:                        infraClient.Infrastructures(),
 	}
 
 	c := &TopologyTransitionController{
@@ -113,7 +114,7 @@ func NewController(
 			clusterOperatorInformer,
 			clusterVersionInformer,
 			kubeAPIServerInformer,
-			openShiftAPIServerInformer,
+			openShiftAPIServerDeploymentInformer,
 			ingressControllerInformer,
 			machineConfigInformer,
 			machineConfigPoolInformer,
