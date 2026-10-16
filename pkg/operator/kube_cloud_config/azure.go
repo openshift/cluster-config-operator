@@ -26,6 +26,7 @@ var (
 		configv1.AzureChinaCloud:        true,
 		configv1.AzureGermanCloud:       true,
 		configv1.AzureStackCloud:        true,
+		configv1.AzureUSSecCloud:        true,
 	}
 
 	validAzureCloudNameValues = func() []string {
