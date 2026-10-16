@@ -10,7 +10,6 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
-	applyoperatorv1 "github.com/openshift/client-go/operator/applyconfigurations/operator/v1"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"github.com/stretchr/testify/assert"
@@ -104,24 +103,6 @@ func TestDiscoveryFailureOwnsSeparateDegradedConditionAndRecovers(t *testing.T) 
 	assert.NoError(t, err)
 	assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, evaluationDegradedCondition))
 	assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, "TopologyTransitionControllerDegraded"))
-}
-
-type reportingOperatorClient struct {
-	v1helpers.OperatorClient
-	reports chan<- *operatorv1.OperatorStatus
-}
-
-func (c reportingOperatorClient) ApplyOperatorStatus(ctx context.Context, manager string, configuration *applyoperatorv1.OperatorStatusApplyConfiguration) error {
-	if err := c.OperatorClient.ApplyOperatorStatus(ctx, manager, configuration); err != nil {
-		return err
-	}
-
-	_, status, _, err := c.OperatorClient.GetOperatorState()
-	if err == nil {
-		c.reports <- status.DeepCopy()
-	}
-
-	return err
 }
 
 func TestFreshInfrastructureReadFailureStillRunsActiveChecks(t *testing.T) {

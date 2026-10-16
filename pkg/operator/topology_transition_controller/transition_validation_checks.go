@@ -437,7 +437,10 @@ func validateMachineConfigNotPresent(config string, machineConfigLister machinec
 // transitionStartTime reads the active transition's API condition. A missing
 // condition in the safety-net path leaves no start time to compare against.
 func transitionStartTime(infraClient configv1client.InfrastructureInterface) (time.Time, bool, error) {
-	infra, err := infraClient.Get(context.Background(), "cluster", metav1.GetOptions{})
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	infra, err := infraClient.Get(ctx, "cluster", metav1.GetOptions{})
 	if err != nil {
 		return time.Time{}, false, fmt.Errorf("failed to read Infrastructure transition start time: %w", err)
 	}
