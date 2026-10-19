@@ -11,6 +11,10 @@ import (
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
 
+const (
+	minWorkerCapableNodes = 2
+)
+
 // TransitionValidatorFunc defines validation functions for transitions
 type TransitionValidatorFunc func() error
 
@@ -54,6 +58,12 @@ type TransitionValidationListers struct {
 	MachineConfigLister                machineconfigv1listers.MachineConfigLister
 	MachineConfigPoolLister            machineconfigv1listers.MachineConfigPoolLister
 	OperatorClient                     v1helpers.OperatorClient
+
+	// Infrastructure transition listers
+	ImageRegistryDeploymentLister appsv1listers.DeploymentNamespaceLister
+	ConsoleDeploymentLister       appsv1listers.DeploymentNamespaceLister
+	OAuthDeploymentLister         appsv1listers.DeploymentNamespaceLister
+	MonitoringStatefulSetLister   appsv1listers.StatefulSetNamespaceLister
 }
 
 // buildSupportedTransitions returns the set of permitted topology transitions
@@ -100,6 +110,36 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 				validateOpenShiftAPIServerReadyReplicas(3, listers.OpenShiftAPIServerDeploymentLister),
 			},
 		},
+		// Infrastructure SingleReplica to HighlyAvailable
+		// Requires HA control plane and sufficient worker-capable nodes.
+		{
+			From: configv1.InfrastructureStatus{
+				ControlPlaneTopology:   configv1.HighlyAvailableTopologyMode,
+				InfrastructureTopology: configv1.SingleReplicaTopologyMode,
+			},
+			To: configv1.InfrastructureSpec{
+				InfrastructureTopology: configv1.HighlyAvailableTopologyMode,
+			},
+			PreflightValidators: []PreflightCheck{
+				{Type: "WorkerCapableNodeCountSatisfied", Validate: validateWorkerCapableNodeCount(minWorkerCapableNodes, listers.NodeLister)},
+				{Type: "WorkerCapableNodesReady", Validate: validateWorkerCapableNodesReady(minWorkerCapableNodes, listers.NodeLister)},
+				{Type: "WorkerCapableNodesSchedulable", Validate: validateWorkerCapableNodesSchedulable(minWorkerCapableNodes, listers.NodeLister)},
+				{Type: "WorkerCapableNodesUntainted", Validate: validateWorkerCapableNodesUntainted(minWorkerCapableNodes, listers.NodeLister)},
+			},
+			UpdateStatus: func(infra *configv1.Infrastructure) {
+				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+			},
+			TransitionValidators: []TransitionValidatorFunc{
+				validateWorkerCapableNodesReady(minWorkerCapableNodes, listers.NodeLister),
+				validateWorkerCapableNodesSchedulable(minWorkerCapableNodes, listers.NodeLister),
+				validateIngressRouterCount(minWorkerCapableNodes, listers.IngressControllerLister),
+				validateDeploymentReadyReplicas("image-registry", minWorkerCapableNodes, listers.ImageRegistryDeploymentLister),
+				validateDeploymentReadyReplicas("console", minWorkerCapableNodes, listers.ConsoleDeploymentLister),
+				validateDeploymentReadyReplicas("oauth-openshift", minWorkerCapableNodes, listers.OAuthDeploymentLister),
+				validateStatefulSetReadyReplicas("prometheus-k8s", minWorkerCapableNodes, listers.MonitoringStatefulSetLister),
+				validateStatefulSetReadyReplicas("alertmanager-main", minWorkerCapableNodes, listers.MonitoringStatefulSetLister),
+			},
+		},
 	}
 }
 
@@ -129,6 +169,9 @@ func matchesSpec(descriptor, actual configv1.InfrastructureSpec) bool {
 	if descriptor.ControlPlaneTopology != "" && descriptor.ControlPlaneTopology != actual.ControlPlaneTopology {
 		return false
 	}
+	if descriptor.InfrastructureTopology != "" && descriptor.InfrastructureTopology != actual.InfrastructureTopology {
+		return false
+	}
 	return true
 }
 
@@ -146,8 +189,15 @@ func findTransition(infra *configv1.Infrastructure, transitions []TransitionDesc
 	if infra.Status.PlatformStatus != nil {
 		platformType = infra.Status.PlatformStatus.Type
 	}
-
-	return nil, fmt.Errorf("transition from {controlPlane=%s, infrastructure=%s, platform=%s} to {controlPlane=%s} is not supported",
+	specCP := infra.Spec.ControlPlaneTopology
+	if specCP == "" {
+		specCP = infra.Status.ControlPlaneTopology
+	}
+	specInfra := infra.Spec.InfrastructureTopology
+	if specInfra == "" {
+		specInfra = infra.Status.InfrastructureTopology
+	}
+	return nil, fmt.Errorf("transition from {controlPlane=%s, infrastructure=%s, platform=%s} to {controlPlane=%s, infrastructure=%s} is not supported",
 		infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology,
-		platformType, infra.Spec.ControlPlaneTopology)
+		platformType, specCP, specInfra)
 }

@@ -59,7 +59,7 @@ func TestEvaluationStartsWithoutTransitionQueueWork(t *testing.T) {
 	defer func() { cancel(); <-done }()
 
 	updated := receiveCompletedEvaluation(t, ctx, controller.writes)
-	assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
+	assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 2)
 }
 
 type publicEvaluationTestController struct {
@@ -86,6 +86,7 @@ func newPublicEvaluationTestController(t *testing.T, informer cache.SharedIndexI
 	controller := NewController(operatorClient, client.ConfigV1(), configlistersv1.NewInfrastructureLister(indexer), informer,
 		f.nodeLister, informer, f.cmLister, informer, f.etcdLister, informer, f.coLister, informer, f.cvLister, informer,
 		f.kasLister, informer, f.oasDeploymentLister, informer, f.icLister, informer, f.mcLister, informer, f.mcpLister, informer,
+		f.imageRegistryDeploymentLister, informer, f.consoleDeploymentLister, informer, f.oauthDeploymentLister, informer, f.monitoringStatefulSetLister, informer,
 		clocktesting.NewFakeClock(evaluationTime), newTestSyncContext().Recorder())
 
 	return publicEvaluationTestController{controller, writes}, client
@@ -633,7 +634,7 @@ func TestEvaluationWaitsForAllCachesAndDoesNotStartWhenStoppedEarly(t *testing.T
 
 			close(gate)
 			updated := receiveCompletedEvaluation(t, ctx, controller.writes)
-			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
+			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 2)
 			cancel()
 			receiveEvaluation(t, t.Context(), done)
 			assert.Equal(t, registrations+6, informer.registered.Load())

@@ -10,6 +10,7 @@ import (
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
+	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
@@ -50,7 +51,7 @@ func TestPreflightChecksDistinguishReadErrors(t *testing.T) {
 	assert.NoError(t, fixture.cvIndexer.Delete(newTestClusterVersion(false)))
 
 	checks := append(fixture.buildPreflightChecks(), fixture.buildTransitions()[0].PreflightValidators...)
-	assert.Len(t, checks, 10)
+	assert.Len(t, checks, 11)
 	for _, check := range checks {
 		t.Run(check.Type, func(t *testing.T) {
 			err := check.Validate()
@@ -65,6 +66,9 @@ func TestPreflightChecksDistinguishReadErrors(t *testing.T) {
 	fixture = newTestFixture().withEtcdCR(false, true).withEtcdEndpoints(1).withClusterVersion(true).
 		withClusterOperators(newTestClusterOperator("etcd", configv1.ConditionFalse, configv1.ConditionTrue, configv1.ConditionTrue)).
 		withNodes(newTestWorkerNode("worker-0"))
+	if err := fixture.cvIndexer.Update(newTestClusterVersionWithUpgradeable(true, configv1.ConditionFalse)); err != nil {
+		t.Fatal(err)
+	}
 
 	checks = append(fixture.buildPreflightChecks(), fixture.buildTransitions()[0].PreflightValidators...)
 	for _, check := range checks {
@@ -1001,5 +1005,217 @@ func TestValidateOpenShiftAPIServerReadyReplicas(t *testing.T) {
 		}
 		assert.Contains(t, err.Error(), "failed to get deployments.apps/openshift-apiserver/apiserver")
 		assert.True(t, apierrors.IsNotFound(err), "expected wrapped NotFound error")
+	})
+}
+
+func TestValidateDeploymentReadyReplicas(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		readyReplicas int32
+		wantErr       string
+	}{
+		{name: "fails below required count", readyReplicas: 1, wantErr: "insufficient image-registry ready replicas: need 2, have 1"},
+		{name: "passes at required count", readyReplicas: 2},
+		{name: "passes above required count", readyReplicas: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newTestFixture().withImageRegistryDeployment(tc.readyReplicas)
+			v := validateDeploymentReadyReplicas("image-registry", 2, fixture.imageRegistryDeploymentLister)
+			err := v()
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tc.wantErr)
+		})
+	}
+
+	t.Run("fails when deployment is not found", func(t *testing.T) {
+		fixture := newTestFixture()
+		v := validateDeploymentReadyReplicas("image-registry", 2, fixture.imageRegistryDeploymentLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "failed to get deployment image-registry")
+	})
+}
+
+func TestValidateStatefulSetReadyReplicas(t *testing.T) {
+	for _, tc := range []struct {
+		name          string
+		readyReplicas int32
+		wantErr       string
+	}{
+		{name: "fails below required count", readyReplicas: 1, wantErr: "insufficient prometheus-k8s ready replicas: need 2, have 1"},
+		{name: "passes at required count", readyReplicas: 2},
+		{name: "passes above required count", readyReplicas: 3},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			fixture := newTestFixture().withMonitoringStatefulSet("prometheus-k8s", tc.readyReplicas)
+			v := validateStatefulSetReadyReplicas("prometheus-k8s", 2, fixture.monitoringStatefulSetLister)
+			err := v()
+			if tc.wantErr == "" {
+				assert.NoError(t, err)
+				return
+			}
+			assert.EqualError(t, err, tc.wantErr)
+		})
+	}
+
+	t.Run("fails when statefulset is not found", func(t *testing.T) {
+		fixture := newTestFixture()
+		v := validateStatefulSetReadyReplicas("prometheus-k8s", 2, fixture.monitoringStatefulSetLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "failed to get statefulset prometheus-k8s")
+	})
+}
+
+func TestValidateClusterVersionUpgradeable(t *testing.T) {
+	t.Run("passes when Upgradeable is True", func(t *testing.T) {
+		fixture := newTestFixture().withClusterVersion(false)
+		cv := newTestClusterVersionWithUpgradeable(false, configv1.ConditionTrue)
+		if err := fixture.cvIndexer.Update(cv); err != nil {
+			t.Fatal(err)
+		}
+		v := validateClusterVersionUpgradeable(fixture.cvLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("passes when Upgradeable condition is absent", func(t *testing.T) {
+		fixture := newTestFixture()
+		v := validateClusterVersionUpgradeable(fixture.cvLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("fails when Upgradeable is False", func(t *testing.T) {
+		fixture := newTestFixture()
+		cv := newTestClusterVersionWithUpgradeable(false, configv1.ConditionFalse)
+		if err := fixture.cvIndexer.Update(cv); err != nil {
+			t.Fatal(err)
+		}
+		v := validateClusterVersionUpgradeable(fixture.cvLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "cluster is not upgradeable")
+		assert.Contains(t, err.Error(), "Upgradeable=False")
+	})
+}
+
+func newTestClusterVersionWithUpgradeable(progressing bool, upgradeableStatus configv1.ConditionStatus) *configv1.ClusterVersion {
+	progressingStatus := configv1.ConditionFalse
+	if progressing {
+		progressingStatus = configv1.ConditionTrue
+	}
+	return &configv1.ClusterVersion{
+		ObjectMeta: metav1.ObjectMeta{Name: clusterVersionName},
+		Status: configv1.ClusterVersionStatus{
+			Conditions: []configv1.ClusterOperatorStatusCondition{
+				{Type: configv1.OperatorProgressing, Status: progressingStatus},
+				{Type: configv1.OperatorUpgradeable, Status: upgradeableStatus},
+			},
+		},
+	}
+}
+
+func TestHasBlockingTaints(t *testing.T) {
+	t.Run("no taints", func(t *testing.T) {
+		node := newTestWorkerNodeWithConditions("worker-0", readyNodeCondition())
+		assert.False(t, hasBlockingTaints(node))
+	})
+
+	t.Run("kubelet-managed taint is not blocking", func(t *testing.T) {
+		node := newTestWorkerNodeWithConditions("worker-0", readyNodeCondition())
+		node.Spec.Taints = []corev1.Taint{
+			{Key: "node.kubernetes.io/not-ready", Effect: corev1.TaintEffectNoSchedule},
+		}
+		assert.False(t, hasBlockingTaints(node))
+	})
+
+	t.Run("master role taint is not blocking", func(t *testing.T) {
+		node := newTestDualRoleNodeWithConditions("master-0", false, readyNodeCondition())
+		node.Spec.Taints = []corev1.Taint{
+			{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+		}
+		assert.False(t, hasBlockingTaints(node))
+	})
+
+	t.Run("control-plane role taint is not blocking", func(t *testing.T) {
+		node := newTestDualRoleNodeWithConditions("master-0", false, readyNodeCondition())
+		node.Spec.Taints = []corev1.Taint{
+			{Key: "node-role.kubernetes.io/control-plane", Effect: corev1.TaintEffectNoSchedule},
+		}
+		assert.False(t, hasBlockingTaints(node))
+	})
+
+	t.Run("user NoSchedule taint is blocking", func(t *testing.T) {
+		node := newTestWorkerNodeWithConditions("worker-0", readyNodeCondition())
+		node.Spec.Taints = []corev1.Taint{
+			{Key: "custom/dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule},
+		}
+		assert.True(t, hasBlockingTaints(node))
+	})
+
+	t.Run("user NoExecute taint is blocking", func(t *testing.T) {
+		node := newTestWorkerNodeWithConditions("worker-0", readyNodeCondition())
+		node.Spec.Taints = []corev1.Taint{
+			{Key: "custom/dedicated", Value: "gpu", Effect: corev1.TaintEffectNoExecute},
+		}
+		assert.True(t, hasBlockingTaints(node))
+	})
+
+	t.Run("PreferNoSchedule taint is not blocking", func(t *testing.T) {
+		node := newTestWorkerNodeWithConditions("worker-0", readyNodeCondition())
+		node.Spec.Taints = []corev1.Taint{
+			{Key: "custom/preferred", Effect: corev1.TaintEffectPreferNoSchedule},
+		}
+		assert.False(t, hasBlockingTaints(node))
+	})
+}
+
+func TestValidateWorkerCapableNodesUntainted(t *testing.T) {
+	t.Run("passes when nodes are untainted", func(t *testing.T) {
+		fixture := newTestFixture().withNodes(
+			newTestWorkerNodeWithConditions("worker-0", readyNodeCondition()),
+			newTestWorkerNodeWithConditions("worker-1", readyNodeCondition()),
+		)
+		v := validateWorkerCapableNodesUntainted(2, fixture.nodeLister)
+		assert.NoError(t, v())
+	})
+
+	t.Run("fails when tainted nodes reduce count below required", func(t *testing.T) {
+		taintedNode := newTestWorkerNodeWithConditions("worker-1", readyNodeCondition())
+		taintedNode.Spec.Taints = []corev1.Taint{
+			{Key: "custom/dedicated", Value: "gpu", Effect: corev1.TaintEffectNoSchedule},
+		}
+		fixture := newTestFixture().withNodes(
+			newTestWorkerNodeWithConditions("worker-0", readyNodeCondition()),
+			taintedNode,
+		)
+		v := validateWorkerCapableNodesUntainted(2, fixture.nodeLister)
+		err := v()
+		if !assert.Error(t, err) {
+			return
+		}
+		assert.Contains(t, err.Error(), "insufficient untainted worker-capable nodes")
+	})
+
+	t.Run("passes with dual-role nodes bearing only master taint", func(t *testing.T) {
+		node0 := newTestDualRoleNodeWithConditions("master-0", false, readyNodeCondition())
+		node0.Spec.Taints = []corev1.Taint{
+			{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+		}
+		node1 := newTestDualRoleNodeWithConditions("master-1", false, readyNodeCondition())
+		node1.Spec.Taints = []corev1.Taint{
+			{Key: "node-role.kubernetes.io/master", Effect: corev1.TaintEffectNoSchedule},
+		}
+		fixture := newTestFixture().withNodes(node0, node1)
+		v := validateWorkerCapableNodesUntainted(2, fixture.nodeLister)
+		assert.NoError(t, v())
 	})
 }

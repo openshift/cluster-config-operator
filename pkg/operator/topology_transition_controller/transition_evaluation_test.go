@@ -34,7 +34,7 @@ func TestEvaluateTransitionsHealthyWithoutRequest(t *testing.T) {
 			ctrl := newTestControllerWithClock(infra, nil, fixture.buildPreflightChecks(), fixture.buildTransitions(), clocktesting.NewFakePassiveClock(evaluationTime))
 
 			transitions, condition, err := ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
 				return
 			}
 
@@ -49,7 +49,7 @@ func TestEvaluateTransitionsHealthyWithoutRequest(t *testing.T) {
 
 			expectedTypes := []string{
 				configv1.TopologyTransitionAvailableConditionType,
-				"ClusterOperatorsStable", "NoClusterVersionUpgradeInProgress",
+				"ClusterOperatorsStable", "NoClusterVersionUpgradeInProgress", "ClusterVersionUpgradeable",
 				"ControlPlaneNodeCountSatisfied", "InfrastructureNodeCountSatisfied",
 				"ControlPlaneNodesSchedulable", "ControlPlaneNodesReady", "ControlPlaneNodesAreWorkers",
 				"EtcdQuorumAvailable", "EtcdNotProgressing", "EtcdVotingMembersSatisfied",
@@ -78,12 +78,12 @@ func TestEvaluateTransitionsEmittedConditionsValid(t *testing.T) {
 		transitions int
 		readFailure bool
 	}{
-		{name: "healthy", transitions: 1},
-		{name: "multiple blockers", transitions: 1, change: func(f *testFixture, _ *configv1.Infrastructure) {
+		{name: "healthy", transitions: 2},
+		{name: "multiple blockers", transitions: 2, change: func(f *testFixture, _ *configv1.Infrastructure) {
 			f.withNodes(newTestDualRoleNodeWithConditions("master-2", true, notReadyNodeCondition())).
 				withEtcdCR(false, true).withEtcdEndpoints(1).withClusterVersion(true)
 		}},
-		{name: "unsupported platform", transitions: 1, change: func(_ *testFixture, i *configv1.Infrastructure) {
+		{name: "unsupported platform", transitions: 2, change: func(_ *testFixture, i *configv1.Infrastructure) {
 			i.Status.PlatformStatus.Type = configv1.AWSPlatformType
 		}},
 		{name: "typed read failure", readFailure: true, change: func(f *testFixture, _ *configv1.Infrastructure) {
@@ -108,7 +108,7 @@ func TestEvaluateTransitionsEmittedConditionsValid(t *testing.T) {
 				assert.NoError(t, err)
 			}
 			assert.Len(t, transitions, tc.transitions)
-			assert.LessOrEqual(t, len(transitions), 1)
+			assert.LessOrEqual(t, len(transitions), 2)
 			assert.Equal(t, configv1.TopologyTransitionsEvaluatedConditionType, condition.Type)
 			assert.Equal(t, infra.Generation, condition.ObservedGeneration)
 
@@ -197,7 +197,7 @@ func TestEvaluateTransitionsMessageBounds(t *testing.T) {
 		ctrl := newTestControllerWithClock(infra, nil, fixture.buildPreflightChecks(), fixture.buildTransitions(), clocktesting.NewFakePassiveClock(evaluationTime))
 
 		transitions, condition, err := ctrl.evaluateTransitions(infra)
-		if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+		if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
 			return
 		}
 		assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -307,7 +307,7 @@ func TestEvaluateTransitionsReadFailureAndRecovery(t *testing.T) {
 
 			if tc.prior {
 				transitions, condition, err := ctrl.evaluateTransitions(infra)
-				if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+				if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
 					return
 				}
 				infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Transitions: transitions, Conditions: []metav1.Condition{condition}}
@@ -355,7 +355,7 @@ func TestEvaluateTransitionsReadFailureAndRecovery(t *testing.T) {
 			ctrl.transitions = fixture.buildTransitions()
 
 			transitions, condition, err = ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -527,14 +527,14 @@ func TestEvaluateTransitionsBlockersAndRecovery(t *testing.T) {
 			ctrl.clock = clocktesting.NewFakePassiveClock(evaluationTime)
 
 			transitions, condition, err := ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, condition.Status)
 			assert.Equal(t, "EvaluationComplete", condition.Reason)
 
 			evaluations := transitions[0].Evaluations
-			assert.Len(t, evaluations, 11, "all checks must run, including after a blocker")
+			assert.Len(t, evaluations, 12, "all checks must run, including after a blocker")
 			available := meta.FindStatusCondition(evaluations, configv1.TopologyTransitionAvailableConditionType)
 			if !assert.NotNil(t, available) {
 				return
@@ -573,7 +573,7 @@ func TestEvaluateTransitionsBlockersAndRecovery(t *testing.T) {
 				withEtcdCR(true, false).withEtcdEndpoints(3).withClusterVersion(false)
 
 			transitions, condition, err = ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -592,7 +592,7 @@ func TestEvaluateTransitionsRetainsDescriptorAfterHA(t *testing.T) {
 
 	transitions, condition, err := ctrl.evaluateTransitions(infra)
 
-	if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+	if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
 		return
 	}
 	assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -606,7 +606,7 @@ func TestEvaluateTransitionsRetainsDescriptorAfterHA(t *testing.T) {
 		assert.Contains(t, available.Message, "SingleReplica")
 		assert.Contains(t, available.Message, "HighlyAvailable")
 	}
-	assert.Len(t, transitions[0].Evaluations, 11)
+	assert.Len(t, transitions[0].Evaluations, 12)
 }
 
 // TestEvaluateTransitionsReportsEachDescriptorIndependently checks that one target can be blocked
