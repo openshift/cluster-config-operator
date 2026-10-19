@@ -12,16 +12,45 @@ import (
 	machineconfigurationv1 "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
 )
 
 // MachineConfigInformer provides access to a shared informer and lister for
-// MachineConfigs.
+// MachineConfigs. Prefer using the type-safe variant (see [TypedMachineConfigInformer]).
 type MachineConfigInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() machineconfigurationv1.MachineConfigLister
 }
+
+// TypedMachineConfigInformer provides access to a shared informer and lister for
+// MachineConfigs, including the type-safe TypedInformer variant.
+// It is a superset of MachineConfigInformer.
+type TypedMachineConfigInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() MachineConfigIndexInformer
+	Lister() machineconfigurationv1.MachineConfigLister
+}
+
+// MachineConfigIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type MachineConfigIndexInformer cache.TypedSharedIndexInformer[*apimachineconfigurationv1.MachineConfig]
+
+// MachineConfigHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for MachineConfig.
+type MachineConfigHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apimachineconfigurationv1.MachineConfig]
+
+// MachineConfigDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for MachineConfig.
+type MachineConfigDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apimachineconfigurationv1.MachineConfig]
+
+// MachineConfigFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for MachineConfig.
+type MachineConfigFilteringHandler = cache.TypedFilteringResourceEventHandler[*apimachineconfigurationv1.MachineConfig]
+
+// MachineConfigIndexers is a specialization of [cache.TypedIndexers] for MachineConfig.
+type MachineConfigIndexers = cache.TypedIndexers[*apimachineconfigurationv1.MachineConfig]
+
+// DeletedMachineConfig is a specialization of [cache.DeletedObject] for MachineConfig.
+type DeletedMachineConfig = cache.DeletedObject[*apimachineconfigurationv1.MachineConfig]
 
 type machineConfigInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -31,55 +60,132 @@ type machineConfigInformer struct {
 // NewMachineConfigInformer constructs a new informer for MachineConfig type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedMachineConfigInformer]).
 func NewMachineConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredMachineConfigInformer(client, resyncPeriod, indexers, nil)
+	return NewMachineConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedMachineConfigInformer constructs a new informer for MachineConfig type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedMachineConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers MachineConfigIndexers) MachineConfigIndexInformer {
+	return NewTypedMachineConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredMachineConfigInformer constructs a new informer for MachineConfig type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredMachineConfigInformer]).
 func NewFilteredMachineConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return cache.NewSharedIndexInformer(
+	return NewTypedMachineConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredMachineConfigInformer constructs a new informer for MachineConfig type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredMachineConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers MachineConfigIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) MachineConfigIndexInformer {
+	return NewTypedMachineConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
+}
+
+// NewMachineConfigInformerWithOptions constructs a new informer for MachineConfig type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedMachineConfigInformerWithOptions]).
+func NewMachineConfigInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedMachineConfigInformerWithOptions(client, options)
+}
+
+// NewTypedMachineConfigInformerWithOptions constructs a new informer for MachineConfig type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedMachineConfigInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) MachineConfigIndexInformer {
+	gvr := schema.GroupVersionResource{Group: "machineconfiguration.openshift.io", Version: "v1", Resource: "machineconfigs"}
+	identifier := options.InformerName.WithResource(gvr)
+	tweakListOptions := options.TweakListOptions
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.MachineConfig](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().MachineConfigs().List(context.Background(), options)
+				return client.MachineconfigurationV1().MachineConfigs().List(context.Background(), opts)
 			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().MachineConfigs().Watch(context.Background(), options)
+				return client.MachineconfigurationV1().MachineConfigs().Watch(context.Background(), opts)
 			},
-			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+			ListWithContextFunc: func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().MachineConfigs().List(ctx, options)
+				return client.MachineconfigurationV1().MachineConfigs().List(ctx, opts)
 			},
-			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().MachineConfigs().Watch(ctx, options)
+				return client.MachineconfigurationV1().MachineConfigs().Watch(ctx, opts)
 			},
 		}, client),
 		&apimachineconfigurationv1.MachineConfig{},
-		resyncPeriod,
-		indexers,
-	)
+		cache.SharedIndexInformerOptions{
+			ResyncPeriod: options.ResyncPeriod,
+			Indexers:     options.Indexers,
+			Identifier:   identifier,
+		},
+	))
 }
 
 func (f *machineConfigInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredMachineConfigInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewTypedMachineConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *machineConfigInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apimachineconfigurationv1.MachineConfig{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *machineConfigInformer) TypedInformer() MachineConfigIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.MachineConfig](f.factory.InformerFor(&apimachineconfigurationv1.MachineConfig{}, f.defaultInformer))
 }
 
 func (f *machineConfigInformer) Lister() machineconfigurationv1.MachineConfigLister {
 	return machineconfigurationv1.NewMachineConfigLister(f.Informer().GetIndexer())
+}
+
+// ToTypedMachineConfigInformer converts an untyped informer into a TypedMachineConfigInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *MachineConfig. If that is not the case, calling type-safe methods of the returned
+// TypedMachineConfigInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedMachineConfigInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedMachineConfigInformer(informer MachineConfigInformer) TypedMachineConfigInformer {
+	if informer, ok := informer.(TypedMachineConfigInformer); ok {
+		return informer
+	}
+	return &machineConfigTypedInformerAdapter{informer}
+}
+
+type machineConfigTypedInformerAdapter struct {
+	MachineConfigInformer
+}
+
+func (a *machineConfigTypedInformerAdapter) TypedInformer() MachineConfigIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.MachineConfig](a.Informer())
+}
+
+// ToMachineConfigIndexInformer converts an untyped informer into a MachineConfigIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *MachineConfig. If that is not the case, calling type-safe methods of the returned
+// MachineConfigIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a MachineConfigIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToMachineConfigIndexInformer(informer cache.SharedIndexInformer) MachineConfigIndexInformer {
+	if informer, ok := informer.(MachineConfigIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.MachineConfig](informer)
 }

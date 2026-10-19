@@ -12,16 +12,45 @@ import (
 	machineconfigurationv1 "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	runtime "k8s.io/apimachinery/pkg/runtime"
+	schema "k8s.io/apimachinery/pkg/runtime/schema"
 	watch "k8s.io/apimachinery/pkg/watch"
 	cache "k8s.io/client-go/tools/cache"
 )
 
 // ContainerRuntimeConfigInformer provides access to a shared informer and lister for
-// ContainerRuntimeConfigs.
+// ContainerRuntimeConfigs. Prefer using the type-safe variant (see [TypedContainerRuntimeConfigInformer]).
 type ContainerRuntimeConfigInformer interface {
 	Informer() cache.SharedIndexInformer
 	Lister() machineconfigurationv1.ContainerRuntimeConfigLister
 }
+
+// TypedContainerRuntimeConfigInformer provides access to a shared informer and lister for
+// ContainerRuntimeConfigs, including the type-safe TypedInformer variant.
+// It is a superset of ContainerRuntimeConfigInformer.
+type TypedContainerRuntimeConfigInformer interface {
+	Informer() cache.SharedIndexInformer
+	TypedInformer() ContainerRuntimeConfigIndexInformer
+	Lister() machineconfigurationv1.ContainerRuntimeConfigLister
+}
+
+// ContainerRuntimeConfigIndexInformer is a wrapper around the underlying [cache.SharedIndexInformer]
+// with type-safe variants of several methods.
+type ContainerRuntimeConfigIndexInformer cache.TypedSharedIndexInformer[*apimachineconfigurationv1.ContainerRuntimeConfig]
+
+// ContainerRuntimeConfigHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerFuncs] for ContainerRuntimeConfig.
+type ContainerRuntimeConfigHandlerFuncs = cache.TypedResourceEventHandlerFuncs[*apimachineconfigurationv1.ContainerRuntimeConfig]
+
+// ContainerRuntimeConfigDetailedHandlerFuncs is a specialization of [cache.TypedResourceEventHandlerDetailedFuncs] for ContainerRuntimeConfig.
+type ContainerRuntimeConfigDetailedHandlerFuncs = cache.TypedResourceEventHandlerDetailedFuncs[*apimachineconfigurationv1.ContainerRuntimeConfig]
+
+// ContainerRuntimeConfigFilteringHandler is a specialization of [cache.TypedFilteringResourceEventHandler] for ContainerRuntimeConfig.
+type ContainerRuntimeConfigFilteringHandler = cache.TypedFilteringResourceEventHandler[*apimachineconfigurationv1.ContainerRuntimeConfig]
+
+// ContainerRuntimeConfigIndexers is a specialization of [cache.TypedIndexers] for ContainerRuntimeConfig.
+type ContainerRuntimeConfigIndexers = cache.TypedIndexers[*apimachineconfigurationv1.ContainerRuntimeConfig]
+
+// DeletedContainerRuntimeConfig is a specialization of [cache.DeletedObject] for ContainerRuntimeConfig.
+type DeletedContainerRuntimeConfig = cache.DeletedObject[*apimachineconfigurationv1.ContainerRuntimeConfig]
 
 type containerRuntimeConfigInformer struct {
 	factory          internalinterfaces.SharedInformerFactory
@@ -31,55 +60,132 @@ type containerRuntimeConfigInformer struct {
 // NewContainerRuntimeConfigInformer constructs a new informer for ContainerRuntimeConfig type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedContainerRuntimeConfigInformer]).
 func NewContainerRuntimeConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers) cache.SharedIndexInformer {
-	return NewFilteredContainerRuntimeConfigInformer(client, resyncPeriod, indexers, nil)
+	return NewContainerRuntimeConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers})
+}
+
+// NewTypedContainerRuntimeConfigInformer constructs a new informer for ContainerRuntimeConfig type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedContainerRuntimeConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers ContainerRuntimeConfigIndexers) ContainerRuntimeConfigIndexInformer {
+	return NewTypedContainerRuntimeConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers)})
 }
 
 // NewFilteredContainerRuntimeConfigInformer constructs a new informer for ContainerRuntimeConfig type.
 // Always prefer using an informer factory to get a shared informer instead of getting an independent
 // one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedFilteredContainerRuntimeConfigInformer]).
 func NewFilteredContainerRuntimeConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers cache.Indexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) cache.SharedIndexInformer {
-	return cache.NewSharedIndexInformer(
+	return NewTypedContainerRuntimeConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: indexers, TweakListOptions: tweakListOptions})
+}
+
+// NewTypedFilteredContainerRuntimeConfigInformer constructs a new informer for ContainerRuntimeConfig type.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedFilteredContainerRuntimeConfigInformer(client versioned.Interface, resyncPeriod time.Duration, indexers ContainerRuntimeConfigIndexers, tweakListOptions internalinterfaces.TweakListOptionsFunc) ContainerRuntimeConfigIndexInformer {
+	return NewTypedContainerRuntimeConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.TypedIndexersToIndexers(indexers), TweakListOptions: tweakListOptions})
+}
+
+// NewContainerRuntimeConfigInformerWithOptions constructs a new informer for ContainerRuntimeConfig type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+// If you really need an independent one, prefer using the type-safe variant (see [NewTypedContainerRuntimeConfigInformerWithOptions]).
+func NewContainerRuntimeConfigInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) cache.SharedIndexInformer {
+	return NewTypedContainerRuntimeConfigInformerWithOptions(client, options)
+}
+
+// NewTypedContainerRuntimeConfigInformerWithOptions constructs a new informer for ContainerRuntimeConfig type with additional options.
+// Always prefer using an informer factory to get a shared informer instead of getting an independent
+// one. This reduces memory footprint and number of connections to the server.
+func NewTypedContainerRuntimeConfigInformerWithOptions(client versioned.Interface, options internalinterfaces.InformerOptions) ContainerRuntimeConfigIndexInformer {
+	gvr := schema.GroupVersionResource{Group: "machineconfiguration.openshift.io", Version: "v1", Resource: "containerruntimeconfigs"}
+	identifier := options.InformerName.WithResource(gvr)
+	tweakListOptions := options.TweakListOptions
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.ContainerRuntimeConfig](cache.NewSharedIndexInformerWithOptions(
 		cache.ToListWatcherWithWatchListSemantics(&cache.ListWatch{
-			ListFunc: func(options metav1.ListOptions) (runtime.Object, error) {
+			ListFunc: func(opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().ContainerRuntimeConfigs().List(context.Background(), options)
+				return client.MachineconfigurationV1().ContainerRuntimeConfigs().List(context.Background(), opts)
 			},
-			WatchFunc: func(options metav1.ListOptions) (watch.Interface, error) {
+			WatchFunc: func(opts metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().ContainerRuntimeConfigs().Watch(context.Background(), options)
+				return client.MachineconfigurationV1().ContainerRuntimeConfigs().Watch(context.Background(), opts)
 			},
-			ListWithContextFunc: func(ctx context.Context, options metav1.ListOptions) (runtime.Object, error) {
+			ListWithContextFunc: func(ctx context.Context, opts metav1.ListOptions) (runtime.Object, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().ContainerRuntimeConfigs().List(ctx, options)
+				return client.MachineconfigurationV1().ContainerRuntimeConfigs().List(ctx, opts)
 			},
-			WatchFuncWithContext: func(ctx context.Context, options metav1.ListOptions) (watch.Interface, error) {
+			WatchFuncWithContext: func(ctx context.Context, opts metav1.ListOptions) (watch.Interface, error) {
 				if tweakListOptions != nil {
-					tweakListOptions(&options)
+					tweakListOptions(&opts)
 				}
-				return client.MachineconfigurationV1().ContainerRuntimeConfigs().Watch(ctx, options)
+				return client.MachineconfigurationV1().ContainerRuntimeConfigs().Watch(ctx, opts)
 			},
 		}, client),
 		&apimachineconfigurationv1.ContainerRuntimeConfig{},
-		resyncPeriod,
-		indexers,
-	)
+		cache.SharedIndexInformerOptions{
+			ResyncPeriod: options.ResyncPeriod,
+			Indexers:     options.Indexers,
+			Identifier:   identifier,
+		},
+	))
 }
 
 func (f *containerRuntimeConfigInformer) defaultInformer(client versioned.Interface, resyncPeriod time.Duration) cache.SharedIndexInformer {
-	return NewFilteredContainerRuntimeConfigInformer(client, resyncPeriod, cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, f.tweakListOptions)
+	return NewTypedContainerRuntimeConfigInformerWithOptions(client, internalinterfaces.InformerOptions{ResyncPeriod: resyncPeriod, Indexers: cache.Indexers{cache.NamespaceIndex: cache.MetaNamespaceIndexFunc}, InformerName: f.factory.InformerName(), TweakListOptions: f.tweakListOptions})
 }
 
 func (f *containerRuntimeConfigInformer) Informer() cache.SharedIndexInformer {
-	return f.factory.InformerFor(&apimachineconfigurationv1.ContainerRuntimeConfig{}, f.defaultInformer)
+	return f.TypedInformer()
+}
+
+func (f *containerRuntimeConfigInformer) TypedInformer() ContainerRuntimeConfigIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.ContainerRuntimeConfig](f.factory.InformerFor(&apimachineconfigurationv1.ContainerRuntimeConfig{}, f.defaultInformer))
 }
 
 func (f *containerRuntimeConfigInformer) Lister() machineconfigurationv1.ContainerRuntimeConfigLister {
 	return machineconfigurationv1.NewContainerRuntimeConfigLister(f.Informer().GetIndexer())
+}
+
+// ToTypedContainerRuntimeConfigInformer converts an untyped informer into a TypedContainerRuntimeConfigInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *ContainerRuntimeConfig. If that is not the case, calling type-safe methods of the returned
+// TypedContainerRuntimeConfigInformer leads to runtime panics. A safer alternative is to pass
+// around a TypedContainerRuntimeConfigInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToTypedContainerRuntimeConfigInformer(informer ContainerRuntimeConfigInformer) TypedContainerRuntimeConfigInformer {
+	if informer, ok := informer.(TypedContainerRuntimeConfigInformer); ok {
+		return informer
+	}
+	return &containerRuntimeConfigTypedInformerAdapter{informer}
+}
+
+type containerRuntimeConfigTypedInformerAdapter struct {
+	ContainerRuntimeConfigInformer
+}
+
+func (a *containerRuntimeConfigTypedInformerAdapter) TypedInformer() ContainerRuntimeConfigIndexInformer {
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.ContainerRuntimeConfig](a.Informer())
+}
+
+// ToContainerRuntimeConfigIndexInformer converts an untyped informer into a ContainerRuntimeConfigIndexInformer.
+//
+// WARNING: this conversion is only safe if the informer handles objects of type
+// *ContainerRuntimeConfig. If that is not the case, calling type-safe methods of the returned
+// ContainerRuntimeConfigIndexInformer leads to runtime panics. A safer alternative is to pass
+// around a ContainerRuntimeConfigIndexInformer instances that was obtained from a
+// SharedInformerFactory.
+func ToContainerRuntimeConfigIndexInformer(informer cache.SharedIndexInformer) ContainerRuntimeConfigIndexInformer {
+	if informer, ok := informer.(ContainerRuntimeConfigIndexInformer); ok {
+		return informer
+	}
+	return cache.NewTypedSharedIndexInformer[*apimachineconfigurationv1.ContainerRuntimeConfig](informer)
 }
