@@ -1,16 +1,19 @@
 package topology_transition_controller
 
 import (
+	"errors"
 	"testing"
 	"time"
 
-	"github.com/stretchr/testify/assert"
-
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
+	"github.com/stretchr/testify/assert"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime"
+	clienttesting "k8s.io/client-go/testing"
 	"k8s.io/client-go/tools/cache"
 )
 
@@ -734,15 +737,28 @@ func TestValidateMachineConfigNotPresent(t *testing.T) {
 }
 
 func TestValidateNewRenderedMasterConfig(t *testing.T) {
+	t.Run("does not accept old config when Infrastructure read fails", func(t *testing.T) {
+		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
+		readErr := errors.New("infrastructure unavailable")
+		client := configfakeclient.NewSimpleClientset(snoInfra(""))
+		client.PrependReactor("get", "infrastructures", func(clienttesting.Action) (bool, runtime.Object, error) {
+			return true, nil, readErr
+		})
+		fixture.infraClient = client.ConfigV1().Infrastructures()
+
+		assert.ErrorIs(t, validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)(), readErr)
+	})
+
 	t.Run("passes when a rendered master config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
 		assert.NoError(t, v())
 	})
 
 	t.Run("fails when no rendered master config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-worker-abc123"))
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -752,7 +768,7 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 
 	t.Run("fails when no MachineConfigs exist", func(t *testing.T) {
 		fixture := newTestFixture()
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
 		err := v()
 		assert.Error(t, err)
 	})
@@ -762,7 +778,8 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 		fixture := newTestFixture().
 			withTransitionStartTime(transitionStart).
 			withMachineConfigs(newTestMachineConfigAt("rendered-master-abc123", transitionStart.Add(-time.Hour)))
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -778,7 +795,8 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 				newTestMachineConfigAt("rendered-master-abc123", transitionStart.Add(-time.Hour)),
 				newTestMachineConfigAt("rendered-master-def456", transitionStart.Add(time.Hour)),
 			)
-		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedMasterConfig(fixture.mcLister, fixture.infraClient)
+
 		assert.NoError(t, v())
 	})
 }
@@ -786,13 +804,14 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 	t.Run("passes when a rendered worker config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-worker-abc123"))
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
 		assert.NoError(t, v())
 	})
 
 	t.Run("fails when no rendered worker config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return
@@ -802,7 +821,7 @@ func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 
 	t.Run("fails when no MachineConfigs exist", func(t *testing.T) {
 		fixture := newTestFixture()
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
 		err := v()
 		assert.Error(t, err)
 	})
@@ -812,7 +831,8 @@ func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 		fixture := newTestFixture().
 			withTransitionStartTime(transitionStart).
 			withMachineConfigs(newTestMachineConfigAt("rendered-worker-abc123", transitionStart.Add(-time.Hour)))
-		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.operatorClient)
+		v := validateNewRenderedWorkerConfig(fixture.mcLister, fixture.infraClient)
+
 		err := v()
 		if !assert.Error(t, err) {
 			return

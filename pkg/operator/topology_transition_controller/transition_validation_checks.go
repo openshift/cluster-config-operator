@@ -1,6 +1,7 @@
 package topology_transition_controller
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"strings"
@@ -8,6 +9,7 @@ import (
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
@@ -15,6 +17,8 @@ import (
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	corev1 "k8s.io/api/core/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/labels"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
@@ -83,7 +87,7 @@ func validateControlPlaneNodeCount(required int, nodeLister corev1listers.NodeLi
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		if len(nodes) < required {
@@ -103,7 +107,7 @@ func validateExactInfrastructureNodeCount(expected int, nodeLister corev1listers
 		})
 		nodes, err := nodeLister.List(selector)
 		if err != nil {
-			return fmt.Errorf("failed to list infrastructure nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list infrastructure nodes: %w", err)}
 		}
 
 		dedicatedWorkers := 0
@@ -130,7 +134,7 @@ func validateEtcdNotProgressing(etcdLister operatorv1listers.EtcdLister) Transit
 	return func() error {
 		etcd, err := etcdLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get etcd operator CR: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get etcd operator CR: %w", err)}
 		}
 
 		cond := v1helpers.FindOperatorCondition(etcd.Status.Conditions, etcdMembersProgressingCondition)
@@ -157,7 +161,7 @@ func validateEtcdVotingMembers(required int, configMapLister corev1listers.Confi
 	return func() error {
 		cm, err := configMapLister.Get(etcdEndpointsConfigMapName)
 		if err != nil {
-			return fmt.Errorf("failed to get %s/%s ConfigMap: %w", etcdNamespace, etcdEndpointsConfigMapName, err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get %s/%s ConfigMap: %w", etcdNamespace, etcdEndpointsConfigMapName, err)}
 		}
 
 		votingMembers := len(cm.Data)
@@ -176,7 +180,7 @@ func validateEtcdQuorum(etcdLister operatorv1listers.EtcdLister) TransitionValid
 	return func() error {
 		etcd, err := etcdLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get etcd operator CR: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get etcd operator CR: %w", err)}
 		}
 
 		if !v1helpers.IsOperatorConditionTrue(etcd.Status.Conditions, etcdMembersAvailableCondition) {
@@ -193,7 +197,7 @@ func validateControlPlaneNodesSchedulable(required int, nodeLister corev1listers
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		schedulable := 0
@@ -279,7 +283,7 @@ func validateClusterOperatorsStable(coLister configlistersv1.ClusterOperatorList
 	return func() error {
 		unstable, err := checkClusterOperatorsStable(coLister)
 		if err != nil {
-			return fmt.Errorf("failed to check cluster operator stability: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to check cluster operator stability: %w", err)}
 		}
 
 		if len(unstable) > 0 {
@@ -297,7 +301,7 @@ func validateNoClusterVersionUpgradeInProgress(clusterVersionLister configlister
 	return func() error {
 		cv, err := clusterVersionLister.Get(clusterVersionName)
 		if err != nil {
-			return fmt.Errorf("failed to get clusterversions.%s/%s: %w", configv1.GroupName, clusterVersionName, err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get clusterversions.%s/%s: %w", configv1.GroupName, clusterVersionName, err)}
 		}
 
 		if configv1helpers.IsStatusConditionTrue(cv.Status.Conditions, configv1.OperatorProgressing) {
@@ -316,7 +320,7 @@ func validateControlPlaneNodesAreWorkers(required int, nodeLister corev1listers.
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		dualRole := 0
@@ -340,13 +344,14 @@ func validateControlPlaneNodesReady(required int, nodeLister corev1listers.NodeL
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		readyCount := countReadyNodes(nodes)
 		if readyCount < required {
 			return fmt.Errorf("insufficient ready control plane nodes: need %d, have %d", required, readyCount)
 		}
+
 		return nil
 	}
 }
@@ -419,43 +424,47 @@ func validateMachineConfigNotPresent(config string, machineConfigLister machinec
 	}
 }
 
-// transitionStartTime returns the LastTransitionTime of the
-// transitionProgressingCondition, which marks when the current topology
-// transition began. Returns false if the condition is not present (e.g. the
-// safety-net path where the condition was lost; callers should treat any
-// existing rendered config as new in that case).
-func transitionStartTime(operatorClient v1helpers.OperatorClient) (time.Time, bool) {
-	_, status, _, err := operatorClient.GetOperatorState()
+// transitionStartTime reads the active transition completion condition.
+func transitionStartTime(infraClient configv1client.InfrastructureInterface) (time.Time, bool, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	infra, err := infraClient.Get(ctx, "cluster", metav1.GetOptions{})
 	if err != nil {
-		return time.Time{}, false
+		return time.Time{}, false, fmt.Errorf("failed to read Infrastructure transition start time: %w", err)
 	}
 
-	cond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
-	if cond == nil || cond.LastTransitionTime.IsZero() {
-		return time.Time{}, false
+	cond := meta.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+	if cond == nil || cond.Reason != reasonTopologyTransitionInProgress || cond.LastTransitionTime.IsZero() {
+		return time.Time{}, false, nil
 	}
 
-	return cond.LastTransitionTime.Time, true
+	return cond.LastTransitionTime.Time, true, nil
 }
 
 // validateNewRenderedPoolConfig returns a TransitionValidatorFunc that checks
 // the machine-config-operator has rendered a MachineConfig for the given pool
 // since the transition began, confirming it has picked up the topology
 // change rather than matching a config that predates it.
-func validateNewRenderedPoolConfig(pool string, machineConfigLister machineconfigv1listers.MachineConfigLister, operatorClient v1helpers.OperatorClient) TransitionValidatorFunc {
+func validateNewRenderedPoolConfig(pool string, machineConfigLister machineconfigv1listers.MachineConfigLister, infraClient configv1client.InfrastructureInterface) TransitionValidatorFunc {
 	prefix := renderedConfigPrefix(pool)
+
 	return func() error {
 		configs, err := machineConfigLister.List(labels.Everything())
 		if err != nil {
 			return fmt.Errorf("failed to list MachineConfigs: %w", err)
 		}
 
-		since, ok := transitionStartTime(operatorClient)
+		since, ok, err := transitionStartTime(infraClient)
+		if err != nil {
+			return err
+		}
 
 		for _, mc := range configs {
 			if !strings.HasPrefix(mc.Name, prefix) {
 				continue
 			}
+
 			if !ok || mc.CreationTimestamp.After(since) {
 				return nil
 			}
@@ -468,15 +477,15 @@ func validateNewRenderedPoolConfig(pool string, machineConfigLister machineconfi
 // validateNewRenderedMasterConfig returns a TransitionValidatorFunc that checks
 // the machine-config-operator has rendered a new master MachineConfig,
 // confirming it has picked up the topology change.
-func validateNewRenderedMasterConfig(machineConfigLister machineconfigv1listers.MachineConfigLister, operatorClient v1helpers.OperatorClient) TransitionValidatorFunc {
-	return validateNewRenderedPoolConfig("master", machineConfigLister, operatorClient)
+func validateNewRenderedMasterConfig(machineConfigLister machineconfigv1listers.MachineConfigLister, infraClient configv1client.InfrastructureInterface) TransitionValidatorFunc {
+	return validateNewRenderedPoolConfig("master", machineConfigLister, infraClient)
 }
 
 // validateNewRenderedWorkerConfig returns a TransitionValidatorFunc that checks
 // the machine-config-operator has rendered a new worker MachineConfig,
 // confirming it has picked up the topology change.
-func validateNewRenderedWorkerConfig(machineConfigLister machineconfigv1listers.MachineConfigLister, operatorClient v1helpers.OperatorClient) TransitionValidatorFunc {
-	return validateNewRenderedPoolConfig("worker", machineConfigLister, operatorClient)
+func validateNewRenderedWorkerConfig(machineConfigLister machineconfigv1listers.MachineConfigLister, infraClient configv1client.InfrastructureInterface) TransitionValidatorFunc {
+	return validateNewRenderedPoolConfig("worker", machineConfigLister, infraClient)
 }
 
 // validateMachineConfigPoolReadyCount returns a TransitionValidatorFunc that

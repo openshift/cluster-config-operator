@@ -4,15 +4,23 @@ import (
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
+	configv1client "github.com/openshift/client-go/config/clientset/versioned/typed/config/v1"
 	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
-	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 )
 
 // TransitionValidatorFunc defines validation functions for transitions
 type TransitionValidatorFunc func() error
+
+// clusterStateReadError distinguishes unreadable state from a known unmet prerequisite.
+type clusterStateReadError struct {
+	err error
+}
+
+func (e *clusterStateReadError) Error() string { return e.err.Error() }
+func (e *clusterStateReadError) Unwrap() error { return e.err }
 
 // TransitionDescriptor describes a topology transition with its source/target
 // state, per-transition validation functions, and a status updater. From
@@ -36,7 +44,7 @@ type TransitionValidationListers struct {
 	IngressControllerLister            operatorv1listers.IngressControllerNamespaceLister
 	MachineConfigLister                machineconfigv1listers.MachineConfigLister
 	MachineConfigPoolLister            machineconfigv1listers.MachineConfigPoolLister
-	OperatorClient                     v1helpers.OperatorClient
+	InfraClient                        configv1client.InfrastructureInterface
 }
 
 // buildSupportedTransitions returns the set of permitted topology transitions
@@ -75,8 +83,8 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 				validateEtcdNotProgressing(listers.EtcdLister),
 				validateEtcdVotingMembers(3, listers.EtcdConfigMapLister),
 				validateMachineConfigNotPresent("50-master-dnsmasq-configuration", listers.MachineConfigLister),
-				validateNewRenderedMasterConfig(listers.MachineConfigLister, listers.OperatorClient),
-				validateNewRenderedWorkerConfig(listers.MachineConfigLister, listers.OperatorClient),
+				validateNewRenderedMasterConfig(listers.MachineConfigLister, listers.InfraClient),
+				validateNewRenderedWorkerConfig(listers.MachineConfigLister, listers.InfraClient),
 				validateMachineConfigPoolReadyCount(3, listers.MachineConfigPoolLister),
 				validateIngressRouterCount(2, listers.IngressControllerLister),
 				validateKubeAPIServerNodeCount(3, listers.KubeAPIServerLister),
