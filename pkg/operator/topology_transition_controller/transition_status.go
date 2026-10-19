@@ -3,6 +3,7 @@ package topology_transition_controller
 import (
 	"context"
 	"errors"
+	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
@@ -62,6 +63,15 @@ func (c *TopologyTransitionController) applyTopologyStatus(ctx context.Context, 
 		transition.UpdateStatus(updated)
 		if topologyState(current.Status) != topologyState(updated.Status) {
 			c.invalidateDiscovery(updated)
+			// Mark the transition committed in the same write as the topology
+			// change: Completed=False is the point of no return and the
+			// authoritative crash-recovery signal. The Reason carries the
+			// transition name so post-transition reconciliation can identify
+			// the committed descriptor even if the operator conditions are
+			// lost. Writing it atomically with the commit guarantees no
+			// cancelled transition leaves a stale Completed=False behind.
+			setTopologyTransitionCompleted(updated, metav1.ConditionFalse, transition.Name,
+				"Topology transition committed; post-transition reconciliation in progress", c.clock.Now())
 		}
 
 		if equality.Semantic.DeepEqual(current.Status, updated.Status) {
@@ -74,6 +84,54 @@ func (c *TopologyTransitionController) applyTopologyStatus(ctx context.Context, 
 	})
 
 	return applied, writeErr
+}
+
+// setTopologyTransitionCompleted writes the TopologyTransitionCompleted
+// lifecycle condition on the Infrastructure CR. It is the authoritative
+// transition-lifecycle signal: False once the topology status has been
+// committed (the point of no return), True once post-transition
+// reconciliation has converged. While in progress the Reason carries the
+// transition name, identifying the committed descriptor for recovery when
+// operator conditions are lost. Existing timestamps are preserved when the
+// reported status is unchanged.
+func setTopologyTransitionCompleted(infra *configv1.Infrastructure, status metav1.ConditionStatus, reason, message string, now time.Time) {
+	condition := metav1.Condition{
+		Type: configv1.TopologyTransitionCompletedConditionType, Status: status,
+		Reason: reason, Message: message,
+		ObservedGeneration: infra.Generation, LastTransitionTime: metav1.NewTime(now),
+	}
+	conditions := &infra.Status.TopologyTransitionStatus.Conditions
+	preserveConditionTime(&condition, *conditions)
+
+	if old := meta.FindStatusCondition(*conditions, condition.Type); old != nil {
+		*old = condition
+	} else {
+		*conditions = append(*conditions, condition)
+	}
+}
+
+// completeTopologyTransition marks the transition complete on the
+// Infrastructure CR. It reads fresh state inside the retry so neither a
+// stale cache nor a conflict can clobber discovery or other status fields
+// written concurrently by the evaluation worker.
+func (c *TopologyTransitionController) completeTopologyTransition(ctx context.Context) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		updated := current.DeepCopy()
+		setTopologyTransitionCompleted(updated, metav1.ConditionTrue, "TopologyTransitionComplete",
+			"Topology transition complete", c.clock.Now())
+
+		if equality.Semantic.DeepEqual(current.Status, updated.Status) {
+			return nil
+		}
+
+		_, err = c.infraClient.UpdateStatus(ctx, updated, metav1.UpdateOptions{})
+		return err
+	})
 }
 
 // invalidateDiscovery clears the old report when topology inputs change.

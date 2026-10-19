@@ -59,12 +59,17 @@ func TestEvaluationStartsWithoutTransitionQueueWork(t *testing.T) {
 	defer func() { cancel(); <-done }()
 
 	updated := receiveCompletedEvaluation(t, ctx, controller.writes)
-	assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
+	assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, applicableTransitions(controller.transitions, controller.infra))
 }
 
 type publicEvaluationTestController struct {
 	controller factory.Controller
-	writes     chan *configv1.Infrastructure
+	// transitions is the descriptor list the controller was built with, so
+	// tests can derive expected report sizes instead of hardcoding counts.
+	transitions []TransitionDescriptor
+	// infra is the Infrastructure the controller watches.
+	infra  *configv1.Infrastructure
+	writes chan *configv1.Infrastructure
 }
 
 // newPublicEvaluationTestController builds the public controller with fake inputs and a channel of
@@ -86,9 +91,10 @@ func newPublicEvaluationTestController(t *testing.T, informer cache.SharedIndexI
 	controller := NewController(operatorClient, client.ConfigV1(), configlistersv1.NewInfrastructureLister(indexer), informer,
 		f.nodeLister, informer, f.cmLister, informer, f.etcdLister, informer, f.coLister, informer, f.cvLister, informer,
 		f.kasLister, informer, f.oasDeploymentLister, informer, f.icLister, informer, f.mcLister, informer, f.mcpLister, informer,
+		f.imageRegistryDeploymentLister, informer, f.consoleDeploymentLister, informer, f.monitoringStatefulSetLister, informer,
 		clocktesting.NewFakeClock(evaluationTime), newTestSyncContext().Recorder())
 
-	return publicEvaluationTestController{controller, writes}, client
+	return publicEvaluationTestController{controller: controller, transitions: f.buildTransitions(), infra: infra, writes: writes}, client
 }
 
 type evaluationTestInformer struct {
@@ -411,7 +417,7 @@ func TestEvaluationRetriesReportAndDegradedWriteFailures(t *testing.T) {
 			assert.NoError(t, err)
 			assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, evaluationDegradedCondition))
 			stored := currentInfra(t, c).Status.TopologyTransitionStatus
-			if assert.Len(t, stored.Transitions, 1) {
+			if assert.Len(t, stored.Transitions, len(c.transitions)) {
 				check := meta.FindStatusCondition(stored.Transitions[0].Evaluations, "Controlled")
 				if assert.NotNil(t, check) {
 					assert.Equal(t, metav1.ConditionFalse, check.Status)
@@ -549,7 +555,7 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.ControlPlaneTopology)
 	completion := meta.FindStatusCondition(stored.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
 	if assert.NotNil(t, completion) {
-		assert.Equal(t, metav1.ConditionUnknown, completion.Status, "evaluation must not report transition progress")
+		assert.Equal(t, metav1.ConditionTrue, completion.Status, "evaluation must preserve, not rewrite, transition completion")
 	}
 	if assert.Len(t, stored.Status.TopologyTransitionStatus.Transitions, 1) {
 		assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
@@ -632,7 +638,7 @@ func TestEvaluationWaitsForAllCachesAndDoesNotStartWhenStoppedEarly(t *testing.T
 
 			close(gate)
 			updated := receiveCompletedEvaluation(t, ctx, controller.writes)
-			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
+			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, applicableTransitions(controller.transitions, controller.infra))
 			cancel()
 			receiveEvaluation(t, t.Context(), done)
 			assert.Equal(t, registrations+6, informer.registered.Load())
