@@ -147,6 +147,8 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 	return errors.Join(readErr, c.reconcileInfrastructure(ctx, syncCtx, infra, readErr == nil))
 }
 
+// reconcileInfrastructure routes requests, active checks, and upgrade recovery.
+// allowTopologyWrite prevents a cached fallback read from authorizing a new transition.
 func (c *TopologyTransitionController) reconcileInfrastructure(ctx context.Context, syncCtx factory.SyncContext, infra *configv1.Infrastructure, allowTopologyWrite bool) error {
 	specTopology := infra.Spec.ControlPlaneTopology
 	statusTopology := infra.Status.ControlPlaneTopology

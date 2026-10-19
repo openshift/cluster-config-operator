@@ -37,6 +37,7 @@ func newTestSyncContext() factory.SyncContext {
 	)
 }
 
+// newTestInfra builds a cluster Infrastructure with separate desired and observed topologies.
 func newTestInfra(specTopology, statusTopology, statusInfraTopology configv1.TopologyMode, platformType configv1.PlatformType) *configv1.Infrastructure {
 	infra := &configv1.Infrastructure{
 		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
@@ -203,6 +204,7 @@ func newTestLegacyMasterNodeWithWorkerLabel(name string, unschedulable bool) *co
 	}
 }
 
+// newTestEtcdEndpointsConfigMap creates one endpoint entry per voting member.
 func newTestEtcdEndpointsConfigMap(memberCount int) *corev1.ConfigMap {
 	data := map[string]string{}
 	for i := 0; i < memberCount; i++ {
@@ -218,6 +220,7 @@ func newTestEtcdEndpointsConfigMap(memberCount int) *corev1.ConfigMap {
 	}
 }
 
+// newTestEtcdCR sets member availability and progress conditions for etcd checks.
 func newTestEtcdCR(membersAvailable bool, progressing bool) *operatorv1.Etcd {
 	conditions := []operatorv1.OperatorCondition{}
 	if membersAvailable {
@@ -321,6 +324,7 @@ func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorConditio
 	}
 }
 
+// withTransitionInProgress copies Infrastructure and records an active transition start time.
 func withTransitionInProgress(infra *configv1.Infrastructure, since time.Time) *configv1.Infrastructure {
 	infra = infra.DeepCopy()
 	infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Conditions: []metav1.Condition{{
@@ -330,6 +334,7 @@ func withTransitionInProgress(infra *configv1.Infrastructure, since time.Time) *
 	return infra
 }
 
+// completionCondition reads the live completion condition and fails the test if it is missing.
 func completionCondition(t *testing.T, c *TopologyTransitionController) *metav1.Condition {
 	t.Helper()
 
@@ -402,6 +407,7 @@ type testFixture struct {
 // ingressOperatorNamespace is the namespace IngressControllers live in.
 const ingressOperatorNamespace = "openshift-ingress-operator"
 
+// newTestFixture builds fake resource stores and clients for real transition validators.
 func newTestFixture() *testFixture {
 	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	cmIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -538,6 +544,7 @@ func (f *testFixture) withOpenShiftAPIServerDeployment(deployment *appsv1.Deploy
 	return f
 }
 
+// buildTransitions wires the fixture stores and Infrastructure client into supported transitions.
 func (f *testFixture) buildTransitions() []TransitionDescriptor {
 	return buildSupportedTransitions(TransitionValidationListers{
 		NodeLister:                         f.nodeLister,
@@ -559,6 +566,7 @@ func (f *testFixture) buildPreflightChecks() []TransitionValidatorFunc {
 	}
 }
 
+// newController shares its Infrastructure client with the fixture transition validators.
 func (f *testFixture) newController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition) *TopologyTransitionController {
 	c := newTestController(infra, conditions, f.buildPreflightChecks(), nil)
 	f.infraClient = c.infraClient
@@ -580,6 +588,7 @@ func newTestClusterOperator(name string, available, progressing, degraded config
 	}
 }
 
+// newTestClusterVersion sets the upgrade progress condition for preflight tests.
 func newTestClusterVersion(progressing bool) *configv1.ClusterVersion {
 	status := configv1.ConditionFalse
 	if progressing {
@@ -596,6 +605,7 @@ func newTestClusterVersion(progressing bool) *configv1.ClusterVersion {
 	}
 }
 
+// newTestClusterOperatorLister stores the supplied operators in an informer-backed lister.
 func newTestClusterOperatorLister(operators ...*configv1.ClusterOperator) configlistersv1.ClusterOperatorLister {
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	for _, co := range operators {

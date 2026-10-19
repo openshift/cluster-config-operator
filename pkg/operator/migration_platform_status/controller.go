@@ -60,6 +60,8 @@ func NewController(operatorClient operatorv1helpers.OperatorClient,
 		ToController("MigrationPlatformStatusController", recorder)
 }
 
+// sync fills missing platform status from legacy fields and cluster config,
+// then writes only when platform status changes.
 func (c MigrationPlatformStatusController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	obji, err := c.infraLister.Get("cluster")
 	if errors.IsNotFound(err) {

@@ -736,6 +736,8 @@ func TestValidateMachineConfigNotPresent(t *testing.T) {
 	})
 }
 
+// TestValidateNewRenderedMasterConfig checks config creation times against the
+// active transition and rejects configs when the start-time read fails.
 func TestValidateNewRenderedMasterConfig(t *testing.T) {
 	t.Run("does not accept old config when Infrastructure read fails", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-master-abc123"))
@@ -801,6 +803,8 @@ func TestValidateNewRenderedMasterConfig(t *testing.T) {
 	})
 }
 
+// TestValidateNewRenderedWorkerConfig checks that worker configs exist and
+// were rendered after the active transition began.
 func TestValidateNewRenderedWorkerConfig(t *testing.T) {
 	t.Run("passes when a rendered worker config exists", func(t *testing.T) {
 		fixture := newTestFixture().withMachineConfigs(newTestMachineConfig("rendered-worker-abc123"))

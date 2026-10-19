@@ -36,6 +36,8 @@ func readyFixture() *testFixture {
 		)
 }
 
+// TestSNOToHACompact checks real preflight validators, topology writes, and
+// completion reporting for a single-node cluster moving to compact HA.
 func TestSNOToHACompact(t *testing.T) {
 	t.Run("all preflights pass", func(t *testing.T) {
 		ctrl := readyFixture().newController(snoInfra(configv1.HighlyAvailableTopologyMode), nil)

@@ -110,6 +110,7 @@ func (c *TopologyTransitionController) ensureTransitionConditions(infra *configv
 	}
 }
 
+// topologyState selects the two topology fields used to guard status writes.
 func topologyState(status configv1.InfrastructureStatus) configv1.TopologyState {
 	return configv1.TopologyState{
 		ControlPlaneTopology: status.ControlPlaneTopology, InfrastructureTopology: status.InfrastructureTopology,

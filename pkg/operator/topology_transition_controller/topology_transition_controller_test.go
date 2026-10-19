@@ -16,6 +16,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
+// TestSync checks request handling, completion reporting, and upgrade recovery.
 func TestSync(t *testing.T) {
 	t.Run("transition progress is recorded on Infrastructure, not the operator", func(t *testing.T) {
 		infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.SingleReplicaTopologyMode, configv1.SingleReplicaTopologyMode, configv1.NonePlatformType)
@@ -532,6 +533,7 @@ func TestMatchesSpec(t *testing.T) {
 	}
 }
 
+// TestFindTransition checks descriptor selection and unsupported-source errors.
 func TestFindTransition(t *testing.T) {
 	transitions := noopTransitions()
 
@@ -574,6 +576,7 @@ func TestFindTransition(t *testing.T) {
 	})
 }
 
+// TestValidatePreflight checks that global and transition failures are combined.
 func TestValidatePreflight(t *testing.T) {
 	t.Run("all validators pass", func(t *testing.T) {
 		td := &TransitionDescriptor{

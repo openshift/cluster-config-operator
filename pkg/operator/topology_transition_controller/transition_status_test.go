@@ -22,6 +22,7 @@ import (
 	clocktesting "k8s.io/utils/clock/testing"
 )
 
+// statusTestController creates a controller with a fixed clock and tracked Infrastructure writes.
 func statusTestController(infra *configv1.Infrastructure) (*TopologyTransitionController, *configfakeclient.Clientset, *clocktesting.FakePassiveClock) {
 	clk := clocktesting.NewFakePassiveClock(evaluationTime)
 	c := newTestControllerWithClock(infra, []operatorv1.OperatorCondition{{Type: upgradeableCondition, Status: operatorv1.ConditionTrue}}, nil, noopTransitions(), clk)
@@ -31,6 +32,8 @@ func statusTestController(infra *configv1.Infrastructure) (*TopologyTransitionCo
 	return c, client, clk
 }
 
+// TestFreshInfrastructureReadFailureStillRunsActiveChecks checks that cached recovery
+// runs active validators while a failed live read prevents status writes.
 func TestFreshInfrastructureReadFailureStillRunsActiveChecks(t *testing.T) {
 	infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
 	c, client, _ := statusTestController(infra)
@@ -45,6 +48,7 @@ func TestFreshInfrastructureReadFailureStillRunsActiveChecks(t *testing.T) {
 	assert.Equal(t, 0, statusWrites(client))
 }
 
+// currentInfra reads live Infrastructure and fails the test on read errors.
 func currentInfra(t *testing.T, c *TopologyTransitionController) *configv1.Infrastructure {
 	t.Helper()
 
@@ -56,6 +60,7 @@ func currentInfra(t *testing.T, c *TopologyTransitionController) *configv1.Infra
 	return infra
 }
 
+// statusWrites counts Infrastructure status updates recorded by the fake client.
 func statusWrites(client *configfakeclient.Clientset) int {
 	count := 0
 	for _, action := range client.Actions() {
@@ -67,6 +72,8 @@ func statusWrites(client *configfakeclient.Clientset) int {
 	return count
 }
 
+// TestApplyTransitionStatusConditionOnly checks completion updates, stable timestamps,
+// and conflict retries that preserve live discovery and unrelated status.
 func TestApplyTransitionStatusConditionOnly(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
@@ -163,6 +170,8 @@ func TestApplyTransitionStatusConditionOnly(t *testing.T) {
 	}
 }
 
+// TestBlockedRequestStartsNewSoakPeriodWhenItBecomesAvailable checks that starting
+// a formerly blocked request resets the soak timer exactly once.
 func TestBlockedRequestStartsNewSoakPeriodWhenItBecomesAvailable(t *testing.T) {
 	infra := snoInfra(configv1.HighlyAvailableTopologyMode)
 	oldTime := metav1.NewTime(evaluationTime.Add(-time.Hour))
@@ -189,6 +198,8 @@ func TestBlockedRequestStartsNewSoakPeriodWhenItBecomesAvailable(t *testing.T) {
 	assert.True(t, v1helpers.IsOperatorConditionFalse(operatorStatus.Conditions, upgradeableCondition))
 }
 
+// TestTransitionWriteFailureRecovers checks bounded conflict retries, retained
+// upgrade blocking, and a single success event after the topology write recovers.
 func TestTransitionWriteFailureRecovers(t *testing.T) {
 	for _, conflict := range []bool{false, true} {
 		t.Run(map[bool]string{false: "nonconflict write error", true: "persistent conflict"}[conflict], func(t *testing.T) {
@@ -264,6 +275,8 @@ func TestTransitionWriteFailureRecovers(t *testing.T) {
 	}
 }
 
+// TestTransitionWriteGuardsConcurrentSpecAndSource checks that conflicting request
+// or source changes prevent applying an obsolete transition.
 func TestTransitionWriteGuardsConcurrentSpecAndSource(t *testing.T) {
 	for _, change := range []string{"spec", "source", "platform"} {
 		t.Run(change, func(t *testing.T) {
@@ -306,6 +319,8 @@ func TestTransitionWriteGuardsConcurrentSpecAndSource(t *testing.T) {
 	}
 }
 
+// TestRequestValidationRemainsAuthoritative checks that request preflight checks
+// reject newly blocked transitions despite an earlier available report.
 func TestRequestValidationRemainsAuthoritative(t *testing.T) {
 	for _, readFailure := range []bool{false, true} {
 		t.Run(map[bool]string{false: "known blocker", true: "request read failure"}[readFailure], func(t *testing.T) {
@@ -344,6 +359,8 @@ func TestRequestValidationRemainsAuthoritative(t *testing.T) {
 	}
 }
 
+// TestRequestReadAndOperatorErrorsAreJoined checks that failed rejection reporting
+// preserves both the cluster read error and the operator status error.
 func TestRequestReadAndOperatorErrorsAreJoined(t *testing.T) {
 	c, _, _ := statusTestController(snoInfra(configv1.HighlyAvailableTopologyMode))
 	calls := 0
@@ -362,6 +379,8 @@ func TestRequestReadAndOperatorErrorsAreJoined(t *testing.T) {
 	assert.Equal(t, configv1.SingleReplicaTopologyMode, currentInfra(t, c).Status.ControlPlaneTopology)
 }
 
+// TestInitialLiveInfrastructureReadFailurePreventsNewStart checks that cached
+// preflight checks run without authorizing a write after the initial live read fails.
 func TestInitialLiveInfrastructureReadFailurePreventsNewStart(t *testing.T) {
 	c, client, _ := statusTestController(snoInfra(configv1.HighlyAvailableTopologyMode))
 	readErr := errors.New("initial live read unavailable")
@@ -384,6 +403,8 @@ func TestInitialLiveInfrastructureReadFailurePreventsNewStart(t *testing.T) {
 
 var evaluationTime = time.Date(2026, time.September, 29, 12, 0, 0, 0, time.UTC)
 
+// seedExistingReport stores an available transition report for preservation tests
+// without running background evaluation.
 func seedExistingReport(c *TopologyTransitionController, client *configfakeclient.Clientset, infra *configv1.Infrastructure) {
 	infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{
 		Conditions:  []metav1.Condition{{Type: configv1.TopologyTransitionsEvaluatedConditionType, Status: metav1.ConditionTrue, Reason: "EvaluationComplete", LastTransitionTime: metav1.NewTime(evaluationTime)}},
@@ -400,6 +421,7 @@ type failingOperatorStatusClient struct {
 	err error
 }
 
+// UpdateOperatorStatus returns the configured failure to test rejection-report errors.
 func (c failingOperatorStatusClient) UpdateOperatorStatus(context.Context, string, *operatorv1.OperatorStatus) (*operatorv1.OperatorStatus, error) {
 	return nil, c.err
 }

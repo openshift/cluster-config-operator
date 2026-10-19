@@ -19,7 +19,10 @@ type clusterStateReadError struct {
 	err error
 }
 
+// Error returns the read failure message for status reporting.
 func (e *clusterStateReadError) Error() string { return e.err.Error() }
+
+// Unwrap lets callers match the underlying cluster read failure.
 func (e *clusterStateReadError) Unwrap() error { return e.err }
 
 // TransitionDescriptor describes a topology transition with its source/target
