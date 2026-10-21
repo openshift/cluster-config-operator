@@ -277,7 +277,7 @@ func TestInfrastructureSRToHA(t *testing.T) {
 		assert.Contains(t, cond.Message, "cluster is not upgradeable")
 	})
 
-	t.Run("post-transition blocked by insufficient image-registry replicas", func(t *testing.T) {
+	t.Run("post-transition not blocked by image-registry replicas", func(t *testing.T) {
 		fixture := infraReadyFixture().withImageRegistryDeployment(1)
 		infra := newTestInfraWithInfraSpec(
 			configv1.HighlyAvailableTopologyMode,
@@ -290,8 +290,8 @@ func TestInfrastructureSRToHA(t *testing.T) {
 		assert.NoError(t, ctrl.sync(context.TODO(), newTestSyncContext()))
 
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
-		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
-		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, transitionProgressingCondition))
+		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition))
 	})
 
 	t.Run("post-transition blocked by insufficient prometheus replicas", func(t *testing.T) {

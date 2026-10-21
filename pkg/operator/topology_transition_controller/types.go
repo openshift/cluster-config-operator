@@ -129,11 +129,14 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 			UpdateStatus: func(infra *configv1.Infrastructure) {
 				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 			},
+			// Image Registry is excluded: on platform:none / external with
+			// LVMS (RWO-only), replicas>1 is actively rejected by the
+			// registry operator and can never converge. This is an existing
+			// platform limitation, not a regression from the transition.
 			TransitionValidators: []TransitionValidatorFunc{
 				validateWorkerCapableNodesReady(minWorkerCapableNodes, listers.NodeLister),
 				validateWorkerCapableNodesSchedulable(minWorkerCapableNodes, listers.NodeLister),
 				validateIngressRouterCount(minWorkerCapableNodes, listers.IngressControllerLister),
-				validateDeploymentReadyReplicas("image-registry", minWorkerCapableNodes, listers.ImageRegistryDeploymentLister),
 				validateDeploymentReadyReplicas("console", minWorkerCapableNodes, listers.ConsoleDeploymentLister),
 				validateDeploymentReadyReplicas("oauth-openshift", minWorkerCapableNodes, listers.OAuthDeploymentLister),
 				validateStatefulSetReadyReplicas("prometheus-k8s", minWorkerCapableNodes, listers.MonitoringStatefulSetLister),
