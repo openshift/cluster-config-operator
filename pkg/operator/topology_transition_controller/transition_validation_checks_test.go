@@ -1,6 +1,7 @@
 package topology_transition_controller
 
 import (
+	"errors"
 	"testing"
 	"time"
 
@@ -11,8 +12,72 @@ import (
 	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/labels"
 	"k8s.io/client-go/tools/cache"
 )
+
+type testClusterOperatorLister struct {
+	configlistersv1.ClusterOperatorLister
+	operators []*configv1.ClusterOperator
+	err       error
+}
+
+// List returns the supplied operator snapshot or read error for preflight tests.
+func (l testClusterOperatorLister) List(labels.Selector) ([]*configv1.ClusterOperator, error) {
+	return l.operators, l.err
+}
+
+// TestValidateClusterOperatorsStableDeterministicMessage checks that operator and condition
+// ordering cannot change the failure message.
+func TestValidateClusterOperatorsStableDeterministicMessage(t *testing.T) {
+	a := newTestClusterOperator("a", configv1.ConditionFalse, configv1.ConditionTrue, configv1.ConditionTrue)
+	z := newTestClusterOperator("z", configv1.ConditionFalse, configv1.ConditionTrue, configv1.ConditionTrue)
+	z.Status.Conditions[0], z.Status.Conditions[2] = z.Status.Conditions[2], z.Status.Conditions[0]
+
+	for _, operators := range [][]*configv1.ClusterOperator{{z, a}, {a, z}} {
+		validator := validateClusterOperatorsStable(testClusterOperatorLister{operators: operators})
+		assert.EqualError(t, validator(), "cluster operators are not stable: a: Available=False, Degraded=True, Progressing=True; z: Available=False, Degraded=True, Progressing=True")
+	}
+}
+
+// TestPreflightChecksDistinguishReadErrors checks that unreadable state is distinct from known
+// unmet prerequisites.
+func TestPreflightChecksDistinguishReadErrors(t *testing.T) {
+	fixture := newTestFixture()
+	readErr := errors.New("cache unavailable")
+	fixture.nodeLister = failingNodeLister{NodeLister: fixture.nodeLister, err: readErr}
+	fixture.coLister = testClusterOperatorLister{err: readErr}
+	assert.NoError(t, fixture.cvIndexer.Delete(newTestClusterVersion(false)))
+
+	checks := append(fixture.buildPreflightChecks(), fixture.buildTransitions()[0].PreflightValidators...)
+	assert.Len(t, checks, 10)
+	for _, check := range checks {
+		t.Run(check.Type, func(t *testing.T) {
+			err := check.Validate()
+			var typed *clusterStateReadError
+			assert.ErrorAs(t, err, &typed)
+			if check.Type == "ClusterOperatorsStable" || check.Type == "InfrastructureNodeCountSatisfied" || check.Type == "ControlPlaneNodeCountSatisfied" || check.Type == "ControlPlaneNodesSchedulable" || check.Type == "ControlPlaneNodesReady" || check.Type == "ControlPlaneNodesAreWorkers" {
+				assert.ErrorIs(t, err, readErr)
+			}
+		})
+	}
+
+	fixture = newTestFixture().withEtcdCR(false, true).withEtcdEndpoints(1).withClusterVersion(true).
+		withClusterOperators(newTestClusterOperator("etcd", configv1.ConditionFalse, configv1.ConditionTrue, configv1.ConditionTrue)).
+		withNodes(newTestWorkerNode("worker-0"))
+
+	checks = append(fixture.buildPreflightChecks(), fixture.buildTransitions()[0].PreflightValidators...)
+	for _, check := range checks {
+		t.Run("blocked "+check.Type, func(t *testing.T) {
+			err := check.Validate()
+			if !assert.Error(t, err) {
+				return
+			}
+			var typed *clusterStateReadError
+			assert.False(t, errors.As(err, &typed), "known blockers must not be read errors")
+		})
+	}
+}
 
 func TestValidateClusterOperatorsStable(t *testing.T) {
 	t.Run("passes when all operators stable", func(t *testing.T) {

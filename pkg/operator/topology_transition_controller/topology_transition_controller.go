@@ -15,7 +15,6 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -40,12 +39,13 @@ const (
 // validates the transition, updates Infrastructure status, and monitors
 // downstream workloads to verify reconciliation.
 type TopologyTransitionController struct {
-	operatorClient  v1helpers.OperatorClient
-	infraLister     configlistersv1.InfrastructureLister
-	infraClient     configv1client.InfrastructureInterface
-	preflightChecks []TransitionValidatorFunc
-	transitions     []TransitionDescriptor
-	clock           clock.PassiveClock
+	operatorClient      v1helpers.OperatorClient
+	infraLister         configlistersv1.InfrastructureLister
+	infraClient         configv1client.InfrastructureInterface
+	preflightChecks     []PreflightCheck
+	transitions         []TransitionDescriptor
+	clock               clock.PassiveClock
+	evaluationInformers []cache.SharedIndexInformer
 }
 
 // NewController returns a new TopologyTransitionController.
@@ -88,17 +88,20 @@ func NewController(
 		MachineConfigPoolLister:            machineConfigPoolLister,
 		OperatorClient:                     operatorClient,
 	}
+
 	c := &TopologyTransitionController{
-		operatorClient: operatorClient,
-		infraLister:    infraLister,
-		infraClient:    infraClient.Infrastructures(),
-		preflightChecks: []TransitionValidatorFunc{
-			validateClusterOperatorsStable(clusterOperatorLister),
-			validateNoClusterVersionUpgradeInProgress(clusterVersionLister),
+		operatorClient:  operatorClient,
+		infraLister:     infraLister,
+		infraClient:     infraClient.Infrastructures(),
+		preflightChecks: buildGlobalPreflightChecks(clusterOperatorLister, clusterVersionLister),
+		transitions:     buildSupportedTransitions(listers),
+		clock:           clk,
+		evaluationInformers: []cache.SharedIndexInformer{
+			infraInformer, nodeInformer, etcdConfigMapInformer, etcdOperatorInformer,
+			clusterOperatorInformer, clusterVersionInformer,
 		},
-		transitions: buildSupportedTransitions(listers),
-		clock:       clk,
 	}
+
 	return factory.New().
 		WithInformers(
 			operatorClient.Informer(),
@@ -115,6 +118,7 @@ func NewController(
 			machineConfigPoolInformer,
 		).
 		WithSync(c.sync).
+		WithPostStartHooks(c.runEvaluation).
 		WithSyncDegradedOnError(operatorClient).
 		ResyncEvery(time.Minute).
 		ToController("TopologyTransitionController", recorder)
@@ -263,22 +267,8 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		return err
 	}
 
-	current, err := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
-	if err != nil {
-		return err
-	}
-
-	// Guard against the spec changing between the initial lister read and the
-	// API write. Without this, a user reverting spec mid-sync would leave
-	// status diverged from spec until the next sync detects the mismatch.
-	if !matchesSpec(transition.To, current.Spec) {
-		klog.Warningf("TopologyTransitionController: infrastructure spec changed during status update; will re-evaluate on next sync")
-		return nil
-	}
-
-	// Update the infra status
-	transition.UpdateStatus(current)
-	if _, err = c.infraClient.UpdateStatus(ctx, current, metav1.UpdateOptions{}); err != nil {
+	applied, err := c.applyTopologyStatus(ctx, infra, transition)
+	if err != nil || !applied {
 		return err
 	}
 
