@@ -85,8 +85,8 @@ func TestSync(t *testing.T) {
 				To: configv1.InfrastructureSpec{
 					ControlPlaneTopology: configv1.HighlyAvailableTopologyMode,
 				},
-				PreflightValidators: []TransitionValidatorFunc{
-					func() error { return fmt.Errorf("insufficient control plane nodes") },
+				PreflightValidators: []PreflightCheck{
+					{Type: "ControlPlaneNodeCountSatisfied", Validate: func() error { return fmt.Errorf("insufficient control plane nodes") }},
 				},
 				UpdateStatus: func(infra *configv1.Infrastructure) {},
 			},
@@ -563,38 +563,44 @@ func TestFindTransition(t *testing.T) {
 	})
 }
 
+// TestValidatePreflight checks that global and transition checks run and their errors are combined.
 func TestValidatePreflight(t *testing.T) {
 	t.Run("all validators pass", func(t *testing.T) {
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
-				func() error { return nil },
+			PreflightValidators: []PreflightCheck{
+				{Type: "FirstCheck", Validate: func() error { return nil }},
+				{Type: "SecondCheck", Validate: func() error { return nil }},
 			},
 		}
+
 		assert.NoError(t, validatePreflight(nil, td))
 	})
 
 	t.Run("single validator fails", func(t *testing.T) {
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
-				func() error { return fmt.Errorf("node count too low") },
+			PreflightValidators: []PreflightCheck{
+				{Type: "FirstCheck", Validate: func() error { return nil }},
+				{Type: "SecondCheck", Validate: func() error { return fmt.Errorf("node count too low") }},
 			},
 		}
+
 		err := validatePreflight(nil, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 	})
 
 	t.Run("multiple failures are accumulated", func(t *testing.T) {
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return fmt.Errorf("node count too low") },
-				func() error { return nil },
-				func() error { return fmt.Errorf("etcd not ready") },
+			PreflightValidators: []PreflightCheck{
+				{Type: "FirstCheck", Validate: func() error { return fmt.Errorf("node count too low") }},
+				{Type: "SecondCheck", Validate: func() error { return nil }},
+				{Type: "ThirdCheck", Validate: func() error { return fmt.Errorf("etcd not ready") }},
 			},
 		}
+
 		err := validatePreflight(nil, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "node count too low")
 		assert.Contains(t, err.Error(), "etcd not ready")
@@ -606,29 +612,33 @@ func TestValidatePreflight(t *testing.T) {
 	})
 
 	t.Run("global preflight checks run before transition validators", func(t *testing.T) {
-		globalChecks := []TransitionValidatorFunc{
-			func() error { return fmt.Errorf("global check failed") },
+		globalChecks := []PreflightCheck{
+			{Type: "GlobalCheck", Validate: func() error { return fmt.Errorf("global check failed") }},
 		}
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return nil },
+			PreflightValidators: []PreflightCheck{
+				{Type: "TransitionCheck", Validate: func() error { return nil }},
 			},
 		}
+
 		err := validatePreflight(globalChecks, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "global check failed")
 	})
 
 	t.Run("global and transition failures are accumulated", func(t *testing.T) {
-		globalChecks := []TransitionValidatorFunc{
-			func() error { return fmt.Errorf("operators unstable") },
+		globalChecks := []PreflightCheck{
+			{Type: "GlobalCheck", Validate: func() error { return fmt.Errorf("operators unstable") }},
 		}
 		td := &TransitionDescriptor{
-			PreflightValidators: []TransitionValidatorFunc{
-				func() error { return fmt.Errorf("etcd not ready") },
+			PreflightValidators: []PreflightCheck{
+				{Type: "TransitionCheck", Validate: func() error { return fmt.Errorf("etcd not ready") }},
 			},
 		}
+
 		err := validatePreflight(globalChecks, td)
+
 		assert.Error(t, err)
 		assert.Contains(t, err.Error(), "operators unstable")
 		assert.Contains(t, err.Error(), "etcd not ready")

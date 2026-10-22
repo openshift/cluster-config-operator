@@ -319,11 +319,11 @@ func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorConditio
 	}
 }
 
-func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor) *TopologyTransitionController {
+func newTestController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []PreflightCheck, transitions []TransitionDescriptor) *TopologyTransitionController {
 	return newTestControllerWithClock(infra, conditions, preflightChecks, transitions, clocktesting.NewFakePassiveClock(time.Now()))
 }
 
-func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []TransitionValidatorFunc, transitions []TransitionDescriptor, clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
+func newTestControllerWithClock(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition, preflightChecks []PreflightCheck, transitions []TransitionDescriptor, clk *clocktesting.FakePassiveClock) *TopologyTransitionController {
 	fakeConfigClient := configfakeclient.NewSimpleClientset(infra)
 
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -532,11 +532,9 @@ func (f *testFixture) buildTransitions() []TransitionDescriptor {
 	})
 }
 
-func (f *testFixture) buildPreflightChecks() []TransitionValidatorFunc {
-	return []TransitionValidatorFunc{
-		validateClusterOperatorsStable(f.coLister),
-		validateNoClusterVersionUpgradeInProgress(f.cvLister),
-	}
+// buildPreflightChecks wires global checks to the fixture caches.
+func (f *testFixture) buildPreflightChecks() []PreflightCheck {
+	return buildGlobalPreflightChecks(f.coLister, f.cvLister)
 }
 
 func (f *testFixture) newController(infra *configv1.Infrastructure, conditions []operatorv1.OperatorCondition) *TopologyTransitionController {

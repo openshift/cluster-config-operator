@@ -3,6 +3,7 @@ package topology_transition_controller
 import (
 	"errors"
 	"fmt"
+	"sort"
 	"strings"
 	"time"
 
@@ -34,21 +35,30 @@ const (
 // validatePreflight runs global preflight checks followed by
 // transition-specific validators. Returns a combined error containing all
 // validation failures.
-func validatePreflight(globalChecks []TransitionValidatorFunc, transition *TransitionDescriptor) error {
+func validatePreflight(globalChecks []PreflightCheck, transition *TransitionDescriptor) error {
 	var errs []error
 	for _, v := range globalChecks {
-		if err := v(); err != nil {
+		if err := v.Validate(); err != nil {
 			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
 		}
 	}
 
 	for _, v := range transition.PreflightValidators {
-		if err := v(); err != nil {
+		if err := v.Validate(); err != nil {
 			errs = append(errs, fmt.Errorf("transition validation failed: %w", err))
 		}
 	}
 
 	return errors.Join(errs...)
+}
+
+// buildGlobalPreflightChecks assigns stable condition types to cluster stability and upgrade
+// checks.
+func buildGlobalPreflightChecks(coLister configlistersv1.ClusterOperatorLister, cvLister configlistersv1.ClusterVersionLister) []PreflightCheck {
+	return []PreflightCheck{
+		{Type: "ClusterOperatorsStable", Validate: validateClusterOperatorsStable(coLister)},
+		{Type: "NoClusterVersionUpgradeInProgress", Validate: validateNoClusterVersionUpgradeInProgress(cvLister)},
+	}
 }
 
 // isControlPlaneNode returns true if the node carries either the modern
@@ -83,7 +93,7 @@ func validateControlPlaneNodeCount(required int, nodeLister corev1listers.NodeLi
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		if len(nodes) < required {
@@ -103,7 +113,7 @@ func validateExactInfrastructureNodeCount(expected int, nodeLister corev1listers
 		})
 		nodes, err := nodeLister.List(selector)
 		if err != nil {
-			return fmt.Errorf("failed to list infrastructure nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list infrastructure nodes: %w", err)}
 		}
 
 		dedicatedWorkers := 0
@@ -130,7 +140,7 @@ func validateEtcdNotProgressing(etcdLister operatorv1listers.EtcdLister) Transit
 	return func() error {
 		etcd, err := etcdLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get etcd operator CR: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get etcd operator CR: %w", err)}
 		}
 
 		cond := v1helpers.FindOperatorCondition(etcd.Status.Conditions, etcdMembersProgressingCondition)
@@ -157,7 +167,7 @@ func validateEtcdVotingMembers(required int, configMapLister corev1listers.Confi
 	return func() error {
 		cm, err := configMapLister.Get(etcdEndpointsConfigMapName)
 		if err != nil {
-			return fmt.Errorf("failed to get %s/%s ConfigMap: %w", etcdNamespace, etcdEndpointsConfigMapName, err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get %s/%s ConfigMap: %w", etcdNamespace, etcdEndpointsConfigMapName, err)}
 		}
 
 		votingMembers := len(cm.Data)
@@ -176,7 +186,7 @@ func validateEtcdQuorum(etcdLister operatorv1listers.EtcdLister) TransitionValid
 	return func() error {
 		etcd, err := etcdLister.Get("cluster")
 		if err != nil {
-			return fmt.Errorf("failed to get etcd operator CR: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get etcd operator CR: %w", err)}
 		}
 
 		if !v1helpers.IsOperatorConditionTrue(etcd.Status.Conditions, etcdMembersAvailableCondition) {
@@ -193,7 +203,7 @@ func validateControlPlaneNodesSchedulable(required int, nodeLister corev1listers
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		schedulable := 0
@@ -266,10 +276,12 @@ func checkClusterOperatorsStable(coLister configlistersv1.ClusterOperatorLister)
 		}
 
 		if len(issues) > 0 {
+			sort.Strings(issues)
 			unstable = append(unstable, fmt.Sprintf("%s: %s", co.Name, strings.Join(issues, ", ")))
 		}
 	}
 
+	sort.Strings(unstable)
 	return unstable, nil
 }
 
@@ -279,7 +291,7 @@ func validateClusterOperatorsStable(coLister configlistersv1.ClusterOperatorList
 	return func() error {
 		unstable, err := checkClusterOperatorsStable(coLister)
 		if err != nil {
-			return fmt.Errorf("failed to check cluster operator stability: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to check cluster operator stability: %w", err)}
 		}
 
 		if len(unstable) > 0 {
@@ -297,7 +309,7 @@ func validateNoClusterVersionUpgradeInProgress(clusterVersionLister configlister
 	return func() error {
 		cv, err := clusterVersionLister.Get(clusterVersionName)
 		if err != nil {
-			return fmt.Errorf("failed to get clusterversions.%s/%s: %w", configv1.GroupName, clusterVersionName, err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to get clusterversions.%s/%s: %w", configv1.GroupName, clusterVersionName, err)}
 		}
 
 		if configv1helpers.IsStatusConditionTrue(cv.Status.Conditions, configv1.OperatorProgressing) {
@@ -316,7 +328,7 @@ func validateControlPlaneNodesAreWorkers(required int, nodeLister corev1listers.
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		dualRole := 0
@@ -340,13 +352,14 @@ func validateControlPlaneNodesReady(required int, nodeLister corev1listers.NodeL
 	return func() error {
 		nodes, err := listControlPlaneNodes(nodeLister)
 		if err != nil {
-			return fmt.Errorf("failed to list control plane nodes: %w", err)
+			return &clusterStateReadError{err: fmt.Errorf("failed to list control plane nodes: %w", err)}
 		}
 
 		readyCount := countReadyNodes(nodes)
 		if readyCount < required {
 			return fmt.Errorf("insufficient ready control plane nodes: need %d, have %d", required, readyCount)
 		}
+
 		return nil
 	}
 }
