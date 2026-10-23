@@ -349,7 +349,7 @@ func TestDiscoveryReadFailurePreservesCompletionAndOtherFields(t *testing.T) {
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 
 			recovered := currentInfra(t, c)
-			if !assert.NotEmpty(t, recovered.Status.TopologyTransitionStatus.Conditions) || !assert.Len(t, recovered.Status.TopologyTransitionStatus.Transitions, 1) {
+			if !assert.NotEmpty(t, recovered.Status.TopologyTransitionStatus.Conditions) || !assert.Len(t, recovered.Status.TopologyTransitionStatus.Transitions, 2) {
 				return
 			}
 			evaluated = meta.FindStatusCondition(recovered.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
@@ -415,8 +415,8 @@ func TestEvaluationPublishesDiscoveryIdle(t *testing.T) {
 			if !assert.NotEmpty(t, first.Status.TopologyTransitionStatus.Conditions) {
 				return
 			}
-			assert.Len(t, first.Status.TopologyTransitionStatus.Transitions, 1)
-			assert.Len(t, first.Status.TopologyTransitionStatus.Transitions[0].Evaluations, 11)
+			assert.Len(t, first.Status.TopologyTransitionStatus.Transitions, 2)
+			assert.Len(t, first.Status.TopologyTransitionStatus.Transitions[0].Evaluations, 12)
 			condition := meta.FindStatusCondition(first.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
 			if !assert.NotNil(t, condition) {
 				return
@@ -462,7 +462,7 @@ func TestDiscoveryRealBlockersRemainStableAndRecover(t *testing.T) {
 			assert.NoError(t, c.syncEvaluation(t.Context()))
 
 			first := currentInfra(t, c).Status.TopologyTransitionStatus
-			if !assert.NotEmpty(t, first.Conditions) || !assert.Len(t, first.Transitions, 1) {
+			if !assert.NotEmpty(t, first.Conditions) || !assert.Len(t, first.Transitions, 2) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, first.Conditions[0].Status)
@@ -476,7 +476,7 @@ func TestDiscoveryRealBlockersRemainStableAndRecover(t *testing.T) {
 			blocked := currentInfra(t, c).Status.TopologyTransitionStatus
 			assert.Equal(t, first.Conditions[1], blocked.Conditions[1])
 			assert.Equal(t, first.Conditions[0].LastTransitionTime, blocked.Conditions[0].LastTransitionTime)
-			if !assert.Len(t, blocked.Transitions, 1) {
+			if !assert.Len(t, blocked.Transitions, 2) {
 				return
 			}
 			assert.Len(t, blocked.Transitions[0].Evaluations, len(first.Transitions[0].Evaluations))
@@ -511,7 +511,7 @@ func TestDiscoveryRealBlockersRemainStableAndRecover(t *testing.T) {
 			recovered := currentInfra(t, c).Status.TopologyTransitionStatus
 			assert.Equal(t, first.Conditions[1], recovered.Conditions[1])
 			assert.Equal(t, first.Conditions[0].LastTransitionTime, recovered.Conditions[0].LastTransitionTime)
-			if !assert.Len(t, recovered.Transitions, 1) {
+			if !assert.Len(t, recovered.Transitions, 2) {
 				return
 			}
 			assert.Len(t, recovered.Transitions[0].Evaluations, len(first.Transitions[0].Evaluations))
@@ -612,7 +612,7 @@ func TestDiscoveryWriteFailureRecovers(t *testing.T) {
 			assert.Equal(t, baseline.Status.ControlPlaneTopology, recovered.Status.ControlPlaneTopology)
 			assert.Equal(t, baseline.Status.InfrastructureTopology, recovered.Status.InfrastructureTopology)
 			status := recovered.Status.TopologyTransitionStatus
-			if !assert.NotEmpty(t, status.Conditions) || !assert.Len(t, status.Transitions, 1) {
+			if !assert.NotEmpty(t, status.Conditions) || !assert.Len(t, status.Transitions, 2) {
 				return
 			}
 			evaluated := meta.FindStatusCondition(status.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)

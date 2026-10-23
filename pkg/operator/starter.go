@@ -291,6 +291,22 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		kubeInformersForOpenShiftAPIServer := v1helpers.NewKubeInformersForNamespaces(kubeClient, openShiftAPIServerNamespace)
 		openShiftAPIServerDeploymentInformer := kubeInformersForOpenShiftAPIServer.InformersFor(openShiftAPIServerNamespace).Apps().V1().Deployments()
 
+		const (
+			imageRegistryNamespace = "openshift-image-registry"
+			consoleNamespace       = "openshift-console"
+			oauthNamespace         = "openshift-authentication"
+			monitoringNamespace    = "openshift-monitoring"
+		)
+		kubeInformersForImageRegistry := v1helpers.NewKubeInformersForNamespaces(kubeClient, imageRegistryNamespace)
+		kubeInformersForConsole := v1helpers.NewKubeInformersForNamespaces(kubeClient, consoleNamespace)
+		kubeInformersForOAuth := v1helpers.NewKubeInformersForNamespaces(kubeClient, oauthNamespace)
+		kubeInformersForMonitoring := v1helpers.NewKubeInformersForNamespaces(kubeClient, monitoringNamespace)
+
+		imageRegistryDeploymentInformer := kubeInformersForImageRegistry.InformersFor(imageRegistryNamespace).Apps().V1().Deployments()
+		consoleDeploymentInformer := kubeInformersForConsole.InformersFor(consoleNamespace).Apps().V1().Deployments()
+		oauthDeploymentInformer := kubeInformersForOAuth.InformersFor(oauthNamespace).Apps().V1().Deployments()
+		monitoringStatefulSetInformer := kubeInformersForMonitoring.InformersFor(monitoringNamespace).Apps().V1().StatefulSets()
+
 		topologyTransitionController := topologytransition.NewController(
 			operatorClient,
 			configClient.ConfigV1(),
@@ -316,6 +332,14 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 			machineConfigInformers.Machineconfiguration().V1().MachineConfigs().Informer(),
 			machineConfigInformers.Machineconfiguration().V1().MachineConfigPools().Lister(),
 			machineConfigInformers.Machineconfiguration().V1().MachineConfigPools().Informer(),
+			imageRegistryDeploymentInformer.Lister().Deployments(imageRegistryNamespace),
+			imageRegistryDeploymentInformer.Informer(),
+			consoleDeploymentInformer.Lister().Deployments(consoleNamespace),
+			consoleDeploymentInformer.Informer(),
+			oauthDeploymentInformer.Lister().Deployments(oauthNamespace),
+			oauthDeploymentInformer.Informer(),
+			monitoringStatefulSetInformer.Lister().StatefulSets(monitoringNamespace),
+			monitoringStatefulSetInformer.Informer(),
 			clock.RealClock{},
 			controllerContext.EventRecorder,
 		)
@@ -324,6 +348,10 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 		go machineConfigInformers.Start(ctx.Done())
 		go kubeInformersForEtcd.Start(ctx.Done())
 		go kubeInformersForOpenShiftAPIServer.Start(ctx.Done())
+		go kubeInformersForImageRegistry.Start(ctx.Done())
+		go kubeInformersForConsole.Start(ctx.Done())
+		go kubeInformersForOAuth.Start(ctx.Done())
+		go kubeInformersForMonitoring.Start(ctx.Done())
 		go kubeInformersForNamespaces.Start(ctx.Done())
 		go topologyTransitionController.Run(ctx, 1)
 	}

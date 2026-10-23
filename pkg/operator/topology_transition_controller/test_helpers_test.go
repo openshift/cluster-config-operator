@@ -50,6 +50,23 @@ func newTestInfra(specTopology, statusTopology, statusInfraTopology configv1.Top
 	return infra
 }
 
+func newTestInfraWithInfraSpec(specInfraTopology, statusCPTopology, statusInfraTopology configv1.TopologyMode, platformType configv1.PlatformType) *configv1.Infrastructure {
+	infra := &configv1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		Spec: configv1.InfrastructureSpec{
+			InfrastructureTopology: specInfraTopology,
+		},
+		Status: configv1.InfrastructureStatus{
+			ControlPlaneTopology:   statusCPTopology,
+			InfrastructureTopology: statusInfraTopology,
+		},
+	}
+	if platformType != "" {
+		infra.Status.PlatformStatus = &configv1.PlatformStatus{Type: platformType}
+	}
+	return infra
+}
+
 func newTestControlPlaneNode(name string, unschedulable bool) *corev1.Node {
 	return &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -145,6 +162,23 @@ func newTestWorkerNodeWithConditions(name string, conditions []corev1.NodeCondit
 		},
 		Status: corev1.NodeStatus{
 			Conditions: conditions,
+		},
+	}
+}
+
+func newWorkerNodeUnschedulable(name string) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"node-role.kubernetes.io/worker": "",
+			},
+		},
+		Spec: corev1.NodeSpec{
+			Unschedulable: true,
+		},
+		Status: corev1.NodeStatus{
+			Conditions: readyNodeCondition(),
 		},
 	}
 }
@@ -284,6 +318,35 @@ func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []Tran
 	return transitions
 }
 
+// noopInfraTransitions returns a transitions list that matches
+// infrastructure SR→HA without real listers — validators always pass.
+func noopInfraTransitions() []TransitionDescriptor {
+	return []TransitionDescriptor{
+		{
+			From: configv1.InfrastructureStatus{
+				ControlPlaneTopology:   configv1.HighlyAvailableTopologyMode,
+				InfrastructureTopology: configv1.SingleReplicaTopologyMode,
+			},
+			To: configv1.InfrastructureSpec{
+				InfrastructureTopology: configv1.HighlyAvailableTopologyMode,
+			},
+			PreflightValidators: nil,
+			UpdateStatus: func(infra *configv1.Infrastructure) {
+				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+			},
+			TransitionValidators: nil,
+		},
+	}
+}
+
+// noopInfraTransitionsWithValidators returns the same transitions list as
+// noopInfraTransitions, but with the given TransitionValidators wired in.
+func noopInfraTransitionsWithValidators(validators ...TransitionValidatorFunc) []TransitionDescriptor {
+	transitions := noopInfraTransitions()
+	transitions[0].TransitionValidators = validators
+	return transitions
+}
+
 // reconciliationTestTransitions returns a transitions list whose To spec is a
 // wildcard (matches any Infrastructure spec), used to control
 // checkClusterReconciliation behavior in tests independent of the infra's
@@ -363,6 +426,11 @@ type testFixture struct {
 	kasIndexer           cache.Indexer
 	oasDeploymentIndexer cache.Indexer
 
+	imageRegistryDeploymentIndexer cache.Indexer
+	consoleDeploymentIndexer       cache.Indexer
+	oauthDeploymentIndexer         cache.Indexer
+	monitoringStatefulSetIndexer   cache.Indexer
+
 	nodeLister          corev1listers.NodeLister
 	cmLister            corev1listers.ConfigMapNamespaceLister
 	etcdLister          operatorv1listers.EtcdLister
@@ -374,11 +442,23 @@ type testFixture struct {
 	kasLister           operatorv1listers.KubeAPIServerLister
 	oasDeploymentLister appsv1listers.DeploymentNamespaceLister
 
+	imageRegistryDeploymentLister appsv1listers.DeploymentNamespaceLister
+	consoleDeploymentLister       appsv1listers.DeploymentNamespaceLister
+	oauthDeploymentLister         appsv1listers.DeploymentNamespaceLister
+	monitoringStatefulSetLister   appsv1listers.StatefulSetNamespaceLister
+
 	operatorClient v1helpers.OperatorClient
 }
 
 // ingressOperatorNamespace is the namespace IngressControllers live in.
 const ingressOperatorNamespace = "openshift-ingress-operator"
+
+const (
+	imageRegistryNamespace = "openshift-image-registry"
+	consoleNamespace       = "openshift-console"
+	oauthNamespace         = "openshift-authentication"
+	monitoringNamespace    = "openshift-monitoring"
+)
 
 func newTestFixture() *testFixture {
 	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -391,6 +471,10 @@ func newTestFixture() *testFixture {
 	icIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	kasIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	oasDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	imageRegistryDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	consoleDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	oauthDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	monitoringStatefulSetIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
 	// Default to no upgrade in progress, so fixtures that don't care about this
 	// check don't have to opt in to a passing ClusterVersion.
@@ -410,6 +494,11 @@ func newTestFixture() *testFixture {
 		kasIndexer:           kasIndexer,
 		oasDeploymentIndexer: oasDeploymentIndexer,
 
+		imageRegistryDeploymentIndexer: imageRegistryDeploymentIndexer,
+		consoleDeploymentIndexer:       consoleDeploymentIndexer,
+		oauthDeploymentIndexer:         oauthDeploymentIndexer,
+		monitoringStatefulSetIndexer:   monitoringStatefulSetIndexer,
+
 		nodeLister:          corev1listers.NewNodeLister(nodeIndexer),
 		cmLister:            corev1listers.NewConfigMapLister(cmIndexer).ConfigMaps(etcdNamespace),
 		etcdLister:          operatorv1listers.NewEtcdLister(etcdIndexer),
@@ -420,6 +509,11 @@ func newTestFixture() *testFixture {
 		icLister:            operatorv1listers.NewIngressControllerLister(icIndexer).IngressControllers(ingressOperatorNamespace),
 		kasLister:           operatorv1listers.NewKubeAPIServerLister(kasIndexer),
 		oasDeploymentLister: appsv1listers.NewDeploymentLister(oasDeploymentIndexer).Deployments(openShiftAPIServerNamespace),
+
+		imageRegistryDeploymentLister: appsv1listers.NewDeploymentLister(imageRegistryDeploymentIndexer).Deployments(imageRegistryNamespace),
+		consoleDeploymentLister:       appsv1listers.NewDeploymentLister(consoleDeploymentIndexer).Deployments(consoleNamespace),
+		oauthDeploymentLister:         appsv1listers.NewDeploymentLister(oauthDeploymentIndexer).Deployments(oauthNamespace),
+		monitoringStatefulSetLister:   appsv1listers.NewStatefulSetLister(monitoringStatefulSetIndexer).StatefulSets(monitoringNamespace),
 
 		operatorClient: v1helpers.NewFakeOperatorClient(&operatorv1.OperatorSpec{}, &operatorv1.OperatorStatus{}, nil),
 	}
@@ -529,10 +623,13 @@ func (f *testFixture) buildTransitions() []TransitionDescriptor {
 		MachineConfigLister:                f.mcLister,
 		MachineConfigPoolLister:            f.mcpLister,
 		OperatorClient:                     f.operatorClient,
+		ImageRegistryDeploymentLister:      f.imageRegistryDeploymentLister,
+		ConsoleDeploymentLister:            f.consoleDeploymentLister,
+		OAuthDeploymentLister:              f.oauthDeploymentLister,
+		MonitoringStatefulSetLister:        f.monitoringStatefulSetLister,
 	})
 }
 
-// buildPreflightChecks wires global checks to the fixture caches.
 func (f *testFixture) buildPreflightChecks() []PreflightCheck {
 	return buildGlobalPreflightChecks(f.coLister, f.cvLister)
 }
@@ -629,4 +726,50 @@ func newTestOpenShiftAPIServerDeployment(readyReplicas int32) *appsv1.Deployment
 			ReadyReplicas: readyReplicas,
 		},
 	}
+}
+
+func newTestDeployment(name, namespace string, readyReplicas int32) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.DeploymentStatus{
+			ReadyReplicas: readyReplicas,
+		},
+	}
+}
+
+func newTestStatefulSet(name, namespace string, readyReplicas int32) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: readyReplicas,
+		},
+	}
+}
+
+func (f *testFixture) withImageRegistryDeployment(readyReplicas int32) *testFixture {
+	if err := f.imageRegistryDeploymentIndexer.Add(newTestDeployment("image-registry", imageRegistryNamespace, readyReplicas)); err != nil {
+		panic(fmt.Sprintf("failed to add image-registry deployment to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withConsoleDeployment(readyReplicas int32) *testFixture {
+	if err := f.consoleDeploymentIndexer.Add(newTestDeployment("console", consoleNamespace, readyReplicas)); err != nil {
+		panic(fmt.Sprintf("failed to add console deployment to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withOAuthDeployment(readyReplicas int32) *testFixture {
+	if err := f.oauthDeploymentIndexer.Add(newTestDeployment("oauth-openshift", oauthNamespace, readyReplicas)); err != nil {
+		panic(fmt.Sprintf("failed to add oauth deployment to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withMonitoringStatefulSet(name string, readyReplicas int32) *testFixture {
+	if err := f.monitoringStatefulSetIndexer.Add(newTestStatefulSet(name, monitoringNamespace, readyReplicas)); err != nil {
+		panic(fmt.Sprintf("failed to add %s statefulset to indexer: %v", name, err))
+	}
+	return f
 }

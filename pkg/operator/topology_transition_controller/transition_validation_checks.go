@@ -58,6 +58,7 @@ func buildGlobalPreflightChecks(coLister configlistersv1.ClusterOperatorLister, 
 	return []PreflightCheck{
 		{Type: "ClusterOperatorsStable", Validate: validateClusterOperatorsStable(coLister)},
 		{Type: "NoClusterVersionUpgradeInProgress", Validate: validateNoClusterVersionUpgradeInProgress(cvLister)},
+		{Type: "ClusterVersionUpgradeable", Validate: validateClusterVersionUpgradeable(cvLister)},
 	}
 }
 
@@ -320,6 +321,24 @@ func validateNoClusterVersionUpgradeInProgress(clusterVersionLister configlister
 	}
 }
 
+// validateClusterVersionUpgradeable returns a TransitionValidatorFunc that
+// checks the ClusterVersion does not report Upgradeable=False. Starting a
+// topology transition on an already un-upgradeable cluster compounds risk.
+func validateClusterVersionUpgradeable(clusterVersionLister configlistersv1.ClusterVersionLister) TransitionValidatorFunc {
+	return func() error {
+		cv, err := clusterVersionLister.Get(clusterVersionName)
+		if err != nil {
+			return &clusterStateReadError{err: fmt.Errorf("failed to get clusterversions.%s/%s: %w", configv1.GroupName, clusterVersionName, err)}
+		}
+
+		if configv1helpers.IsStatusConditionFalse(cv.Status.Conditions, configv1.OperatorUpgradeable) {
+			return fmt.Errorf("cluster is not upgradeable: clusterversions.%s/%s has Upgradeable=False", configv1.GroupName, clusterVersionName)
+		}
+
+		return nil
+	}
+}
+
 // validateControlPlaneNodesAreWorkers returns a TransitionValidatorFunc that
 // checks the required number of control plane nodes also carry the worker
 // role label, confirming they are dual-role as expected in a compact HA
@@ -555,6 +574,160 @@ func validateOpenShiftAPIServerReadyReplicas(required int, deploymentLister apps
 
 		if deployment.Status.ReadyReplicas < int32(required) {
 			return fmt.Errorf("insufficient openshift-apiserver ready replicas: need %d, have %d", required, deployment.Status.ReadyReplicas)
+		}
+
+		return nil
+	}
+}
+
+// listWorkerCapableNodes returns all nodes bearing the worker role label,
+// including dual-role nodes that also carry the control-plane label.
+func listWorkerCapableNodes(nodeLister corev1listers.NodeLister) ([]*corev1.Node, error) {
+	return listWorkerNodes(nodeLister)
+}
+
+// validateWorkerCapableNodeCount returns a TransitionValidatorFunc that checks
+// the total count of worker-capable nodes (with the worker role label,
+// including dual-role control-plane/worker nodes) meets the requirement.
+func validateWorkerCapableNodeCount(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
+	return func() error {
+		nodes, err := listWorkerCapableNodes(nodeLister)
+		if err != nil {
+			return fmt.Errorf("failed to list worker-capable nodes: %w", err)
+		}
+
+		if len(nodes) < required {
+			return fmt.Errorf("insufficient worker-capable nodes: need %d, have %d", required, len(nodes))
+		}
+
+		return nil
+	}
+}
+
+// validateWorkerCapableNodesReady returns a TransitionValidatorFunc that checks
+// the required number of worker-capable nodes have a Ready=True condition.
+func validateWorkerCapableNodesReady(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
+	return func() error {
+		nodes, err := listWorkerCapableNodes(nodeLister)
+		if err != nil {
+			return fmt.Errorf("failed to list worker-capable nodes: %w", err)
+		}
+
+		readyCount := countReadyNodes(nodes)
+		if readyCount < required {
+			return fmt.Errorf("insufficient ready worker-capable nodes: need %d, have %d", required, readyCount)
+		}
+
+		return nil
+	}
+}
+
+// validateWorkerCapableNodesSchedulable returns a TransitionValidatorFunc that
+// checks the required number of worker-capable nodes are schedulable (not
+// cordoned).
+func validateWorkerCapableNodesSchedulable(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
+	return func() error {
+		nodes, err := listWorkerCapableNodes(nodeLister)
+		if err != nil {
+			return fmt.Errorf("failed to list worker-capable nodes: %w", err)
+		}
+
+		schedulable := 0
+		for _, node := range nodes {
+			if !node.Spec.Unschedulable {
+				schedulable++
+			}
+		}
+
+		if schedulable < required {
+			return fmt.Errorf("insufficient schedulable worker-capable nodes: need %d, have %d", required, schedulable)
+		}
+
+		return nil
+	}
+}
+
+// hasBlockingTaints returns true if the node has any NoSchedule or NoExecute
+// taint that is not a well-known kubelet-managed taint. Kubelet-managed taints
+// reflect node conditions already covered by the Ready check and are tolerated
+// by standard infrastructure workloads.
+func hasBlockingTaints(node *corev1.Node) bool {
+	for _, taint := range node.Spec.Taints {
+		if taint.Effect != corev1.TaintEffectNoSchedule && taint.Effect != corev1.TaintEffectNoExecute {
+			continue
+		}
+		switch taint.Key {
+		case "node.kubernetes.io/not-ready",
+			"node.kubernetes.io/unreachable",
+			"node.kubernetes.io/disk-pressure",
+			"node.kubernetes.io/memory-pressure",
+			"node.kubernetes.io/pid-pressure",
+			"node.kubernetes.io/network-unavailable",
+			"node.kubernetes.io/unschedulable",
+			"node-role.kubernetes.io/master",
+			"node-role.kubernetes.io/control-plane":
+			continue
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// validateWorkerCapableNodesUntainted returns a TransitionValidatorFunc that
+// checks the required number of worker-capable nodes are free from blocking
+// NoSchedule/NoExecute taints that would prevent infrastructure pods from
+// being scheduled.
+func validateWorkerCapableNodesUntainted(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
+	return func() error {
+		nodes, err := listWorkerCapableNodes(nodeLister)
+		if err != nil {
+			return fmt.Errorf("failed to list worker-capable nodes: %w", err)
+		}
+
+		untainted := 0
+		for _, node := range nodes {
+			if !hasBlockingTaints(node) {
+				untainted++
+			}
+		}
+
+		if untainted < required {
+			return fmt.Errorf("insufficient untainted worker-capable nodes: need %d, have %d (nodes with NoSchedule/NoExecute taints are excluded)", required, untainted)
+		}
+
+		return nil
+	}
+}
+
+// validateDeploymentReadyReplicas returns a TransitionValidatorFunc that checks
+// the named Deployment has the required number of ready replicas.
+func validateDeploymentReadyReplicas(name string, required int, deploymentLister appsv1listers.DeploymentNamespaceLister) TransitionValidatorFunc {
+	return func() error {
+		deployment, err := deploymentLister.Get(name)
+		if err != nil {
+			return fmt.Errorf("failed to get deployment %s: %w", name, err)
+		}
+
+		if deployment.Status.ReadyReplicas < int32(required) {
+			return fmt.Errorf("insufficient %s ready replicas: need %d, have %d", name, required, deployment.Status.ReadyReplicas)
+		}
+
+		return nil
+	}
+}
+
+// validateStatefulSetReadyReplicas returns a TransitionValidatorFunc that
+// checks the named StatefulSet has the required number of ready replicas.
+func validateStatefulSetReadyReplicas(name string, required int, statefulSetLister appsv1listers.StatefulSetNamespaceLister) TransitionValidatorFunc {
+	return func() error {
+		sts, err := statefulSetLister.Get(name)
+		if err != nil {
+			return fmt.Errorf("failed to get statefulset %s: %w", name, err)
+		}
+
+		if sts.Status.ReadyReplicas < int32(required) {
+			return fmt.Errorf("insufficient %s ready replicas: need %d, have %d", name, required, sts.Status.ReadyReplicas)
 		}
 
 		return nil
