@@ -14,7 +14,10 @@ import (
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
+
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1helpers "k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -26,12 +29,18 @@ const (
 	transitionProgressingCondition = "TopologyTransitionControllerProgressing"
 	upgradeableCondition           = "TopologyTransitionControllerUpgradeable"
 
+	reasonTopologyTransitionComplete   = "TopologyTransitionComplete"
 	reasonTopologyTransitionInProgress = "TopologyTransitionInProgress"
+	reasonTopologyTransitionUnknown    = "TopologyTransitionUnknown"
+
+	reasonTopologyTransitionEvaluationComplete   = "TopologyTransitionEvaluationComplete"
+	reasonTopologyTransitionEvaluationInProgress = "TopologyTransitionEvaluationInProgress"
+	reasonTopologyTransitionEvaluationUnknown    = "TopologyTransitionEvaluationUnknown"
 
 	// minReconciliationSoakTime is the minimum time to wait after a transition
 	// starts before accepting reconciliation checks as passing. This prevents
 	// premature completion when downstream operators haven't started progressing yet.
-	minReconciliationSoakTime = 5 * time.Minute
+	minReconciliationSoakTime = 2 * time.Minute
 )
 
 // TopologyTransitionController manages day-2 control plane topology transitions.
@@ -139,6 +148,28 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 		return err
 	}
 
+	// Initialize the infra topology evaluation and transition completion statuses.
+	// Because the evaulation and the completion statuses are updated in the same call
+	cond := metav1helpers.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+	if cond == nil {
+		metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+			Type:    configv1.TopologyTransitionsEvaluatedConditionType,
+			Status:  metav1.ConditionUnknown,
+			Reason:  reasonTopologyTransitionEvaluationUnknown,
+			Message: "Evaluation status is unknown",
+		})
+		metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+			Type:    configv1.TopologyTransitionCompletedConditionType,
+			Status:  metav1.ConditionUnknown,
+			Reason:  reasonTopologyTransitionUnknown,
+			Message: "Transition Status is Unknown",
+		})
+	}
+	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+
 	specTopology := infra.Spec.ControlPlaneTopology
 	statusTopology := infra.Status.ControlPlaneTopology
 
@@ -223,6 +254,18 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		return nil
 	}
 
+	// Set transition complete condition to false
+	metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+		Type:    configv1.TopologyTransitionCompletedConditionType,
+		Status:  metav1.ConditionFalse,
+		Reason:  reasonTopologyTransitionInProgress,
+		Message: "Evaluations have not run",
+	})
+	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+
 	if err := validatePreflight(c.preflightChecks, transition); err != nil {
 		if _, _, condErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
@@ -240,6 +283,19 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		); condErr != nil {
 			return condErr
 		}
+
+		// Set status of evaluations to "False" because the preflight checks failed to complete
+		metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+			Type:    configv1.TopologyTransitionsEvaluatedConditionType,
+			Status:  metav1.ConditionFalse,
+			Reason:  reasonTopologyTransitionEvaluationUnknown,
+			Message: err.Error(),
+		})
+		infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
+		if err != nil {
+			return err
+		}
+
 		syncCtx.Recorder().Warningf("TopologyTransitionPreflightFailed", "%s", err.Error())
 		return nil
 	}
@@ -264,6 +320,19 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 			Message: fmt.Sprintf("Transitioning control plane topology from %s to %s", statusTopology, specTopology),
 		}),
 	); err != nil {
+		return err
+	}
+
+	// Set status of evaluations to "True" because the preflight checks ran to completion.
+	// "True" only indicates successful completion and is not an indicator of passed or failed evaluations.
+	metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+		Type:    configv1.TopologyTransitionsEvaluatedConditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  reasonTopologyTransitionEvaluationComplete,
+		Message: "Evaluations completed successfully",
+	})
+	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
+	if err != nil {
 		return err
 	}
 
@@ -321,7 +390,7 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		}
 	}
 
-	_, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
+	if _, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
 		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 			Type:    upgradeableCondition,
 			Status:  operatorv1.ConditionTrue,
@@ -334,6 +403,20 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 			Reason:  "TopologyTransitionComplete",
 			Message: "Topology transition reconciliation complete",
 		}),
-	)
-	return updateErr
+	); updateErr != nil {
+		return updateErr
+	}
+
+	metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+		Type:    configv1.TopologyTransitionCompletedConditionType,
+		Status:  metav1.ConditionTrue,
+		Reason:  reasonTopologyTransitionComplete,
+		Message: "Topology transition completed successfully",
+	})
+	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
+	if err != nil {
+		return err
+	}
+
+	return nil
 }
