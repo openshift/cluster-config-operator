@@ -6,6 +6,7 @@ import (
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
+	v1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -224,4 +225,8 @@ func preserveEvaluationTimes(transitions, previous []configv1.TopologyTransition
 			}
 		}
 	}
+}
+
+func updateTransitionEvaluationCond(infra *v1.Infrastructure, condition *metav1.Condition) error {
+	meta.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, *condition)
 }

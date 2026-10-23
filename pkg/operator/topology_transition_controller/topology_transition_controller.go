@@ -15,6 +15,7 @@ import (
 	"github.com/openshift/library-go/pkg/controller/factory"
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
+
 	"k8s.io/apimachinery/pkg/api/errors"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -32,7 +33,7 @@ const (
 	// minReconciliationSoakTime is the minimum time to wait after a transition
 	// starts before accepting reconciliation checks as passing. This prevents
 	// premature completion when downstream operators haven't started progressing yet.
-	minReconciliationSoakTime = 5 * time.Minute
+	minReconciliationSoakTime = 2 * time.Minute
 )
 
 // TopologyTransitionController manages day-2 control plane topology transitions.
