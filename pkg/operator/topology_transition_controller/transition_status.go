@@ -6,7 +6,6 @@ import (
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
-	v1 "github.com/openshift/api/config/v1"
 	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -138,8 +137,10 @@ func (c *TopologyTransitionController) completeTopologyTransition(ctx context.Co
 // invalidateDiscovery clears the old report when topology inputs change.
 func (c *TopologyTransitionController) invalidateDiscovery(infra *configv1.Infrastructure) {
 	condition := metav1.Condition{
-		Type: configv1.TopologyTransitionsEvaluatedConditionType, Status: metav1.ConditionUnknown,
-		Reason: "EvaluationPending", Message: "Topology changed; supported transitions await evaluation",
+		Type:               configv1.TopologyTransitionsEvaluatedConditionType,
+		Status:             metav1.ConditionUnknown,
+		Reason:             "EvaluationPending",
+		Message:            "Topology changed; supported transitions await evaluation",
 		ObservedGeneration: infra.Generation, LastTransitionTime: metav1.NewTime(c.clock.Now()),
 	}
 	conditions := &infra.Status.TopologyTransitionStatus.Conditions
@@ -225,8 +226,4 @@ func preserveEvaluationTimes(transitions, previous []configv1.TopologyTransition
 			}
 		}
 	}
-}
-
-func updateTransitionEvaluationCond(infra *v1.Infrastructure, condition *metav1.Condition) error {
-	meta.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, *condition)
 }
