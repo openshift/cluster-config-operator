@@ -16,8 +16,6 @@ import (
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
 	"k8s.io/apimachinery/pkg/api/errors"
-	metav1helpers "k8s.io/apimachinery/pkg/api/meta"
-	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -31,11 +29,9 @@ const (
 
 	reasonTopologyTransitionComplete   = "TopologyTransitionComplete"
 	reasonTopologyTransitionInProgress = "TopologyTransitionInProgress"
-	reasonTopologyTransitionUnknown    = "TopologyTransitionUnknown"
 
-	reasonTopologyTransitionEvaluationComplete   = "TopologyTransitionEvaluationComplete"
-	reasonTopologyTransitionEvaluationInProgress = "TopologyTransitionEvaluationInProgress"
-	reasonTopologyTransitionEvaluationUnknown    = "TopologyTransitionEvaluationUnknown"
+	reasonUnsupportedTransition = "UnsupportedTransition"
+	reasonPreflightCheckFailed  = "PreflightCheckFailed"
 
 	// minReconciliationSoakTime is the minimum time to wait after a transition
 	// starts before accepting reconciliation checks as passing. This prevents
@@ -148,28 +144,6 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 		return err
 	}
 
-	// Initialize the infra topology evaluation and transition completion statuses.
-	// Because the evaulation and the completion statuses are updated in the same call
-	cond := metav1helpers.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
-	if cond == nil {
-		metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
-			Type:    configv1.TopologyTransitionsEvaluatedConditionType,
-			Status:  metav1.ConditionUnknown,
-			Reason:  reasonTopologyTransitionEvaluationUnknown,
-			Message: "Evaluation status is unknown",
-		})
-		metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
-			Type:    configv1.TopologyTransitionCompletedConditionType,
-			Status:  metav1.ConditionUnknown,
-			Reason:  reasonTopologyTransitionUnknown,
-			Message: "Transition Status is Unknown",
-		})
-	}
-	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-
 	specTopology := infra.Spec.ControlPlaneTopology
 	statusTopology := infra.Status.ControlPlaneTopology
 
@@ -207,24 +181,35 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 		// longer differs from status, the request was withdrawn; clear both
 		// conditions back to idle so a stale rejection reason doesn't linger
 		// on transitionProgressingCondition.
-		_, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
-			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    upgradeableCondition,
-				Status:  operatorv1.ConditionTrue,
-				Reason:  "AsExpected",
-				Message: "No topology transition in progress",
-			}),
-			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    transitionProgressingCondition,
-				Status:  operatorv1.ConditionFalse,
-				Reason:  "AsExpected",
-				Message: "No topology transition in progress",
-			}),
+		return c.setTransitionOperatorConditions(ctx,
+			operatorv1.ConditionFalse, operatorv1.ConditionTrue,
+			"AsExpected",
+			"No topology transition in progress",
+			"No topology transition in progress",
 		)
-		return updateErr
 	}
 
 	return nil
+}
+
+// setTransitionOperatorConditions writes the controller's Progressing and
+// Upgradeable operator conditions in one status update. The pair always
+// shares a single reason so operator status stays internally consistent;
+// each condition keeps its own message.
+func (c *TopologyTransitionController) setTransitionOperatorConditions(
+	ctx context.Context,
+	progressing, upgradeable operatorv1.ConditionStatus,
+	reason, progressingMessage, upgradeableMessage string,
+) error {
+	_, _, err := v1helpers.UpdateStatus(ctx, c.operatorClient,
+		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+			Type: transitionProgressingCondition, Status: progressing, Reason: reason, Message: progressingMessage,
+		}),
+		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+			Type: upgradeableCondition, Status: upgradeable, Reason: reason, Message: upgradeableMessage,
+		}),
+	)
+	return err
 }
 
 // reconcileTransition finds the matching transition descriptor, runs preflight
@@ -234,19 +219,11 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 	if err != nil {
 		// Report via conditions, not sync error — these are user-fixable states
 		// that should not trigger WithSyncDegradedOnError.
-		if _, _, condErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
-			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    transitionProgressingCondition,
-				Status:  operatorv1.ConditionFalse,
-				Reason:  "UnsupportedTransition",
-				Message: err.Error(),
-			}),
-			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    upgradeableCondition,
-				Status:  operatorv1.ConditionFalse,
-				Reason:  "UnsupportedTransition",
-				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is requested; revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
-			}),
+		if condErr := c.setTransitionOperatorConditions(ctx,
+			operatorv1.ConditionFalse, operatorv1.ConditionFalse,
+			reasonUnsupportedTransition,
+			err.Error(),
+			fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is requested; revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
 		); condErr != nil {
 			return condErr
 		}
@@ -254,46 +231,14 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		return nil
 	}
 
-	// Set transition complete condition to false
-	metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
-		Type:    configv1.TopologyTransitionCompletedConditionType,
-		Status:  metav1.ConditionFalse,
-		Reason:  reasonTopologyTransitionInProgress,
-		Message: "Evaluations have not run",
-	})
-	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
-	if err != nil {
-		return err
-	}
-
 	if err := validatePreflight(c.preflightChecks, transition); err != nil {
-		if _, _, condErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
-			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    transitionProgressingCondition,
-				Status:  operatorv1.ConditionFalse,
-				Reason:  "PreflightCheckFailed",
-				Message: err.Error(),
-			}),
-			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    upgradeableCondition,
-				Status:  operatorv1.ConditionFalse,
-				Reason:  "PreflightCheckFailed",
-				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is pending; resolve preflight failures or revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
-			}),
+		if condErr := c.setTransitionOperatorConditions(ctx,
+			operatorv1.ConditionFalse, operatorv1.ConditionFalse,
+			reasonPreflightCheckFailed,
+			err.Error(),
+			fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is pending; resolve preflight failures or revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
 		); condErr != nil {
 			return condErr
-		}
-
-		// Set status of evaluations to "False" because the preflight checks failed to complete
-		metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
-			Type:    configv1.TopologyTransitionsEvaluatedConditionType,
-			Status:  metav1.ConditionFalse,
-			Reason:  reasonTopologyTransitionEvaluationUnknown,
-			Message: err.Error(),
-		})
-		infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
-		if err != nil {
-			return err
 		}
 
 		syncCtx.Recorder().Warningf("TopologyTransitionPreflightFailed", "%s", err.Error())
@@ -306,33 +251,12 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 	// Set operator conditions first. If conditions succeed but the infra
 	// status update fails, the next sync still sees spec != status and
 	// retries reconcileTransition (conditions update is idempotent).
-	if _, _, err := v1helpers.UpdateStatus(ctx, c.operatorClient,
-		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-			Type:    upgradeableCondition,
-			Status:  operatorv1.ConditionFalse,
-			Reason:  reasonTopologyTransitionInProgress,
-			Message: fmt.Sprintf("Cluster upgrade is not allowed during topology transition from %s to %s", statusTopology, specTopology),
-		}),
-		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-			Type:    transitionProgressingCondition,
-			Status:  operatorv1.ConditionTrue,
-			Reason:  reasonTopologyTransitionInProgress,
-			Message: fmt.Sprintf("Transitioning control plane topology from %s to %s", statusTopology, specTopology),
-		}),
+	if err := c.setTransitionOperatorConditions(ctx,
+		operatorv1.ConditionTrue, operatorv1.ConditionFalse,
+		reasonTopologyTransitionInProgress,
+		fmt.Sprintf("Transitioning control plane topology from %s to %s", statusTopology, specTopology),
+		fmt.Sprintf("Cluster upgrade is not allowed during topology transition from %s to %s", statusTopology, specTopology),
 	); err != nil {
-		return err
-	}
-
-	// Set status of evaluations to "True" because the preflight checks ran to completion.
-	// "True" only indicates successful completion and is not an indicator of passed or failed evaluations.
-	metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
-		Type:    configv1.TopologyTransitionsEvaluatedConditionType,
-		Status:  metav1.ConditionTrue,
-		Reason:  reasonTopologyTransitionEvaluationComplete,
-		Message: "Evaluations completed successfully",
-	})
-	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
-	if err != nil {
 		return err
 	}
 
@@ -390,31 +314,12 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		}
 	}
 
-	if _, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
-		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-			Type:    upgradeableCondition,
-			Status:  operatorv1.ConditionTrue,
-			Reason:  "TopologyTransitionComplete",
-			Message: "Topology transition complete, upgrades are allowed",
-		}),
-		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-			Type:    transitionProgressingCondition,
-			Status:  operatorv1.ConditionFalse,
-			Reason:  "TopologyTransitionComplete",
-			Message: "Topology transition reconciliation complete",
-		}),
-	); updateErr != nil {
-		return updateErr
-	}
-
-	metav1helpers.SetStatusCondition(&infra.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
-		Type:    configv1.TopologyTransitionCompletedConditionType,
-		Status:  metav1.ConditionTrue,
-		Reason:  reasonTopologyTransitionComplete,
-		Message: "Topology transition completed successfully",
-	})
-	infra, err = c.infraClient.UpdateStatus(ctx, infra, metav1.UpdateOptions{})
-	if err != nil {
+	if err := c.setTransitionOperatorConditions(ctx,
+		operatorv1.ConditionFalse, operatorv1.ConditionTrue,
+		reasonTopologyTransitionComplete,
+		"Topology transition reconciliation complete",
+		"Topology transition complete, upgrades are allowed",
+	); err != nil {
 		return err
 	}
 

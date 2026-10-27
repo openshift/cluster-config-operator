@@ -85,7 +85,7 @@ func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infra
 
 			if err := check.Validate(); err != nil {
 				result.Status = metav1.ConditionFalse
-				result.Reason = "PreflightCheckFailed"
+				result.Reason = reasonPreflightCheckFailed
 				result.Message = limitEvaluationMessage(err.Error())
 
 				if _, ok := errors.AsType[*clusterStateReadError](err); ok {
@@ -105,7 +105,7 @@ func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infra
 				source.Status.ControlPlaneTopology, source.Status.InfrastructureTopology, topologyPlatform(source.Status)))
 		} else if hasBlockers {
 			available.Status = metav1.ConditionFalse
-			available.Reason = "PreflightCheckFailed"
+			available.Reason = reasonPreflightCheckFailed
 			available.Message = "One or more preflight checks failed. See the other evaluation conditions with status False for details."
 		}
 
