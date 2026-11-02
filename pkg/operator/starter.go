@@ -181,11 +181,7 @@ func (o *OperatorOptions) RunOperator(ctx context.Context, controllerContext *co
 
 	statusController := status.NewClusterOperatorStatusController(
 		"config-operator",
-		[]configv1.ObjectReference{
-			{Group: "operator.openshift.io", Resource: "configs", Name: "cluster"},
-			{Group: "", Resource: "namespaces", Name: "openshift-config"},
-			{Group: "", Resource: "namespaces", Name: "openshift-config-operator"},
-		},
+		relatedObjects(),
 		configClient.ConfigV1(),
 		configInformers.Config().V1().ClusterOperators(),
 		operatorClient,
