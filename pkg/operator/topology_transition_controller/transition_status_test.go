@@ -207,6 +207,43 @@ func TestDiscoveryNormalizesEmptyTransitions(t *testing.T) {
 	assert.Equal(t, 0, statusWrites(client))
 }
 
+func TestDiscoveryClearsInapplicableTransitionsAndPreservesCompletion(t *testing.T) {
+	for _, completionStatus := range []metav1.ConditionStatus{metav1.ConditionFalse, metav1.ConditionTrue} {
+		t.Run(string(completionStatus), func(t *testing.T) {
+			infra := snoInfra("")
+			completion := metav1.Condition{
+				Type: configv1.TopologyTransitionCompletedConditionType, Status: completionStatus,
+				Reason: "ExistingCompletion", Message: "Retain completion status",
+				ObservedGeneration: 3, LastTransitionTime: metav1.NewTime(evaluationTime.Add(-time.Hour)),
+			}
+			infra.Status.TopologyTransitionStatus.Conditions = []metav1.Condition{completion}
+			controller, client, clk := statusTestController(infra)
+			assert.NoError(t, controller.syncEvaluation(t.Context()))
+			updated := currentInfra(t, controller)
+			assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
+			updated.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
+			updated.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+			_, err := controller.infraClient.UpdateStatus(t.Context(), updated, metav1.UpdateOptions{})
+			assert.NoError(t, err)
+			clk.SetTime(evaluationTime.Add(time.Hour))
+
+			assert.NoError(t, controller.syncEvaluation(t.Context()))
+
+			status := currentInfra(t, controller).Status.TopologyTransitionStatus
+			assert.Nil(t, status.Transitions)
+			assert.True(t, meta.IsStatusConditionTrue(status.Conditions, configv1.TopologyTransitionsEvaluatedConditionType))
+			assert.Equal(t, &completion, meta.FindStatusCondition(status.Conditions, completion.Type))
+			data, err := json.Marshal(status)
+			assert.NoError(t, err)
+			assert.NotContains(t, string(data), `"transitions"`)
+			client.ClearActions()
+			clk.SetTime(evaluationTime.Add(2 * time.Hour))
+			assert.NoError(t, controller.syncEvaluation(t.Context()))
+			assert.Zero(t, statusWrites(client))
+		})
+	}
+}
+
 // TestDiscoveryConflictReevaluatesAndPreservesOtherFields checks fresh evaluation after a conflict
 // without overwriting unrelated status.
 func TestDiscoveryConflictReevaluatesAndPreservesOtherFields(t *testing.T) {
@@ -256,14 +293,10 @@ func TestDiscoveryConflictReevaluatesAndPreservesOtherFields(t *testing.T) {
 			if assert.NotNil(t, condition) {
 				assert.Equal(t, int64(5), condition.ObservedGeneration)
 			}
-			if assert.Len(t, status.Transitions, 1) {
-				available := status.Transitions[0].Evaluations[0]
-				if changeSource {
-					assert.Equal(t, metav1.ConditionFalse, available.Status)
-					assert.Equal(t, "SourceTopologyMismatch", available.Reason)
-				} else {
-					assert.Equal(t, metav1.ConditionTrue, available.Status)
-				}
+			if changeSource {
+				assert.Nil(t, status.Transitions)
+			} else if assert.Len(t, status.Transitions, 1) {
+				assert.Equal(t, metav1.ConditionTrue, status.Transitions[0].Evaluations[0].Status)
 			}
 		})
 	}
@@ -680,11 +713,7 @@ func TestTopologyWriteGuardsConcurrentSpecAndSource(t *testing.T) {
 					assert.Equal(t, configv1.SingleReplicaTopologyMode, updated.Spec.ControlPlaneTopology)
 					assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1)
 				} else {
-					if assert.Len(t, updated.Status.TopologyTransitionStatus.Transitions, 1) {
-						available := updated.Status.TopologyTransitionStatus.Transitions[0].Evaluations[0]
-						assert.Equal(t, metav1.ConditionFalse, available.Status)
-						assert.Equal(t, "SourceTopologyMismatch", available.Reason)
-					}
+					assert.Nil(t, updated.Status.TopologyTransitionStatus.Transitions)
 				}
 			}
 		})

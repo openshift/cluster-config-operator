@@ -521,7 +521,7 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	assert.NoError(t, indexer.Add(requested))
 	c.infraLister = configlistersv1.NewInfrastructureLister(indexer)
 	assert.NoError(t, c.sync(t.Context(), newTestSyncContext()))
-	assert.Equal(t, int32(2), requestChecks.Load(), "discovery and request must each run source checks")
+	assert.Equal(t, int32(1), requestChecks.Load(), "only the matching request must run source checks")
 	assert.Equal(t, configv1.HighlyAvailableTopologyMode, currentInfra(t, c).Status.ControlPlaneTopology)
 	_, operatorStatus, resourceVersion, err := c.operatorClient.GetOperatorState()
 	assert.NoError(t, err)
@@ -551,10 +551,9 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	if assert.NotNil(t, completion) {
 		assert.Equal(t, metav1.ConditionUnknown, completion.Status, "evaluation must not report transition progress")
 	}
-	if assert.Len(t, stored.Status.TopologyTransitionStatus.Transitions, 2) {
-		assert.Equal(t, configv1.SingleReplicaTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
-		assert.Equal(t, metav1.ConditionFalse, stored.Status.TopologyTransitionStatus.Transitions[0].Evaluations[0].Status)
-		assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[1].Source.ControlPlaneTopology)
+	if assert.Len(t, stored.Status.TopologyTransitionStatus.Transitions, 1) {
+		assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
+		assert.Equal(t, metav1.ConditionTrue, stored.Status.TopologyTransitionStatus.Transitions[0].Evaluations[0].Status)
 	}
 }
 

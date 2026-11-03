@@ -83,7 +83,7 @@ func TestEvaluateTransitionsEmittedConditionsValid(t *testing.T) {
 			f.withNodes(newTestDualRoleNodeWithConditions("master-2", true, notReadyNodeCondition())).
 				withEtcdCR(false, true).withEtcdEndpoints(1).withClusterVersion(true)
 		}},
-		{name: "unsupported platform", transitions: 1, change: func(_ *testFixture, i *configv1.Infrastructure) {
+		{name: "unsupported platform", change: func(_ *testFixture, i *configv1.Infrastructure) {
 			i.Status.PlatformStatus.Type = configv1.AWSPlatformType
 		}},
 		{name: "typed read failure", readFailure: true, change: func(f *testFixture, _ *configv1.Infrastructure) {
@@ -403,29 +403,46 @@ func TestEvaluateTransitionsMissingRequiredState(t *testing.T) {
 	}
 }
 
-// TestEvaluateTransitionsSourceMismatch keeps mismatched transitions listed with unavailable
-// status.
-func TestEvaluateTransitionsSourceMismatch(t *testing.T) {
+func TestEvaluateTransitionsSourceApplicability(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		change func(*configv1.Infrastructure)
+		name      string
+		change    func(*configv1.Infrastructure)
+		wantCount int
 	}{
+		{name: "matching topology and platform", wantCount: 1, change: func(*configv1.Infrastructure) {}},
 		{name: "unsupported platform", change: func(i *configv1.Infrastructure) { i.Status.PlatformStatus.Type = configv1.AWSPlatformType }},
 		{name: "missing platform", change: func(i *configv1.Infrastructure) { i.Status.PlatformStatus = nil }},
 		{name: "unsupported control plane", change: func(i *configv1.Infrastructure) { i.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode }},
 		{name: "unsupported infrastructure", change: func(i *configv1.Infrastructure) {
 			i.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 		}},
+		{name: "unsupported topology and platform", change: func(i *configv1.Infrastructure) {
+			i.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
+			i.Status.PlatformStatus.Type = configv1.AWSPlatformType
+		}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			infra := snoInfra(configv1.HighlyAvailableTopologyMode)
 			tc.change(infra)
 			infra.Generation = 9
-			calls := 0
+			before := infra.DeepCopy()
+			globalCalls, descriptorCalls, updaterCalls := 0, 0, 0
+			descriptors := noopTransitions()
+			updateStatus := descriptors[0].UpdateStatus
+			descriptors[0].UpdateStatus = func(target *configv1.Infrastructure) {
+				updaterCalls++
+				updateStatus(target)
+			}
+			descriptors[0].PreflightValidators = []PreflightCheck{{Type: "DescriptorCheck", Validate: func() error {
+				descriptorCalls++
+				return nil
+			}}}
 			ctrl := &TopologyTransitionController{
-				transitions: noopTransitions(), clock: clocktesting.NewFakePassiveClock(evaluationTime),
+				transitions: descriptors, clock: clocktesting.NewFakePassiveClock(evaluationTime),
 				preflightChecks: []PreflightCheck{{Type: "CurrentClusterCheck", Validate: func() error {
-					calls++
+					globalCalls++
 					return nil
 				}}},
 			}
@@ -433,16 +450,17 @@ func TestEvaluateTransitionsSourceMismatch(t *testing.T) {
 			transitions, condition, err := ctrl.evaluateTransitions(infra)
 
 			assert.NoError(t, err)
-			if !assert.Len(t, transitions, 1) {
-				return
+			assert.Equal(t, before, infra)
+			assert.Len(t, ctrl.transitions, 1)
+			assert.Len(t, transitions, tc.wantCount)
+			assert.Equal(t, tc.wantCount, globalCalls)
+			assert.Equal(t, tc.wantCount, descriptorCalls)
+			assert.Equal(t, tc.wantCount, updaterCalls)
+			if tc.wantCount == 0 {
+				assert.Nil(t, transitions)
+			} else if assert.Len(t, transitions, 1) {
+				assert.Equal(t, metav1.ConditionTrue, transitions[0].Evaluations[0].Status)
 			}
-			assert.Equal(t, 1, calls)
-			available := transitions[0].Evaluations[0]
-			assert.Equal(t, metav1.ConditionFalse, available.Status)
-			assert.Equal(t, "SourceTopologyMismatch", available.Reason)
-			assert.Contains(t, available.Message, string(infra.Status.ControlPlaneTopology))
-			assert.Equal(t, configv1.SingleReplicaTopologyMode, transitions[0].Source.ControlPlaneTopology)
-			assert.Equal(t, configv1.SingleReplicaTopologyMode, transitions[0].Source.InfrastructureTopology)
 			assert.Equal(t, configv1.TopologyTransitionsEvaluatedConditionType, condition.Type)
 			assert.Equal(t, metav1.ConditionTrue, condition.Status)
 			assert.Equal(t, "EvaluationComplete", condition.Reason)
@@ -584,29 +602,15 @@ func TestEvaluateTransitionsBlockersAndRecovery(t *testing.T) {
 	}
 }
 
-// TestEvaluateTransitionsRetainsDescriptorAfterHA keeps the SNO-to-HA option visible after its
-// source no longer matches.
-func TestEvaluateTransitionsRetainsDescriptorAfterHA(t *testing.T) {
+func TestEvaluateTransitionsOmitsDescriptorAfterHA(t *testing.T) {
 	infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
 	ctrl := readyFixture().newController(infra, nil)
 
 	transitions, condition, err := ctrl.evaluateTransitions(infra)
 
-	if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
-		return
-	}
+	assert.NoError(t, err)
+	assert.Nil(t, transitions)
 	assert.Equal(t, metav1.ConditionTrue, condition.Status)
-	assert.Equal(t, configv1.SingleReplicaTopologyMode, transitions[0].Source.ControlPlaneTopology)
-	assert.Equal(t, configv1.SingleReplicaTopologyMode, transitions[0].Source.InfrastructureTopology)
-	assert.Equal(t, configv1.HighlyAvailableTopologyMode, transitions[0].Target.ControlPlaneTopology)
-	available := meta.FindStatusCondition(transitions[0].Evaluations, configv1.TopologyTransitionAvailableConditionType)
-	if assert.NotNil(t, available) {
-		assert.Equal(t, metav1.ConditionFalse, available.Status)
-		assert.Equal(t, "SourceTopologyMismatch", available.Reason)
-		assert.Contains(t, available.Message, "SingleReplica")
-		assert.Contains(t, available.Message, "HighlyAvailable")
-	}
-	assert.Len(t, transitions[0].Evaluations, 11)
 }
 
 // TestEvaluateTransitionsReportsEachDescriptorIndependently checks that one target can be blocked
@@ -643,13 +647,11 @@ func TestEvaluateTransitionsReportsEachDescriptorIndependently(t *testing.T) {
 // TestEvaluateTransitionsReadFailureInvalidatesAllDescriptors checks that one failed read
 // suppresses the full report after all checks run.
 func TestEvaluateTransitionsReadFailureInvalidatesAllDescriptors(t *testing.T) {
-	infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
+	infra := snoInfra("")
 	descriptors := noopTransitions()
 	readErr := errors.New("first target state unreadable")
 	descriptors[0].PreflightValidators = []PreflightCheck{{Type: "TargetState", Validate: func() error { return &clusterStateReadError{err: readErr} }}}
 	second := noopTransitions()[0]
-	second.From.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
-	second.From.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 	second.UpdateStatus = func(i *configv1.Infrastructure) { i.Status.ControlPlaneTopology = configv1.HighlyAvailableArbiterMode }
 	calls := 0
 	second.PreflightValidators = []PreflightCheck{{Type: "TargetState", Validate: func() error { calls++; return nil }}}
@@ -661,5 +663,26 @@ func TestEvaluateTransitionsReadFailureInvalidatesAllDescriptors(t *testing.T) {
 	assert.ErrorIs(t, err, readErr)
 	assert.Empty(t, transitions, "a failed read must not publish a partial report")
 	assert.Equal(t, metav1.ConditionFalse, condition.Status)
-	assert.Equal(t, 1, calls, "a nonmatching source's read failure must not skip other descriptors")
+	assert.Equal(t, 1, calls, "a matching source's read failure must not skip other applicable descriptors")
+}
+
+func TestEvaluateTransitionsSkipsInapplicableReadFailures(t *testing.T) {
+	infra := snoInfra("")
+	descriptors := noopTransitions()
+	skipped := noopTransitions()[0]
+	skipped.From.PlatformStatus = &configv1.PlatformStatus{Type: configv1.AWSPlatformType}
+	calls := 0
+	skipped.PreflightValidators = []PreflightCheck{{Type: "Unreadable", Validate: func() error {
+		calls++
+		return &clusterStateReadError{err: errors.New("unavailable state")}
+	}}}
+	descriptors = append([]TransitionDescriptor{skipped}, descriptors...)
+	ctrl := &TopologyTransitionController{transitions: descriptors, clock: clocktesting.NewFakePassiveClock(evaluationTime)}
+
+	transitions, condition, err := ctrl.evaluateTransitions(infra)
+
+	assert.NoError(t, err)
+	assert.Len(t, transitions, 1)
+	assert.Equal(t, 0, calls)
+	assert.Equal(t, metav1.ConditionTrue, condition.Status)
 }
