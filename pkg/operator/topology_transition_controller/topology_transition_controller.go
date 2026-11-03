@@ -15,10 +15,13 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 
+	"k8s.io/apimachinery/pkg/api/equality"
 	"k8s.io/apimachinery/pkg/api/errors"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
+	"k8s.io/client-go/util/retry"
 	klog "k8s.io/klog/v2"
 	"k8s.io/utils/clock"
 )
@@ -312,6 +315,29 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied: %v", i+1, len(transitionValidators), err)
 			return nil
 		}
+	}
+
+	if writeErr := retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		updated := current.DeepCopy()
+		upsertCondition(&updated.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+			Type:               configv1.TopologyTransitionCompletedConditionType,
+			Status:             metav1.ConditionTrue,
+			Reason:             reasonTopologyTransitionComplete,
+			Message:            "Topology transition reconciliation complete",
+			ObservedGeneration: current.Generation,
+			LastTransitionTime: metav1.NewTime(c.clock.Now()),
+		})
+		if equality.Semantic.DeepEqual(current.Status, updated.Status) {
+			return nil
+		}
+		_, err = c.infraClient.UpdateStatus(ctx, updated, metav1.UpdateOptions{})
+		return err
+	}); writeErr != nil {
+		return fmt.Errorf("failed posting transition completion condition to infra topology status: %w", writeErr)
 	}
 
 	if err := c.setTransitionOperatorConditions(ctx,
