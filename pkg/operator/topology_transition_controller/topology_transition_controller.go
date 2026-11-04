@@ -35,6 +35,8 @@ const (
 	reasonUnsupportedTransition = "UnsupportedTransition"
 	reasonPreflightCheckFailed  = "PreflightCheckFailed"
 
+	messageTransitionReconciliationComplete = "Topology transition reconciliation complete"
+
 	// minReconciliationSoakTime is the minimum time to wait after a transition
 	// starts before accepting reconciliation checks as passing. This prevents
 	// premature completion when downstream operators haven't started progressing yet.
@@ -263,6 +265,25 @@ func validateTransitionConvergence(infra *configv1.Infrastructure, transition *T
 		transition.Name, strings.Join(conflicts, "; "))
 }
 
+// blockTransition sets Progressing=False and Upgradeable=False with the given
+// reason and messages, records a warning event, and returns nil so callers can
+// propagate the return directly. Errors from the condition write are bubbled up
+// instead.
+func (c *TopologyTransitionController) blockTransition(
+	ctx context.Context,
+	syncCtx factory.SyncContext,
+	reason, progressingMessage, upgradeableMessage, eventName string,
+) error {
+	if condErr := c.setTransitionOperatorConditions(ctx,
+		operatorv1.ConditionFalse, operatorv1.ConditionFalse,
+		reason, progressingMessage, upgradeableMessage,
+	); condErr != nil {
+		return condErr
+	}
+	syncCtx.Recorder().Warningf(eventName, "%s", progressingMessage)
+	return nil
+}
+
 // setTransitionOperatorConditions writes the controller's Progressing and
 // Upgradeable operator conditions in one status update. The pair always
 // shares a single reason so operator status stays internally consistent;
@@ -293,31 +314,23 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 	if err != nil {
 		// Report via conditions, not sync error — these are user-fixable states
 		// that should not trigger WithSyncDegradedOnError.
-		if condErr := c.setTransitionOperatorConditions(ctx,
-			operatorv1.ConditionFalse, operatorv1.ConditionFalse,
+		return c.blockTransition(ctx, syncCtx,
 			reasonUnsupportedTransition,
 			err.Error(),
 			fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is requested; set spec.controlPlaneTopology=%s and spec.infrastructureTopology=%s to match status and resolve",
 				infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology),
-		); condErr != nil {
-			return condErr
-		}
-		syncCtx.Recorder().Warningf("TopologyTransitionUnsupported", "%s", err.Error())
-		return nil
+			"TopologyTransitionUnsupported",
+		)
 	}
 
 	if err := validatePreflight(c.preflightChecks, transition); err != nil {
-		if condErr := c.setTransitionOperatorConditions(ctx,
-			operatorv1.ConditionFalse, operatorv1.ConditionFalse,
+		return c.blockTransition(ctx, syncCtx,
 			reasonPreflightCheckFailed,
 			err.Error(),
 			fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is pending; resolve preflight failures or set spec.controlPlaneTopology=%s and spec.infrastructureTopology=%s to match status and resolve",
 				infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology),
-		); condErr != nil {
-			return condErr
-		}
-		syncCtx.Recorder().Warningf("TopologyTransitionPreflightFailed", "%s", err.Error())
-		return nil
+			"TopologyTransitionPreflightFailed",
+		)
 	}
 
 	divergence := describeRequestedTransition(infra)
@@ -474,7 +487,7 @@ func (c *TopologyTransitionController) clearTransitionConditions(ctx context.Con
 	return c.setTransitionOperatorConditions(ctx,
 		operatorv1.ConditionFalse, operatorv1.ConditionTrue,
 		reasonTopologyTransitionComplete,
-		"Topology transition reconciliation complete",
+		messageTransitionReconciliationComplete,
 		"Topology transition complete, upgrades are allowed",
 	)
 }
