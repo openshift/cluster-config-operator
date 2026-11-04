@@ -37,6 +37,31 @@ func (c *TopologyTransitionController) refreshDiscovery(ctx context.Context) (*c
 	return latest, errors.Join(evaluationErr, writeErr)
 }
 
+// setTopologyCompletedCondition writes the TopologyTransitionCompleted condition
+// on infra status. The equality guard prevents writes when nothing changed.
+func (c *TopologyTransitionController) setTopologyCompletedCondition(ctx context.Context, status metav1.ConditionStatus, reason, message string) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+		updated := current.DeepCopy()
+		upsertCondition(&updated.Status.TopologyTransitionStatus.Conditions, metav1.Condition{
+			Type:               configv1.TopologyTransitionCompletedConditionType,
+			Status:             status,
+			Reason:             reason,
+			Message:            message,
+			ObservedGeneration: current.Generation,
+			LastTransitionTime: metav1.NewTime(c.clock.Now()),
+		})
+		if equality.Semantic.DeepEqual(current.Status, updated.Status) {
+			return nil
+		}
+		_, err = c.infraClient.UpdateStatus(ctx, updated, metav1.UpdateOptions{})
+		return err
+	})
+}
+
 // applyTopologyStatus changes topology and invalidates discovery in one write.
 // Each retry checks the request and source against freshly read status.
 func (c *TopologyTransitionController) applyTopologyStatus(ctx context.Context, expected *configv1.Infrastructure, transition *TransitionDescriptor) (bool, error) {

@@ -549,7 +549,11 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	assert.Equal(t, configv1.HighlyAvailableTopologyMode, stored.Status.ControlPlaneTopology)
 	completion := meta.FindStatusCondition(stored.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
 	if assert.NotNil(t, completion) {
-		assert.Equal(t, metav1.ConditionUnknown, completion.Status, "evaluation must not report transition progress")
+		// Evaluation preserves completion state written by the main sync; after the
+		// transition completed above, the main sync wrote True and the evaluation
+		// worker carries it forward without modification.
+		assert.Equal(t, metav1.ConditionTrue, completion.Status, "evaluation preserves completion state from main sync")
+		assert.Equal(t, reasonTopologyTransitionComplete, completion.Reason)
 	}
 	if assert.Len(t, stored.Status.TopologyTransitionStatus.Transitions, 2) {
 		assert.Equal(t, configv1.SingleReplicaTopologyMode, stored.Status.TopologyTransitionStatus.Transitions[0].Source.ControlPlaneTopology)
