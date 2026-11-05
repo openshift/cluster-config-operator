@@ -11,7 +11,7 @@ import (
 
 const maxEvaluationMessageCharacters = 32768
 
-// evaluateTransitions reports each registered transition, independently of any
+// evaluateTransitions reports each applicable transition, independently of any
 // spec request. It returns only the evaluation condition; callers merge it with
 // the completion condition when writing status. No input is changed.
 func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infrastructure) ([]configv1.TopologyTransition, metav1.Condition, error) {
@@ -43,9 +43,11 @@ func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infra
 		if err := validateEvaluationChecks(checks); err != nil {
 			return failedTransitionEvaluation(condition, err)
 		}
+		if !matchesStatus(descriptor.From, infra.Status) {
+			continue
+		}
 
-		// Use the descriptor's source even when the cluster has already moved to
-		// another topology. Resolve wildcard fields from current status.
+		// Resolve wildcard fields from current status.
 		source := infra.DeepCopy()
 		if descriptor.From.ControlPlaneTopology != "" {
 			source.Status.ControlPlaneTopology = descriptor.From.ControlPlaneTopology
@@ -97,13 +99,7 @@ func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infra
 			evaluations = append(evaluations, result)
 		}
 
-		if !matchesStatus(descriptor.From, infra.Status) {
-			available.Status = metav1.ConditionFalse
-			available.Reason = "SourceTopologyMismatch"
-			available.Message = limitEvaluationMessage(fmt.Sprintf("Current cluster state {controlPlane=%s, infrastructure=%s, platform=%s} does not match transition source {controlPlane=%s, infrastructure=%s, platform=%s}",
-				infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology, topologyPlatform(infra.Status),
-				source.Status.ControlPlaneTopology, source.Status.InfrastructureTopology, topologyPlatform(source.Status)))
-		} else if hasBlockers {
+		if hasBlockers {
 			available.Status = metav1.ConditionFalse
 			available.Reason = "PreflightCheckFailed"
 			available.Message = "One or more preflight checks failed. See the other evaluation conditions with status False for details."
@@ -120,14 +116,6 @@ func (c *TopologyTransitionController) evaluateTransitions(infra *configv1.Infra
 	}
 
 	return transitions, condition, nil
-}
-
-// topologyPlatform returns the reported platform type, or Unknown when platform status is absent.
-func topologyPlatform(status configv1.InfrastructureStatus) configv1.PlatformType {
-	if status.PlatformStatus == nil {
-		return "Unknown"
-	}
-	return status.PlatformStatus.Type
 }
 
 // failedTransitionEvaluation marks the report failed, omits all transitions, and returns the error.
