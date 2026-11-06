@@ -375,14 +375,20 @@ func listWorkerNodes(nodeLister corev1listers.NodeLister) ([]*corev1.Node, error
 
 // countReadyNodes returns the number of nodes in the given list with a
 // Ready=True condition.
+func nodeHasReadyCondition(node *corev1.Node) bool {
+	for _, cond := range node.Status.Conditions {
+		if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
+			return true
+		}
+	}
+	return false
+}
+
 func countReadyNodes(nodes []*corev1.Node) int {
 	readyCount := 0
 	for _, node := range nodes {
-		for _, cond := range node.Status.Conditions {
-			if cond.Type == corev1.NodeReady && cond.Status == corev1.ConditionTrue {
-				readyCount++
-				break
-			}
+		if nodeHasReadyCondition(node) {
+			readyCount++
 		}
 	}
 
@@ -555,6 +561,166 @@ func validateOpenShiftAPIServerReadyReplicas(required int, deploymentLister apps
 
 		if deployment.Status.ReadyReplicas < int32(required) {
 			return fmt.Errorf("insufficient openshift-apiserver ready replicas: need %d, have %d", required, deployment.Status.ReadyReplicas)
+		}
+
+		return nil
+	}
+}
+
+// validateWorkerCapableNodeCount returns a TransitionValidatorFunc that checks
+// the total count of worker-capable nodes (with the worker role label,
+// including dual-role control-plane/worker nodes) meets the requirement.
+func validateWorkerCapableNodeCount(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
+	return func() error {
+		nodes, err := listWorkerNodes(nodeLister)
+		if err != nil {
+			return fmt.Errorf("failed to list worker-capable nodes: %w", err)
+		}
+
+		if len(nodes) < required {
+			return fmt.Errorf("insufficient worker-capable nodes: need %d, have %d", required, len(nodes))
+		}
+
+		return nil
+	}
+}
+
+// validateWorkerCapableNodesReady returns a TransitionValidatorFunc that checks
+// the required number of worker-capable nodes are ready. A node is considered
+// ready when it has Ready=True, is schedulable, and has no blocking taints.
+func validateWorkerCapableNodesReady(required int, nodeLister corev1listers.NodeLister) TransitionValidatorFunc {
+	return func() error {
+		nodes, err := listWorkerNodes(nodeLister)
+		if err != nil {
+			return fmt.Errorf("failed to list worker-capable nodes: %w", err)
+		}
+
+		ready := 0
+		for _, node := range nodes {
+			if nodeHasReadyCondition(node) && !node.Spec.Unschedulable && !hasBlockingTaints(node) {
+				ready++
+			}
+		}
+
+		if ready < required {
+			return fmt.Errorf("insufficient ready worker-capable nodes: need %d, have %d (nodes must be Ready, schedulable, and free of blocking taints)", required, ready)
+		}
+
+		return nil
+	}
+}
+
+// hasBlockingTaints returns true if the node has any NoSchedule or NoExecute
+// taint that would prevent standard infrastructure pods from scheduling.
+func hasBlockingTaints(node *corev1.Node) bool {
+	for _, taint := range node.Spec.Taints {
+		if taint.Effect != corev1.TaintEffectNoSchedule && taint.Effect != corev1.TaintEffectNoExecute {
+			continue
+		}
+		switch taint.Key {
+		case "node.kubernetes.io/not-ready",
+			"node.kubernetes.io/unreachable",
+			"node.kubernetes.io/unschedulable",
+			"node-role.kubernetes.io/master",
+			"node-role.kubernetes.io/control-plane":
+			continue
+		default:
+			return true
+		}
+	}
+	return false
+}
+
+// whenCapabilityEnabled wraps a TransitionValidatorFunc so that it is only
+// executed when the given ClusterVersion capability is listed in
+// status.capabilities.enabledCapabilities. Components whose capability is
+// disabled cannot reconcile to the desired replica count and must not block
+// the transition indefinitely. If the ClusterVersion cannot be read, the
+// validator runs to avoid silently skipping a check that should apply.
+func whenCapabilityEnabled(cap configv1.ClusterVersionCapability, cvLister configlistersv1.ClusterVersionLister, v TransitionValidatorFunc) TransitionValidatorFunc {
+	return func() error {
+		cv, err := cvLister.Get(clusterVersionName)
+		if err != nil {
+			return v()
+		}
+		for _, enabled := range cv.Status.Capabilities.EnabledCapabilities {
+			if enabled == cap {
+				return v()
+			}
+		}
+		return nil
+	}
+}
+
+// whenWorkloadExists wraps a validator so that it returns nil when the
+// underlying resource does not exist (NotFound). This handles components
+// without a capability gate (e.g. Monitoring) whose operator management
+// state may be set to Removed.
+func whenWorkloadExists(v TransitionValidatorFunc) TransitionValidatorFunc {
+	return func() error {
+		err := v()
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		return err
+	}
+}
+
+// validateDeploymentReadyReplicas returns a TransitionValidatorFunc that checks
+// the named Deployment has the required number of ready replicas.
+func validateDeploymentReadyReplicas(name string, required int, deploymentLister appsv1listers.DeploymentNamespaceLister) TransitionValidatorFunc {
+	return func() error {
+		deployment, err := deploymentLister.Get(name)
+		if err != nil {
+			return fmt.Errorf("failed to get deployment %s: %w", name, err)
+		}
+
+		if deployment.Status.ReadyReplicas < int32(required) {
+			return fmt.Errorf("insufficient %s ready replicas: need %d, have %d", name, required, deployment.Status.ReadyReplicas)
+		}
+
+		return nil
+	}
+}
+
+// validateImageRegistryIfScaled checks the image-registry deployment has
+// the required ready replicas, but only when the registry operator has
+// requested HA scaling (spec.replicas >= required). On platforms where
+// HA replicas are not supported (e.g. RWO-only storage), the registry
+// operator keeps spec.replicas=1 and this check is skipped.
+func validateImageRegistryIfScaled(required int, deploymentLister appsv1listers.DeploymentNamespaceLister) TransitionValidatorFunc {
+	return func() error {
+		deployment, err := deploymentLister.Get("image-registry")
+		if apierrors.IsNotFound(err) {
+			return nil
+		}
+		if err != nil {
+			return fmt.Errorf("failed to get image-registry deployment: %w", err)
+		}
+
+		if deployment.Spec.Replicas == nil || *deployment.Spec.Replicas < int32(required) {
+			return nil
+		}
+
+		if deployment.Status.ReadyReplicas < int32(required) {
+			return fmt.Errorf("insufficient image-registry ready replicas: need %d, have %d", required, deployment.Status.ReadyReplicas)
+		}
+
+		return nil
+	}
+}
+
+// validateStatefulSetReadyReplicas returns a TransitionValidatorFunc that
+// checks the named StatefulSet has the required number of ready replicas.
+func validateStatefulSetReadyReplicas(name string, required int, statefulSetLister appsv1listers.StatefulSetNamespaceLister) TransitionValidatorFunc {
+	return func() error {
+		sts, err := statefulSetLister.Get(name)
+		if err != nil {
+			return fmt.Errorf("failed to get statefulset %s: %w", name, err)
+		}
+
+		if sts.Status.ReadyReplicas < int32(required) {
+			return fmt.Errorf("insufficient %s ready replicas: need %d, have %d", name, required, sts.Status.ReadyReplicas)
 		}
 
 		return nil

@@ -50,6 +50,23 @@ func newTestInfra(specTopology, statusTopology, statusInfraTopology configv1.Top
 	return infra
 }
 
+func newTestInfraWithInfraSpec(specInfraTopology, statusCPTopology, statusInfraTopology configv1.TopologyMode, platformType configv1.PlatformType) *configv1.Infrastructure {
+	infra := &configv1.Infrastructure{
+		ObjectMeta: metav1.ObjectMeta{Name: "cluster"},
+		Spec: configv1.InfrastructureSpec{
+			InfrastructureTopology: specInfraTopology,
+		},
+		Status: configv1.InfrastructureStatus{
+			ControlPlaneTopology:   statusCPTopology,
+			InfrastructureTopology: statusInfraTopology,
+		},
+	}
+	if platformType != "" {
+		infra.Status.PlatformStatus = &configv1.PlatformStatus{Type: platformType}
+	}
+	return infra
+}
+
 func newTestControlPlaneNode(name string, unschedulable bool) *corev1.Node {
 	return &corev1.Node{
 		ObjectMeta: metav1.ObjectMeta{
@@ -145,6 +162,23 @@ func newTestWorkerNodeWithConditions(name string, conditions []corev1.NodeCondit
 		},
 		Status: corev1.NodeStatus{
 			Conditions: conditions,
+		},
+	}
+}
+
+func newWorkerNodeUnschedulable(name string) *corev1.Node {
+	return &corev1.Node{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+			Labels: map[string]string{
+				"node-role.kubernetes.io/worker": "",
+			},
+		},
+		Spec: corev1.NodeSpec{
+			Unschedulable: true,
+		},
+		Status: corev1.NodeStatus{
+			Conditions: readyNodeCondition(),
 		},
 	}
 }
@@ -252,11 +286,12 @@ func newTestEtcdCR(membersAvailable bool, progressing bool) *operatorv1.Etcd {
 	}
 }
 
-// noopTransitions returns a transitions list that matches SNO→HA on None
+// noopTransitions returns a transitions list that matches SNO->HA on None
 // without real listers — validators always pass.
 func noopTransitions() []TransitionDescriptor {
 	return []TransitionDescriptor{
 		{
+			Name: "SNOToHACompact",
 			From: configv1.InfrastructureStatus{
 				ControlPlaneTopology:   configv1.SingleReplicaTopologyMode,
 				InfrastructureTopology: configv1.SingleReplicaTopologyMode,
@@ -284,6 +319,37 @@ func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []Tran
 	return transitions
 }
 
+// noopInfraTransitions returns a transitions list that matches
+// infrastructure SR->HA without real listers — validators always pass.
+func noopInfraTransitions() []TransitionDescriptor {
+	return []TransitionDescriptor{
+		{
+			Name: "InfrastructureSingleToHA",
+			From: configv1.InfrastructureStatus{
+				ControlPlaneTopology:   configv1.HighlyAvailableTopologyMode,
+				InfrastructureTopology: configv1.SingleReplicaTopologyMode,
+				PlatformStatus:         &configv1.PlatformStatus{Type: configv1.NonePlatformType},
+			},
+			To: configv1.InfrastructureSpec{
+				InfrastructureTopology: configv1.HighlyAvailableTopologyMode,
+			},
+			PreflightValidators: nil,
+			UpdateStatus: func(infra *configv1.Infrastructure) {
+				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+			},
+			TransitionValidators: nil,
+		},
+	}
+}
+
+// noopInfraTransitionsWithValidators returns the same transitions list as
+// noopInfraTransitions, but with the given TransitionValidators wired in.
+func noopInfraTransitionsWithValidators(validators ...TransitionValidatorFunc) []TransitionDescriptor {
+	transitions := noopInfraTransitions()
+	transitions[0].TransitionValidators = validators
+	return transitions
+}
+
 // reconciliationTestTransitions returns a transitions list whose To spec is a
 // wildcard (matches any Infrastructure spec), used to control
 // checkClusterReconciliation behavior in tests independent of the infra's
@@ -291,29 +357,31 @@ func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []Tran
 func reconciliationTestTransitions(validators ...TransitionValidatorFunc) []TransitionDescriptor {
 	return []TransitionDescriptor{
 		{
+			Name:                 "TestTransition",
 			To:                   configv1.InfrastructureSpec{},
 			TransitionValidators: validators,
 		},
 	}
 }
 
-// transitionProgressingConditions returns the standard in-progress operator conditions.
-func transitionInProgressConditions() []operatorv1.OperatorCondition {
-	return transitionInProgressConditionsAt(time.Now().Add(-10 * time.Minute))
+// transitionInProgressConditions returns the standard in-progress operator
+// conditions with the transition name recorded in the Reason field.
+func transitionInProgressConditions(transitionName string) []operatorv1.OperatorCondition {
+	return transitionInProgressConditionsAt(time.Now().Add(-10*time.Minute), transitionName)
 }
 
-func transitionInProgressConditionsAt(t time.Time) []operatorv1.OperatorCondition {
+func transitionInProgressConditionsAt(t time.Time, transitionName string) []operatorv1.OperatorCondition {
 	return []operatorv1.OperatorCondition{
 		{
 			Type:               transitionProgressingCondition,
 			Status:             operatorv1.ConditionTrue,
-			Reason:             reasonTopologyTransitionInProgress,
+			Reason:             transitionName,
 			LastTransitionTime: metav1.NewTime(t),
 		},
 		{
 			Type:               upgradeableCondition,
 			Status:             operatorv1.ConditionFalse,
-			Reason:             reasonTopologyTransitionInProgress,
+			Reason:             transitionName,
 			LastTransitionTime: metav1.NewTime(t),
 		},
 	}
@@ -363,6 +431,10 @@ type testFixture struct {
 	kasIndexer           cache.Indexer
 	oasDeploymentIndexer cache.Indexer
 
+	imageRegistryDeploymentIndexer cache.Indexer
+	consoleDeploymentIndexer       cache.Indexer
+	monitoringStatefulSetIndexer   cache.Indexer
+
 	nodeLister          corev1listers.NodeLister
 	cmLister            corev1listers.ConfigMapNamespaceLister
 	etcdLister          operatorv1listers.EtcdLister
@@ -374,11 +446,21 @@ type testFixture struct {
 	kasLister           operatorv1listers.KubeAPIServerLister
 	oasDeploymentLister appsv1listers.DeploymentNamespaceLister
 
+	imageRegistryDeploymentLister appsv1listers.DeploymentNamespaceLister
+	consoleDeploymentLister       appsv1listers.DeploymentNamespaceLister
+	monitoringStatefulSetLister   appsv1listers.StatefulSetNamespaceLister
+
 	operatorClient v1helpers.OperatorClient
 }
 
 // ingressOperatorNamespace is the namespace IngressControllers live in.
 const ingressOperatorNamespace = "openshift-ingress-operator"
+
+const (
+	imageRegistryNamespace = "openshift-image-registry"
+	consoleNamespace       = "openshift-console"
+	monitoringNamespace    = "openshift-monitoring"
+)
 
 func newTestFixture() *testFixture {
 	nodeIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
@@ -391,6 +473,9 @@ func newTestFixture() *testFixture {
 	icIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	kasIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	oasDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	imageRegistryDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	consoleDeploymentIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	monitoringStatefulSetIndexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 
 	// Default to no upgrade in progress, so fixtures that don't care about this
 	// check don't have to opt in to a passing ClusterVersion.
@@ -410,6 +495,10 @@ func newTestFixture() *testFixture {
 		kasIndexer:           kasIndexer,
 		oasDeploymentIndexer: oasDeploymentIndexer,
 
+		imageRegistryDeploymentIndexer: imageRegistryDeploymentIndexer,
+		consoleDeploymentIndexer:       consoleDeploymentIndexer,
+		monitoringStatefulSetIndexer:   monitoringStatefulSetIndexer,
+
 		nodeLister:          corev1listers.NewNodeLister(nodeIndexer),
 		cmLister:            corev1listers.NewConfigMapLister(cmIndexer).ConfigMaps(etcdNamespace),
 		etcdLister:          operatorv1listers.NewEtcdLister(etcdIndexer),
@@ -420,6 +509,10 @@ func newTestFixture() *testFixture {
 		icLister:            operatorv1listers.NewIngressControllerLister(icIndexer).IngressControllers(ingressOperatorNamespace),
 		kasLister:           operatorv1listers.NewKubeAPIServerLister(kasIndexer),
 		oasDeploymentLister: appsv1listers.NewDeploymentLister(oasDeploymentIndexer).Deployments(openShiftAPIServerNamespace),
+
+		imageRegistryDeploymentLister: appsv1listers.NewDeploymentLister(imageRegistryDeploymentIndexer).Deployments(imageRegistryNamespace),
+		consoleDeploymentLister:       appsv1listers.NewDeploymentLister(consoleDeploymentIndexer).Deployments(consoleNamespace),
+		monitoringStatefulSetLister:   appsv1listers.NewStatefulSetLister(monitoringStatefulSetIndexer).StatefulSets(monitoringNamespace),
 
 		operatorClient: v1helpers.NewFakeOperatorClient(&operatorv1.OperatorSpec{}, &operatorv1.OperatorStatus{}, nil),
 	}
@@ -444,6 +537,27 @@ func (f *testFixture) withTransitionStartTime(t time.Time) *testFixture {
 // with one reflecting the given Progressing state.
 func (f *testFixture) withClusterVersion(progressing bool) *testFixture {
 	if err := f.cvIndexer.Update(newTestClusterVersion(progressing)); err != nil {
+		panic(fmt.Sprintf("failed to update cluster version in indexer: %v", err))
+	}
+	return f
+}
+
+// withDisabledCapability removes a capability from the ClusterVersion's
+// enabledCapabilities to simulate a disabled optional component.
+func (f *testFixture) withDisabledCapability(cap configv1.ClusterVersionCapability) *testFixture {
+	obj, exists, err := f.cvIndexer.GetByKey(clusterVersionName)
+	if err != nil || !exists {
+		panic("ClusterVersion not found in indexer")
+	}
+	cv := obj.(*configv1.ClusterVersion).DeepCopy()
+	filtered := make([]configv1.ClusterVersionCapability, 0, len(cv.Status.Capabilities.EnabledCapabilities))
+	for _, c := range cv.Status.Capabilities.EnabledCapabilities {
+		if c != cap {
+			filtered = append(filtered, c)
+		}
+	}
+	cv.Status.Capabilities.EnabledCapabilities = filtered
+	if err := f.cvIndexer.Update(cv); err != nil {
 		panic(fmt.Sprintf("failed to update cluster version in indexer: %v", err))
 	}
 	return f
@@ -529,10 +643,13 @@ func (f *testFixture) buildTransitions() []TransitionDescriptor {
 		MachineConfigLister:                f.mcLister,
 		MachineConfigPoolLister:            f.mcpLister,
 		OperatorClient:                     f.operatorClient,
+		ClusterVersionLister:               f.cvLister,
+		ImageRegistryDeploymentLister:      f.imageRegistryDeploymentLister,
+		ConsoleDeploymentLister:            f.consoleDeploymentLister,
+		MonitoringStatefulSetLister:        f.monitoringStatefulSetLister,
 	})
 }
 
-// buildPreflightChecks wires global checks to the fixture caches.
 func (f *testFixture) buildPreflightChecks() []PreflightCheck {
 	return buildGlobalPreflightChecks(f.coLister, f.cvLister)
 }
@@ -554,6 +671,15 @@ func newTestClusterOperator(name string, available, progressing, degraded config
 	}
 }
 
+// defaultEnabledCapabilities lists capabilities enabled by default in test
+// fixtures. Tests that validate capability-gating override this via
+// withDisabledCapability.
+var defaultEnabledCapabilities = []configv1.ClusterVersionCapability{
+	configv1.ClusterVersionCapabilityIngress,
+	configv1.ClusterVersionCapabilityImageRegistry,
+	configv1.ClusterVersionCapabilityConsole,
+}
+
 func newTestClusterVersion(progressing bool) *configv1.ClusterVersion {
 	status := configv1.ConditionFalse
 	if progressing {
@@ -564,6 +690,9 @@ func newTestClusterVersion(progressing bool) *configv1.ClusterVersion {
 		Status: configv1.ClusterVersionStatus{
 			Conditions: []configv1.ClusterOperatorStatusCondition{
 				{Type: configv1.OperatorProgressing, Status: status},
+			},
+			Capabilities: configv1.ClusterVersionCapabilitiesStatus{
+				EnabledCapabilities: defaultEnabledCapabilities,
 			},
 		},
 	}
@@ -629,4 +758,91 @@ func newTestOpenShiftAPIServerDeployment(readyReplicas int32) *appsv1.Deployment
 			ReadyReplicas: readyReplicas,
 		},
 	}
+}
+
+func newTestDeployment(name, namespace string, readyReplicas int32) *appsv1.Deployment {
+	return &appsv1.Deployment{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.DeploymentStatus{
+			ReadyReplicas: readyReplicas,
+		},
+	}
+}
+
+func newTestStatefulSet(name, namespace string, readyReplicas int32) *appsv1.StatefulSet {
+	return &appsv1.StatefulSet{
+		ObjectMeta: metav1.ObjectMeta{Name: name, Namespace: namespace},
+		Status: appsv1.StatefulSetStatus{
+			ReadyReplicas: readyReplicas,
+		},
+	}
+}
+
+func (f *testFixture) withImageRegistryDeployment(readyReplicas int32) *testFixture {
+	if err := f.imageRegistryDeploymentIndexer.Add(newTestDeployment("image-registry", imageRegistryNamespace, readyReplicas)); err != nil {
+		panic(fmt.Sprintf("failed to add image-registry deployment to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withImageRegistryDeploymentScaled(specReplicas, readyReplicas int32) *testFixture {
+	d := newTestDeployment("image-registry", imageRegistryNamespace, readyReplicas)
+	d.Spec.Replicas = &specReplicas
+	if err := f.imageRegistryDeploymentIndexer.Add(d); err != nil {
+		panic(fmt.Sprintf("failed to add image-registry deployment to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withConsoleDeployment(readyReplicas int32) *testFixture {
+	if err := f.consoleDeploymentIndexer.Add(newTestDeployment("console", consoleNamespace, readyReplicas)); err != nil {
+		panic(fmt.Sprintf("failed to add console deployment to indexer: %v", err))
+	}
+	return f
+}
+
+func (f *testFixture) withMonitoringStatefulSet(name string, readyReplicas int32) *testFixture {
+	if err := f.monitoringStatefulSetIndexer.Add(newTestStatefulSet(name, monitoringNamespace, readyReplicas)); err != nil {
+		panic(fmt.Sprintf("failed to add %s statefulset to indexer: %v", name, err))
+	}
+	return f
+}
+
+// markTransitionCommitted stamps TopologyTransitionCompleted=False on the
+// Infrastructure, representing a transition whose status commit has landed.
+// The Reason carries the transition name, mirroring the atomic commit write
+// in applyTopologyStatus. The marker carries no timestamp, so soak tests
+// fall back to the operator condition anchors; use markTransitionCommittedAt
+// to pin the commit time.
+func markTransitionCommitted(infra *configv1.Infrastructure, transitionName string) *configv1.Infrastructure {
+	return markTransitionCommittedAt(infra, transitionName, time.Time{})
+}
+
+// markTransitionCommittedAt is markTransitionCommitted with an explicit
+// commit timestamp, mirroring the atomic commit write in applyTopologyStatus.
+func markTransitionCommittedAt(infra *configv1.Infrastructure, transitionName string, committedAt time.Time) *configv1.Infrastructure {
+	condition := metav1.Condition{
+		Type:    configv1.TopologyTransitionCompletedConditionType,
+		Status:  metav1.ConditionFalse,
+		Reason:  transitionName,
+		Message: "Topology transition committed; post-transition reconciliation in progress",
+	}
+	if !committedAt.IsZero() {
+		condition.LastTransitionTime = metav1.NewTime(committedAt)
+	}
+	infra.Status.TopologyTransitionStatus.Conditions = append(infra.Status.TopologyTransitionStatus.Conditions, condition)
+	return infra
+}
+
+// applicableTransitions counts the registered descriptors whose source
+// matches the Infrastructure's current status: evaluation reports only
+// applicable transitions.
+func applicableTransitions(transitions []TransitionDescriptor, infra *configv1.Infrastructure) int {
+	count := 0
+	for i := range transitions {
+		if matchesStatus(transitions[i].From, infra.Status) {
+			count++
+		}
+	}
+	return count
 }

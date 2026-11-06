@@ -68,6 +68,9 @@ func TestEvaluationKeepsOperatorTransitionProgress(t *testing.T) {
 	assert.True(t, v1helpers.IsOperatorConditionTrue(operatorStatus.Conditions, upgradeableCondition))
 	assert.Equal(t, "TopologyTransitionComplete", v1helpers.FindOperatorCondition(operatorStatus.Conditions, transitionProgressingCondition).Reason)
 	completedConditions := append([]operatorv1.OperatorCondition(nil), operatorStatus.Conditions...)
+	// Refresh the cached Infrastructure so the idle-path sync below observes the
+	// completed transition instead of replaying it from a stale cache.
+	assert.NoError(t, indexer.Update(currentInfra(t, c)))
 	assert.NoError(t, c.syncEvaluation(t.Context()))
 	assert.NoError(t, c.sync(t.Context(), newTestSyncContext()))
 	_, operatorStatus, _, err = c.operatorClient.GetOperatorState()
@@ -78,7 +81,7 @@ func TestEvaluationKeepsOperatorTransitionProgress(t *testing.T) {
 
 	completion := meta.FindStatusCondition(currentInfra(t, c).Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
 	if assert.NotNil(t, completion) {
-		assert.Equal(t, metav1.ConditionUnknown, completion.Status)
-		assert.Equal(t, "TransitionStatusUnknown", completion.Reason)
+		assert.Equal(t, metav1.ConditionTrue, completion.Status)
+		assert.Equal(t, "TopologyTransitionComplete", completion.Reason)
 	}
 }

@@ -3,6 +3,7 @@ package topology_transition_controller
 import (
 	"context"
 	"fmt"
+	"strings"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -15,6 +16,8 @@ import (
 	"github.com/openshift/library-go/pkg/operator/events"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/errors"
+	"k8s.io/apimachinery/pkg/api/meta"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
 	"k8s.io/client-go/tools/cache"
@@ -25,8 +28,6 @@ import (
 const (
 	transitionProgressingCondition = "TopologyTransitionControllerProgressing"
 	upgradeableCondition           = "TopologyTransitionControllerUpgradeable"
-
-	reasonTopologyTransitionInProgress = "TopologyTransitionInProgress"
 
 	// minReconciliationSoakTime is the minimum time to wait after a transition
 	// starts before accepting reconciliation checks as passing. This prevents
@@ -74,6 +75,12 @@ func NewController(
 	machineConfigInformer cache.SharedIndexInformer,
 	machineConfigPoolLister machineconfigv1listers.MachineConfigPoolLister,
 	machineConfigPoolInformer cache.SharedIndexInformer,
+	imageRegistryDeploymentLister appsv1listers.DeploymentNamespaceLister,
+	imageRegistryDeploymentInformer cache.SharedIndexInformer,
+	consoleDeploymentLister appsv1listers.DeploymentNamespaceLister,
+	consoleDeploymentInformer cache.SharedIndexInformer,
+	monitoringStatefulSetLister appsv1listers.StatefulSetNamespaceLister,
+	monitoringStatefulSetInformer cache.SharedIndexInformer,
 	clk clock.PassiveClock,
 	recorder events.Recorder,
 ) factory.Controller {
@@ -87,6 +94,10 @@ func NewController(
 		MachineConfigLister:                machineConfigLister,
 		MachineConfigPoolLister:            machineConfigPoolLister,
 		OperatorClient:                     operatorClient,
+		ClusterVersionLister:               clusterVersionLister,
+		ImageRegistryDeploymentLister:      imageRegistryDeploymentLister,
+		ConsoleDeploymentLister:            consoleDeploymentLister,
+		MonitoringStatefulSetLister:        monitoringStatefulSetLister,
 	}
 
 	c := &TopologyTransitionController{
@@ -116,6 +127,9 @@ func NewController(
 			ingressControllerInformer,
 			machineConfigInformer,
 			machineConfigPoolInformer,
+			imageRegistryDeploymentInformer,
+			consoleDeploymentInformer,
+			monitoringStatefulSetInformer,
 		).
 		WithSync(c.sync).
 		WithPostStartHooks(c.runEvaluation).
@@ -124,10 +138,11 @@ func NewController(
 		ToController("TopologyTransitionController", recorder)
 }
 
-// sync reconciles the desired and current control plane topology.
-// If a transition is requested, it validates, sets a progressing condition,
-// and updates Infrastructure status. If a transition is in progress,
-// it checks downstream workloads and clears the condition when complete.
+// sync reconciles the desired and current topology across both the control
+// plane and infrastructure axes. If a transition is requested on either axis,
+// it validates, sets a progressing condition, and updates Infrastructure
+// status. If a transition is in progress, it checks downstream workloads and
+// clears the condition when complete.
 func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory.SyncContext) error {
 	infra, err := c.infraLister.Get("cluster")
 	if errors.IsNotFound(err) {
@@ -139,13 +154,11 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 		return err
 	}
 
-	specTopology := infra.Spec.ControlPlaneTopology
-	statusTopology := infra.Status.ControlPlaneTopology
-
 	// Three states:
-	// 1. spec != status → a transition was requested, run reconcileTransition
-	// 2. spec == status, Progressing=True → transition applied, awaiting downstream reconciliation
-	// 3. spec == status, Progressing!=True → idle, ensure Upgradeable=True
+	// 1. spec != status on any topology axis -> a transition was requested, run reconcileTransition
+	// 2. spec == status with an in-flight transition (Progressing=True or
+	//    TopologyTransitionCompleted=False) -> awaiting downstream reconciliation
+	// 3. spec == status, no in-flight transition -> idle, ensure Upgradeable=True
 
 	// Get the needed operator info to progress
 	_, status, _, err := c.operatorClient.GetOperatorState()
@@ -156,19 +169,26 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 	transitionProgressing := v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition)
 	controllerUpgradeable := v1helpers.IsOperatorConditionTrue(status.Conditions, upgradeableCondition)
 
+	// TopologyTransitionCompleted=False on the Infrastructure CR is the
+	// authoritative signal that a transition was committed but has not yet
+	// converged. Spec/status equality must not be treated as completion:
+	// after a commit (or a CCO crash that lost the Progressing condition),
+	// only Completed=True closes out the transition.
+	transitionIncomplete := meta.IsStatusConditionFalse(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+
 	switch {
-	case specTopology != "" && specTopology != statusTopology:
+	case hasTopologyDivergence(infra):
 		return c.reconcileTransition(ctx, syncCtx, infra)
 
-	case transitionProgressing:
-		return c.checkClusterReconciliation(ctx, infra)
+	case transitionProgressing || transitionIncomplete:
+		return c.checkClusterReconciliation(ctx, syncCtx, infra)
 
 	case !controllerUpgradeable:
 		// Safety net: if Upgradeable is stuck False from a completed transition
 		// whose progressing condition was lost (e.g. partial failure), route
 		// through reconciliation checks before re-enabling upgrades.
-		if upgCond := v1helpers.FindOperatorCondition(status.Conditions, upgradeableCondition); upgCond != nil && upgCond.Reason == reasonTopologyTransitionInProgress {
-			return c.checkClusterReconciliation(ctx, infra)
+		if upgCond := v1helpers.FindOperatorCondition(status.Conditions, upgradeableCondition); upgCond != nil && c.isTransitionName(upgCond.Reason) {
+			return c.checkClusterReconciliation(ctx, syncCtx, infra)
 		}
 
 		// Otherwise Upgradeable was blocked by a rejected transition request
@@ -196,10 +216,63 @@ func (c *TopologyTransitionController) sync(ctx context.Context, syncCtx factory
 	return nil
 }
 
+// hasTopologyDivergence returns true if any topology axis in the
+// Infrastructure spec diverges from the corresponding status field.
+func hasTopologyDivergence(infra *configv1.Infrastructure) bool {
+	if isTopologyChangeRequested(infra.Spec.ControlPlaneTopology, infra.Status.ControlPlaneTopology) {
+		return true
+	}
+	if isTopologyChangeRequested(infra.Spec.InfrastructureTopology, infra.Status.InfrastructureTopology) {
+		return true
+	}
+	return false
+}
+
+// describeRequestedTransition returns a human-readable description of the
+// requested topology changes between spec and status.
+func describeRequestedTransition(infra *configv1.Infrastructure) string {
+	var parts []string
+	if isTopologyChangeRequested(infra.Spec.ControlPlaneTopology, infra.Status.ControlPlaneTopology) {
+		parts = append(parts, fmt.Sprintf("controlPlane: %s->%s", infra.Status.ControlPlaneTopology, infra.Spec.ControlPlaneTopology))
+	}
+	if isTopologyChangeRequested(infra.Spec.InfrastructureTopology, infra.Status.InfrastructureTopology) {
+		parts = append(parts, fmt.Sprintf("infrastructure: %s->%s", infra.Status.InfrastructureTopology, infra.Spec.InfrastructureTopology))
+	}
+	return strings.Join(parts, ", ")
+}
+
+// validateTransitionConvergence returns an error when applying the
+// transition's status update would leave an explicitly requested spec
+// topology diverging from status. Such a state matches no descriptor and
+// would wedge reconciliation in UnsupportedTransition, so it is rejected
+// before any mutation. Spec fields left empty are allowed: the transition
+// determines their target, as with the omitted infrastructure target in
+// SNOToHACompact.
+func validateTransitionConvergence(infra *configv1.Infrastructure, transition *TransitionDescriptor) error {
+	simulated := infra.DeepCopy()
+	transition.UpdateStatus(simulated)
+
+	var conflicts []string
+	if isTopologyChangeRequested(infra.Spec.ControlPlaneTopology, simulated.Status.ControlPlaneTopology) {
+		conflicts = append(conflicts, fmt.Sprintf("spec.controlPlaneTopology=%s conflicts with the transition target %s", infra.Spec.ControlPlaneTopology, simulated.Status.ControlPlaneTopology))
+	}
+	if isTopologyChangeRequested(infra.Spec.InfrastructureTopology, simulated.Status.InfrastructureTopology) {
+		conflicts = append(conflicts, fmt.Sprintf("spec.infrastructureTopology=%s conflicts with the transition target %s", infra.Spec.InfrastructureTopology, simulated.Status.InfrastructureTopology))
+	}
+	if len(conflicts) == 0 {
+		return nil
+	}
+	return fmt.Errorf("transition %s cannot be applied: %s; clear the conflicting spec field or set it to the transition target to resolve",
+		transition.Name, strings.Join(conflicts, "; "))
+}
+
 // reconcileTransition finds the matching transition descriptor, runs preflight
 // validators, sets a progressing condition, and applies the status update.
 func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, syncCtx factory.SyncContext, infra *configv1.Infrastructure) error {
 	transition, err := findTransition(infra, c.transitions)
+	if err == nil {
+		err = validateTransitionConvergence(infra, transition)
+	}
 	if err != nil {
 		// Report via conditions, not sync error — these are user-fixable states
 		// that should not trigger WithSyncDegradedOnError.
@@ -211,10 +284,11 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 				Message: err.Error(),
 			}),
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    upgradeableCondition,
-				Status:  operatorv1.ConditionFalse,
-				Reason:  "UnsupportedTransition",
-				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is requested; revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
+				Type:   upgradeableCondition,
+				Status: operatorv1.ConditionFalse,
+				Reason: "UnsupportedTransition",
+				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is requested; set spec.controlPlaneTopology=%s and spec.infrastructureTopology=%s to match status and resolve",
+					infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology),
 			}),
 		); condErr != nil {
 			return condErr
@@ -232,10 +306,11 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 				Message: err.Error(),
 			}),
 			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
-				Type:    upgradeableCondition,
-				Status:  operatorv1.ConditionFalse,
-				Reason:  "PreflightCheckFailed",
-				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is pending; resolve preflight failures or revert spec.controlPlaneTopology to %s to resolve", infra.Status.ControlPlaneTopology),
+				Type:   upgradeableCondition,
+				Status: operatorv1.ConditionFalse,
+				Reason: "PreflightCheckFailed",
+				Message: fmt.Sprintf("Cluster upgrade is not allowed while a topology transition is pending; resolve preflight failures or set spec.controlPlaneTopology=%s and spec.infrastructureTopology=%s to match status and resolve",
+					infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology),
 			}),
 		); condErr != nil {
 			return condErr
@@ -244,8 +319,7 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		return nil
 	}
 
-	specTopology := infra.Spec.ControlPlaneTopology
-	statusTopology := infra.Status.ControlPlaneTopology
+	divergence := describeRequestedTransition(infra)
 
 	// Set operator conditions first. If conditions succeed but the infra
 	// status update fails, the next sync still sees spec != status and
@@ -254,14 +328,14 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 			Type:    upgradeableCondition,
 			Status:  operatorv1.ConditionFalse,
-			Reason:  reasonTopologyTransitionInProgress,
-			Message: fmt.Sprintf("Cluster upgrade is not allowed during topology transition from %s to %s", statusTopology, specTopology),
+			Reason:  transition.Name,
+			Message: fmt.Sprintf("Cluster upgrade is not allowed during topology transition: %s", divergence),
 		}),
 		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 			Type:    transitionProgressingCondition,
 			Status:  operatorv1.ConditionTrue,
-			Reason:  reasonTopologyTransitionInProgress,
-			Message: fmt.Sprintf("Transitioning control plane topology from %s to %s", statusTopology, specTopology),
+			Reason:  transition.Name,
+			Message: fmt.Sprintf("Topology transition in progress: %s", divergence),
 		}),
 	); err != nil {
 		return err
@@ -272,7 +346,7 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 		return err
 	}
 
-	syncCtx.Recorder().Eventf("TopologyTransitionController", "Control plane topology updated from %s to %s", statusTopology, specTopology)
+	syncCtx.Recorder().Eventf("TopologyTransitionController", "Topology transition applied: %s", divergence)
 	return nil
 }
 
@@ -280,25 +354,66 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 // the transition matching the current Infrastructure spec, to verify downstream
 // workloads have reconciled after a topology transition. All validators must
 // pass before the progressing condition is cleared.
-func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Context, infra *configv1.Infrastructure) error {
+//
+// Only a committed transition (TopologyTransitionCompleted=False on the
+// Infrastructure CR) is reconciled here. Progressing conditions without a
+// commit mean the request was withdrawn before the status write landed:
+// running that transition's validators would wedge Upgradeable=False forever
+// on checks that can never pass, so the stale conditions are unwound instead.
+func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Context, syncCtx factory.SyncContext, infra *configv1.Infrastructure) error {
 	_, status, _, err := c.operatorClient.GetOperatorState()
 	if err != nil {
 		return err
 	}
 
-	// Use the Progressing condition timestamp as the soak anchor. When
-	// Progressing is absent (safety-net path where the condition was lost),
-	// fall back to the Upgradeable condition — both are set at transition
-	// start, so either provides a valid lower bound.
-	var soakAnchor time.Time
-	progressingCond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition)
-	if progressingCond != nil && !progressingCond.LastTransitionTime.IsZero() {
-		soakAnchor = progressingCond.LastTransitionTime.Time
-	} else {
-		upgCond := v1helpers.FindOperatorCondition(status.Conditions, upgradeableCondition)
-		if upgCond != nil && !upgCond.LastTransitionTime.IsZero() {
-			soakAnchor = upgCond.LastTransitionTime.Time
+	completion := meta.FindStatusCondition(infra.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+	switch {
+	case completion == nil || completion.Status == metav1.ConditionUnknown:
+		// The transition was never committed: the request was withdrawn
+		// between setting the gating conditions and the status commit. Clear
+		// both conditions back to idle so a stale transition reason does not
+		// linger and block upgrades.
+		if _, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
+			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+				Type:    upgradeableCondition,
+				Status:  operatorv1.ConditionTrue,
+				Reason:  "AsExpected",
+				Message: "No topology transition in progress",
+			}),
+			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+				Type:    transitionProgressingCondition,
+				Status:  operatorv1.ConditionFalse,
+				Reason:  "AsExpected",
+				Message: "No topology transition in progress",
+			}),
+		); updateErr != nil {
+			return updateErr
 		}
+		syncCtx.Recorder().Eventf("TopologyTransitionController", "Topology transition request withdrawn before commit; upgrade gating cleared")
+		return nil
+
+	case completion.Status == metav1.ConditionTrue:
+		// Completion was already recorded on the Infrastructure CR but the
+		// operator condition clear failed. Redo it idempotently without
+		// re-running the soak or validators.
+		return c.clearTransitionConditions(ctx)
+	}
+
+	// Completed=False: the transition is committed and in flight. Anchor the
+	// soak on the status commit timestamp: the Completed=False condition is
+	// written atomically with the topology change, so its LastTransitionTime
+	// is the moment downstream operators began reacting to the new topology.
+	// The operator conditions are set before the commit and can predate it by
+	// failed commit attempts, so they are only fallbacks (for markers without
+	// a timestamp) — anchoring on them would under-soak relative to the
+	// commit.
+	var soakAnchor time.Time
+	if !completion.LastTransitionTime.IsZero() {
+		soakAnchor = completion.LastTransitionTime.Time
+	} else if progressingCond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition); progressingCond != nil && !progressingCond.LastTransitionTime.IsZero() {
+		soakAnchor = progressingCond.LastTransitionTime.Time
+	} else if upgCond := v1helpers.FindOperatorCondition(status.Conditions, upgradeableCondition); upgCond != nil && !upgCond.LastTransitionTime.IsZero() {
+		soakAnchor = upgCond.LastTransitionTime.Time
 	}
 
 	if !soakAnchor.IsZero() && c.clock.Since(soakAnchor) < minReconciliationSoakTime {
@@ -306,13 +421,41 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		return nil
 	}
 
-	var transitionValidators []TransitionValidatorFunc
-	for i := range c.transitions {
-		if matchesSpec(c.transitions[i].To, infra.Spec) {
-			transitionValidators = c.transitions[i].TransitionValidators
-			break
+	// Identify the committed transition. The Completed=False condition's
+	// Reason carries the transition name and was written atomically with the
+	// commit, so it is authoritative. The operator conditions are fallbacks
+	// for markers written without a name. If the committed transition cannot
+	// be identified at all, do not complete: marking a transition done
+	// without running its validators would re-enable upgrades on a cluster
+	// whose workloads may not have reconciled.
+	var activeTransition *TransitionDescriptor
+	if name := completion.Reason; name != "" {
+		activeTransition = findTransitionByName(name, c.transitions)
+	}
+	if activeTransition == nil {
+		if progressingCond := v1helpers.FindOperatorCondition(status.Conditions, transitionProgressingCondition); progressingCond != nil {
+			activeTransition = findTransitionByName(progressingCond.Reason, c.transitions)
 		}
 	}
+	if activeTransition == nil {
+		if upgCond := v1helpers.FindOperatorCondition(status.Conditions, upgradeableCondition); upgCond != nil {
+			activeTransition = findTransitionByName(upgCond.Reason, c.transitions)
+		}
+	}
+	if activeTransition == nil {
+		klog.V(2).Infof("TopologyTransitionController: committed transition %q cannot be identified; withholding completion", completion.Reason)
+		_, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
+			v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
+				Type:    upgradeableCondition,
+				Status:  operatorv1.ConditionFalse,
+				Reason:  "UnknownCommittedTransition",
+				Message: fmt.Sprintf("Committed topology transition %q is not a registered transition; post-transition reconciliation cannot be verified", completion.Reason),
+			}),
+		)
+		return updateErr
+	}
+
+	transitionValidators := activeTransition.TransitionValidators
 
 	for i, v := range transitionValidators {
 		if err := v(); err != nil {
@@ -321,6 +464,20 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		}
 	}
 
+	// Mark the transition complete on the Infrastructure CR first. If this
+	// write succeeds but the operator condition update below fails, the next
+	// sync still sees Completed=False (or the Progressing condition) and
+	// retries idempotently.
+	if err := c.completeTopologyTransition(ctx); err != nil {
+		return err
+	}
+
+	return c.clearTransitionConditions(ctx)
+}
+
+// clearTransitionConditions closes out the operator-side transition gating:
+// Upgradeable is re-enabled and Progressing is cleared.
+func (c *TopologyTransitionController) clearTransitionConditions(ctx context.Context) error {
 	_, _, updateErr := v1helpers.UpdateStatus(ctx, c.operatorClient,
 		v1helpers.UpdateConditionFn(operatorv1.OperatorCondition{
 			Type:    upgradeableCondition,
@@ -336,4 +493,8 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		}),
 	)
 	return updateErr
+}
+
+func (c *TopologyTransitionController) isTransitionName(reason string) bool {
+	return findTransitionByName(reason, c.transitions) != nil
 }

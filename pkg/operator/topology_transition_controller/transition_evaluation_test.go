@@ -34,7 +34,7 @@ func TestEvaluateTransitionsHealthyWithoutRequest(t *testing.T) {
 			ctrl := newTestControllerWithClock(infra, nil, fixture.buildPreflightChecks(), fixture.buildTransitions(), clocktesting.NewFakePassiveClock(evaluationTime))
 
 			transitions, condition, err := ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, applicableTransitions(ctrl.transitions, infra)) {
 				return
 			}
 
@@ -75,11 +75,10 @@ func TestEvaluateTransitionsEmittedConditionsValid(t *testing.T) {
 	for _, tc := range []struct {
 		name        string
 		change      func(*testFixture, *configv1.Infrastructure)
-		transitions int
 		readFailure bool
 	}{
-		{name: "healthy", transitions: 1},
-		{name: "multiple blockers", transitions: 1, change: func(f *testFixture, _ *configv1.Infrastructure) {
+		{name: "healthy"},
+		{name: "multiple blockers", change: func(f *testFixture, _ *configv1.Infrastructure) {
 			f.withNodes(newTestDualRoleNodeWithConditions("master-2", true, notReadyNodeCondition())).
 				withEtcdCR(false, true).withEtcdEndpoints(1).withClusterVersion(true)
 		}},
@@ -107,8 +106,12 @@ func TestEvaluateTransitionsEmittedConditionsValid(t *testing.T) {
 			} else {
 				assert.NoError(t, err)
 			}
-			assert.Len(t, transitions, tc.transitions)
-			assert.LessOrEqual(t, len(transitions), 1)
+			expectedTransitions := applicableTransitions(ctrl.transitions, infra)
+			if tc.readFailure {
+				// Read failures invalidate the whole report: no partial results.
+				expectedTransitions = 0
+			}
+			assert.Len(t, transitions, expectedTransitions)
 			assert.Equal(t, configv1.TopologyTransitionsEvaluatedConditionType, condition.Type)
 			assert.Equal(t, infra.Generation, condition.ObservedGeneration)
 
@@ -162,7 +165,7 @@ func TestEvaluateTransitionsMessageBounds(t *testing.T) {
 				assert.Equal(t, metav1.ConditionFalse, condition.Status)
 				assert.Equal(t, 32768, utf8.RuneCountInString(condition.Message))
 			} else {
-				if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+				if !assert.NoError(t, err) || !assert.Len(t, transitions, len(ctrl.transitions)) {
 					return
 				}
 				conditions = append(conditions, transitions[0].Evaluations...)
@@ -197,7 +200,7 @@ func TestEvaluateTransitionsMessageBounds(t *testing.T) {
 		ctrl := newTestControllerWithClock(infra, nil, fixture.buildPreflightChecks(), fixture.buildTransitions(), clocktesting.NewFakePassiveClock(evaluationTime))
 
 		transitions, condition, err := ctrl.evaluateTransitions(infra)
-		if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+		if !assert.NoError(t, err) || !assert.Len(t, transitions, applicableTransitions(ctrl.transitions, infra)) {
 			return
 		}
 		assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -268,10 +271,10 @@ func TestEvaluateTransitionsDescriptorBounds(t *testing.T) {
 				return
 			}
 
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, len(ctrl.transitions)) {
 				return
 			}
-			assert.Len(t, transitions[0].Evaluations, 32)
+			assert.Len(t, transitions[0].Evaluations, 1+len(ctrl.preflightChecks))
 			assert.NotNil(t, meta.FindStatusCondition(transitions[0].Evaluations, configv1.TopologyTransitionAvailableConditionType))
 		})
 	}
@@ -307,7 +310,7 @@ func TestEvaluateTransitionsReadFailureAndRecovery(t *testing.T) {
 
 			if tc.prior {
 				transitions, condition, err := ctrl.evaluateTransitions(infra)
-				if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+				if !assert.NoError(t, err) || !assert.Len(t, transitions, applicableTransitions(ctrl.transitions, infra)) {
 					return
 				}
 				infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{Transitions: transitions, Conditions: []metav1.Condition{condition}}
@@ -355,7 +358,7 @@ func TestEvaluateTransitionsReadFailureAndRecovery(t *testing.T) {
 			ctrl.transitions = fixture.buildTransitions()
 
 			transitions, condition, err = ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, applicableTransitions(ctrl.transitions, infra)) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -491,7 +494,7 @@ func TestEvaluateTransitionsUsesActualSourceAndUpdaterCopy(t *testing.T) {
 	ctrl := &TopologyTransitionController{transitions: descriptors, clock: clocktesting.NewFakePassiveClock(evaluationTime)}
 
 	transitions, _, err := ctrl.evaluateTransitions(infra)
-	if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+	if !assert.NoError(t, err) || !assert.Len(t, transitions, len(ctrl.transitions)) {
 		return
 	}
 	assert.Equal(t, before, infra)
@@ -545,7 +548,7 @@ func TestEvaluateTransitionsBlockersAndRecovery(t *testing.T) {
 			ctrl.clock = clocktesting.NewFakePassiveClock(evaluationTime)
 
 			transitions, condition, err := ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, applicableTransitions(ctrl.transitions, infra)) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -591,7 +594,7 @@ func TestEvaluateTransitionsBlockersAndRecovery(t *testing.T) {
 				withEtcdCR(true, false).withEtcdEndpoints(3).withClusterVersion(false)
 
 			transitions, condition, err = ctrl.evaluateTransitions(infra)
-			if !assert.NoError(t, err) || !assert.Len(t, transitions, 1) {
+			if !assert.NoError(t, err) || !assert.Len(t, transitions, applicableTransitions(ctrl.transitions, infra)) {
 				return
 			}
 			assert.Equal(t, metav1.ConditionTrue, condition.Status)
@@ -632,7 +635,7 @@ func TestEvaluateTransitionsReportsEachDescriptorIndependently(t *testing.T) {
 
 	transitions, condition, err := ctrl.evaluateTransitions(infra)
 
-	if !assert.NoError(t, err) || !assert.Len(t, transitions, 2) {
+	if !assert.NoError(t, err) || !assert.Len(t, transitions, len(ctrl.transitions)) {
 		return
 	}
 	assert.Equal(t, metav1.ConditionTrue, condition.Status)
