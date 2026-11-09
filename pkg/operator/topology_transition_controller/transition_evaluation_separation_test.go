@@ -59,6 +59,12 @@ func TestEvaluationKeepsOperatorTransitionProgress(t *testing.T) {
 	assert.NoError(t, err)
 	assert.Equal(t, activeConditions, operatorStatus.Conditions)
 
+	// Before validators pass, completion should be False (transition in progress)
+	preCompletion := meta.FindStatusCondition(currentInfra(t, c).Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+	if assert.NotNil(t, preCompletion) {
+		assert.Equal(t, metav1.ConditionFalse, preCompletion.Status, "completion is False while transition in progress")
+	}
+
 	ready = true
 	assert.NoError(t, c.sync(t.Context(), newTestSyncContext()))
 	assert.Equal(t, 2, validatorCalls)
@@ -81,7 +87,10 @@ func TestEvaluationKeepsOperatorTransitionProgress(t *testing.T) {
 
 	completion := meta.FindStatusCondition(currentInfra(t, c).Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
 	if assert.NotNil(t, completion) {
-		assert.Equal(t, metav1.ConditionTrue, completion.Status)
-		assert.Equal(t, "TopologyTransitionComplete", completion.Reason)
+		// Evaluation preserves completion state written by the main sync; after the
+		// transition completed above, the main sync wrote True and the evaluation
+		// worker carries it forward without modification.
+		assert.Equal(t, metav1.ConditionTrue, completion.Status, "evaluation preserves completion state from main sync")
+		assert.Equal(t, reasonTopologyTransitionComplete, completion.Reason)
 	}
 }
