@@ -4,11 +4,16 @@ import (
 	"fmt"
 
 	configv1 "github.com/openshift/api/config/v1"
+	configlistersv1 "github.com/openshift/client-go/config/listers/config/v1"
 	machineconfigv1listers "github.com/openshift/client-go/machineconfiguration/listers/machineconfiguration/v1"
 	operatorv1listers "github.com/openshift/client-go/operator/listers/operator/v1"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	appsv1listers "k8s.io/client-go/listers/apps/v1"
 	corev1listers "k8s.io/client-go/listers/core/v1"
+)
+
+const (
+	minWorkerCapableNodes = 2
 )
 
 // TransitionValidatorFunc defines validation functions for transitions
@@ -35,8 +40,11 @@ func (e *clusterStateReadError) Unwrap() error { return e.err }
 // state, per-transition validation functions, and a status updater. From
 // matches against the current Infrastructure status, To matches against the
 // desired Infrastructure spec. Zero-value fields act as wildcards in both
-// matchers.
+// matchers. Name uniquely identifies the transition and is stored in the
+// Progressing condition's Reason so that checkClusterReconciliation can
+// look up the correct descriptor after the status update has been applied.
 type TransitionDescriptor struct {
+	Name                 string
 	From                 configv1.InfrastructureStatus
 	To                   configv1.InfrastructureSpec
 	PreflightValidators  []PreflightCheck
@@ -54,6 +62,12 @@ type TransitionValidationListers struct {
 	MachineConfigLister                machineconfigv1listers.MachineConfigLister
 	MachineConfigPoolLister            machineconfigv1listers.MachineConfigPoolLister
 	OperatorClient                     v1helpers.OperatorClient
+
+	// Infrastructure transition listers
+	ClusterVersionLister          configlistersv1.ClusterVersionLister
+	ImageRegistryDeploymentLister appsv1listers.DeploymentNamespaceLister
+	ConsoleDeploymentLister       appsv1listers.DeploymentNamespaceLister
+	MonitoringStatefulSetLister   appsv1listers.StatefulSetNamespaceLister
 }
 
 // buildSupportedTransitions returns the set of permitted topology transitions
@@ -62,6 +76,7 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 	return []TransitionDescriptor{
 		// SNO to HA Compact on platformType: None
 		{
+			Name: "SNOToHACompact",
 			From: configv1.InfrastructureStatus{
 				ControlPlaneTopology:   configv1.SingleReplicaTopologyMode,
 				InfrastructureTopology: configv1.SingleReplicaTopologyMode,
@@ -100,17 +115,54 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 				validateOpenShiftAPIServerReadyReplicas(3, listers.OpenShiftAPIServerDeploymentLister),
 			},
 		},
+		// Infrastructure SingleReplica to HighlyAvailable
+		// Requires HA control plane and sufficient worker-capable nodes.
+		{
+			Name: "InfrastructureSingleToHA",
+			From: configv1.InfrastructureStatus{
+				ControlPlaneTopology:   configv1.HighlyAvailableTopologyMode,
+				InfrastructureTopology: configv1.SingleReplicaTopologyMode,
+				PlatformStatus:         &configv1.PlatformStatus{Type: configv1.NonePlatformType},
+			},
+			To: configv1.InfrastructureSpec{
+				InfrastructureTopology: configv1.HighlyAvailableTopologyMode,
+			},
+			PreflightValidators: []PreflightCheck{
+				{Type: "WorkerCapableNodeCountSatisfied", Validate: validateWorkerCapableNodeCount(minWorkerCapableNodes, listers.NodeLister)},
+				{Type: "WorkerCapableNodesReady", Validate: validateWorkerCapableNodesReady(minWorkerCapableNodes, listers.NodeLister)},
+			},
+			UpdateStatus: func(infra *configv1.Infrastructure) {
+				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
+			},
+			TransitionValidators: []TransitionValidatorFunc{
+				validateWorkerCapableNodesReady(minWorkerCapableNodes, listers.NodeLister),
+				whenCapabilityEnabled(configv1.ClusterVersionCapabilityIngress, listers.ClusterVersionLister,
+					validateIngressRouterCount(minWorkerCapableNodes, listers.IngressControllerLister)),
+				whenCapabilityEnabled(configv1.ClusterVersionCapabilityImageRegistry, listers.ClusterVersionLister,
+					validateImageRegistryIfScaled(minWorkerCapableNodes, listers.ImageRegistryDeploymentLister)),
+				whenCapabilityEnabled(configv1.ClusterVersionCapabilityConsole, listers.ClusterVersionLister,
+					validateDeploymentReadyReplicas("console", minWorkerCapableNodes, listers.ConsoleDeploymentLister)),
+				whenWorkloadExists(validateStatefulSetReadyReplicas("prometheus-k8s", minWorkerCapableNodes, listers.MonitoringStatefulSetLister)),
+				whenWorkloadExists(validateStatefulSetReadyReplicas("alertmanager-main", minWorkerCapableNodes, listers.MonitoringStatefulSetLister)),
+			},
+		},
 	}
+}
+
+// isTopologyChangeRequested reports whether desired is explicitly set (non-empty) and
+// differs from current.
+func isTopologyChangeRequested(desired, current configv1.TopologyMode) bool {
+	return desired != "" && desired != current
 }
 
 // matchesStatus returns true if every non-zero field in descriptor equals
 // the corresponding field in actual. Zero-value fields are skipped.
 func matchesStatus(descriptor, actual configv1.InfrastructureStatus) bool {
-	if descriptor.ControlPlaneTopology != "" && descriptor.ControlPlaneTopology != actual.ControlPlaneTopology {
+	if isTopologyChangeRequested(descriptor.ControlPlaneTopology, actual.ControlPlaneTopology) {
 		return false
 	}
 
-	if descriptor.InfrastructureTopology != "" && descriptor.InfrastructureTopology != actual.InfrastructureTopology {
+	if isTopologyChangeRequested(descriptor.InfrastructureTopology, actual.InfrastructureTopology) {
 		return false
 	}
 
@@ -126,10 +178,23 @@ func matchesStatus(descriptor, actual configv1.InfrastructureStatus) bool {
 // matchesSpec returns true if every non-zero field in descriptor equals
 // the corresponding field in actual. Zero-value fields are skipped.
 func matchesSpec(descriptor, actual configv1.InfrastructureSpec) bool {
-	if descriptor.ControlPlaneTopology != "" && descriptor.ControlPlaneTopology != actual.ControlPlaneTopology {
+	if isTopologyChangeRequested(descriptor.ControlPlaneTopology, actual.ControlPlaneTopology) {
+		return false
+	}
+	if isTopologyChangeRequested(descriptor.InfrastructureTopology, actual.InfrastructureTopology) {
 		return false
 	}
 	return true
+}
+
+// findTransitionByName returns the descriptor with the given name, or nil.
+func findTransitionByName(name string, transitions []TransitionDescriptor) *TransitionDescriptor {
+	for i := range transitions {
+		if transitions[i].Name == name {
+			return &transitions[i]
+		}
+	}
+	return nil
 }
 
 // findTransition returns the TransitionDescriptor matching the current
@@ -146,8 +211,15 @@ func findTransition(infra *configv1.Infrastructure, transitions []TransitionDesc
 	if infra.Status.PlatformStatus != nil {
 		platformType = infra.Status.PlatformStatus.Type
 	}
-
-	return nil, fmt.Errorf("transition from {controlPlane=%s, infrastructure=%s, platform=%s} to {controlPlane=%s} is not supported",
+	specCP := infra.Spec.ControlPlaneTopology
+	if specCP == "" {
+		specCP = infra.Status.ControlPlaneTopology
+	}
+	specInfra := infra.Spec.InfrastructureTopology
+	if specInfra == "" {
+		specInfra = infra.Status.InfrastructureTopology
+	}
+	return nil, fmt.Errorf("transition from {controlPlane=%s, infrastructure=%s, platform=%s} to {controlPlane=%s, infrastructure=%s} is not supported",
 		infra.Status.ControlPlaneTopology, infra.Status.InfrastructureTopology,
-		platformType, infra.Spec.ControlPlaneTopology)
+		platformType, specCP, specInfra)
 }
