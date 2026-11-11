@@ -137,18 +137,13 @@ func (c *TopologyTransitionController) completeTopologyTransition(ctx context.Co
 // invalidateDiscovery clears the old report when topology inputs change.
 func (c *TopologyTransitionController) invalidateDiscovery(infra *configv1.Infrastructure) {
 	condition := metav1.Condition{
-		Type: configv1.TopologyTransitionsEvaluatedConditionType, Status: metav1.ConditionUnknown,
-		Reason: "EvaluationPending", Message: "Topology changed; supported transitions await evaluation",
+		Type:               configv1.TopologyTransitionsEvaluatedConditionType,
+		Status:             metav1.ConditionUnknown,
+		Reason:             "EvaluationPending",
+		Message:            "Topology changed; supported transitions await evaluation",
 		ObservedGeneration: infra.Generation, LastTransitionTime: metav1.NewTime(c.clock.Now()),
 	}
-	conditions := &infra.Status.TopologyTransitionStatus.Conditions
-	preserveConditionTime(&condition, *conditions)
-
-	if old := meta.FindStatusCondition(*conditions, condition.Type); old != nil {
-		*old = condition
-	} else {
-		*conditions = append(*conditions, condition)
-	}
+	upsertCondition(&infra.Status.TopologyTransitionStatus.Conditions, condition)
 
 	infra.Status.TopologyTransitionStatus.Transitions = nil
 	c.ensureTransitionConditions(infra)
@@ -160,17 +155,9 @@ func (c *TopologyTransitionController) mergeDiscovery(infra *configv1.Infrastruc
 	transitions, condition, err := c.evaluateTransitions(infra)
 
 	status := &infra.Status.TopologyTransitionStatus
-	preserveConditionTime(&condition, status.Conditions)
 
 	preserveEvaluationTimes(transitions, status.Transitions)
-
-	// Do not use SetStatusCondition: it supplies wall time when a new timestamp
-	// is zero. All timestamps here come from the injected clock or old status.
-	if old := meta.FindStatusCondition(status.Conditions, condition.Type); old != nil {
-		*old = condition
-	} else {
-		status.Conditions = append(status.Conditions, condition)
-	}
+	upsertCondition(&status.Conditions, condition)
 
 	// Semantic.DeepEqual treats nil and empty slices alike. Keep the emitted
 	// empty list nil so omitempty removes it on an API round trip.
@@ -184,6 +171,19 @@ func (c *TopologyTransitionController) mergeDiscovery(infra *configv1.Infrastruc
 func preserveConditionTime(condition *metav1.Condition, previous []metav1.Condition) {
 	if old := meta.FindStatusCondition(previous, condition.Type); old != nil && old.Status == condition.Status {
 		condition.LastTransitionTime = old.LastTransitionTime
+	}
+}
+
+// upsertCondition writes condition into conditions, retaining the previous
+// LastTransitionTime when the status is unchanged. Unlike
+// meta.SetStatusCondition it never substitutes wall time for a zero timestamp:
+// all timestamps come from the injected clock or prior status.
+func upsertCondition(conditions *[]metav1.Condition, condition metav1.Condition) {
+	preserveConditionTime(&condition, *conditions)
+	if old := meta.FindStatusCondition(*conditions, condition.Type); old != nil {
+		*old = condition
+	} else {
+		*conditions = append(*conditions, condition)
 	}
 }
 
