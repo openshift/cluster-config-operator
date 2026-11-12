@@ -530,8 +530,8 @@ func TestSync(t *testing.T) {
 					infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
 					infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 				},
-				TransitionValidators: []TransitionValidatorFunc{
-					func() error { snoValidatorCalled = true; return nil },
+				TransitionValidators: []PostTransitionCheck{
+					{Name: "SNOCheck", Validate: func() error { snoValidatorCalled = true; return nil }},
 				},
 			},
 			{
@@ -546,8 +546,8 @@ func TestSync(t *testing.T) {
 				UpdateStatus: func(infra *configv1.Infrastructure) {
 					infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 				},
-				TransitionValidators: []TransitionValidatorFunc{
-					func() error { infraValidatorCalled = true; return nil },
+				TransitionValidators: []PostTransitionCheck{
+					{Name: "InfraCheck", Validate: func() error { infraValidatorCalled = true; return nil }},
 				},
 			},
 		}

@@ -469,7 +469,7 @@ func TestPausedTargetEvaluationDoesNotBlockSafeRequestOrProgress(t *testing.T) {
 	var requestChecks atomic.Int32
 	var progressChecks atomic.Int32
 	c.transitions[0].PreflightValidators = []PreflightCheck{{Type: "RequestMandatory", Validate: func() error { requestChecks.Add(1); return nil }}}
-	c.transitions[0].TransitionValidators = []TransitionValidatorFunc{func() error { progressChecks.Add(1); return nil }}
+	c.transitions[0].TransitionValidators = []PostTransitionCheck{{Name: "ProgressMandatory", Validate: func() error { progressChecks.Add(1); return nil }}}
 	target := noopTransitions()[0]
 	target.From.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
 	target.From.InfrastructureTopology = configv1.HighlyAvailableTopologyMode

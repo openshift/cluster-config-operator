@@ -2,6 +2,7 @@ package topology_transition_controller
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -609,4 +610,24 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.Contains(t, cond.Message, "is not supported")
 		assert.Contains(t, cond.Message, "platform=AWS")
 	})
+}
+
+// TestSupportedTransitionsNamePostTransitionChecks guards the names published
+// in the TopologyTransitionCompleted message: every registered post-transition
+// check needs a validator and a unique identifier-style name, so the
+// "<name>: <error>" entries stay unambiguous.
+func TestSupportedTransitionsNamePostTransitionChecks(t *testing.T) {
+	identifier := regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
+	for _, transition := range newTestFixture().buildTransitions() {
+		t.Run(transition.Name, func(t *testing.T) {
+			assert.NotEmpty(t, transition.TransitionValidators)
+			seen := map[string]bool{}
+			for i, check := range transition.TransitionValidators {
+				assert.Regexp(t, identifier, check.Name, "check %d needs an identifier-style name", i)
+				assert.False(t, seen[check.Name], "duplicate check name %q", check.Name)
+				assert.NotNil(t, check.Validate, "check %q has no validator", check.Name)
+				seen[check.Name] = true
+			}
+		})
+	}
 }

@@ -315,8 +315,18 @@ func noopTransitions() []TransitionDescriptor {
 // can control post-transition reconciliation behavior.
 func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []TransitionDescriptor {
 	transitions := noopTransitions()
-	transitions[0].TransitionValidators = validators
+	transitions[0].TransitionValidators = namedChecks(validators...)
 	return transitions
+}
+
+// namedChecks wraps bare validators into post-transition checks named
+// Check1, Check2, ... for tests that only care whether checks pass.
+func namedChecks(validators ...TransitionValidatorFunc) []PostTransitionCheck {
+	var checks []PostTransitionCheck
+	for i, validate := range validators {
+		checks = append(checks, PostTransitionCheck{Name: fmt.Sprintf("Check%d", i+1), Validate: validate})
+	}
+	return checks
 }
 
 // noopInfraTransitions returns a transitions list that matches
@@ -346,7 +356,7 @@ func noopInfraTransitions() []TransitionDescriptor {
 // noopInfraTransitions, but with the given TransitionValidators wired in.
 func noopInfraTransitionsWithValidators(validators ...TransitionValidatorFunc) []TransitionDescriptor {
 	transitions := noopInfraTransitions()
-	transitions[0].TransitionValidators = validators
+	transitions[0].TransitionValidators = namedChecks(validators...)
 	return transitions
 }
 
@@ -359,7 +369,7 @@ func reconciliationTestTransitions(validators ...TransitionValidatorFunc) []Tran
 		{
 			Name:                 "TestTransition",
 			To:                   configv1.InfrastructureSpec{},
-			TransitionValidators: validators,
+			TransitionValidators: namedChecks(validators...),
 		},
 	}
 }

@@ -463,9 +463,9 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 
 	transitionValidators := activeTransition.TransitionValidators
 
-	for i, v := range transitionValidators {
-		if err := v(); err != nil {
-			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d not yet satisfied: %v", i+1, len(transitionValidators), err)
+	for i, check := range transitionValidators {
+		if err := check.Validate(); err != nil {
+			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d %s not yet satisfied: %v", i+1, len(transitionValidators), check.Name, err)
 			return nil
 		}
 	}
