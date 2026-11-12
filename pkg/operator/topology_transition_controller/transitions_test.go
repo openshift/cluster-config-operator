@@ -284,6 +284,9 @@ func TestInfrastructureSingleToHA(t *testing.T) {
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+		assert.Equal(t,
+			"Topology transition committed; waiting for 1 of 6 post-transition checks: ImageRegistryReplicasReady: insufficient image-registry ready replicas: need 2, have 1. The transition completes automatically when all checks pass.",
+			completedCondition(t, ctrl).Message)
 	})
 
 	t.Run("post-transition blocked by insufficient prometheus replicas", func(t *testing.T) {
@@ -301,6 +304,9 @@ func TestInfrastructureSingleToHA(t *testing.T) {
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+		assert.Equal(t,
+			"Topology transition committed; waiting for 1 of 6 post-transition checks: PrometheusReplicasReady: insufficient prometheus-k8s ready replicas: need 2, have 1. The transition completes automatically when all checks pass.",
+			completedCondition(t, ctrl).Message)
 	})
 
 	t.Run("post-transition not blocked when console capability is disabled", func(t *testing.T) {

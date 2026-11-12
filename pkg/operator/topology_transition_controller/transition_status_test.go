@@ -418,6 +418,18 @@ func currentInfra(t *testing.T, c *TopologyTransitionController) *configv1.Infra
 	return infra
 }
 
+// infraReads counts recorded Infrastructure API reads.
+func infraReads(client *configfakeclient.Clientset) int {
+	count := 0
+	for _, action := range client.Actions() {
+		if action.GetVerb() == "get" && action.GetResource().Resource == "infrastructures" {
+			count++
+		}
+	}
+
+	return count
+}
+
 // statusWrites counts recorded status updates while excluding reads and spec updates.
 func statusWrites(client *configfakeclient.Clientset) int {
 	count := 0
@@ -718,4 +730,131 @@ func TestTopologyWriteGuardsConcurrentSpecAndSource(t *testing.T) {
 			}
 		})
 	}
+}
+
+// TestInProgressMessageUpdateUsesFreshState checks that publishing failing
+// post-transition checks acts on freshly read Infrastructure status: it never
+// reverts a concurrently recorded completion, retries conflicts without
+// clobbering concurrent writes, and surfaces write failures.
+func TestInProgressMessageUpdateUsesFreshState(t *testing.T) {
+	committedAt := evaluationTime.Add(-2 * minReconciliationSoakTime)
+	failing := PostTransitionCheck{Name: "AlphaReady", Validate: func() error { return errors.New("alpha not ready") }}
+	failingMessage := "Topology transition committed; waiting for 1 of 1 post-transition checks: AlphaReady: alpha not ready. The transition completes automatically when all checks pass."
+	resource := configv1.SchemeGroupVersion.WithResource("infrastructures")
+
+	t.Run("a concurrently recorded completion is not reverted", func(t *testing.T) {
+		c, client := committedTransitionController(committedAt, failing)
+		// The lister still shows Completed=False, but the API server already
+		// holds the completed transition.
+		completed := currentInfra(t, c)
+		setTopologyTransitionCompleted(completed, metav1.ConditionTrue, reasonTopologyTransitionComplete, "Topology transition complete", evaluationTime)
+		assert.NoError(t, client.Tracker().Update(resource, completed, ""))
+
+		assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+
+		completion := completedCondition(t, c)
+		assert.Equal(t, metav1.ConditionTrue, completion.Status)
+		assert.Equal(t, reasonTopologyTransitionComplete, completion.Reason)
+		assert.Equal(t, "Topology transition complete", completion.Message)
+		assert.Zero(t, statusWrites(client))
+	})
+
+	t.Run("another committed transition is not overwritten", func(t *testing.T) {
+		c, client := committedTransitionController(committedAt, failing)
+		// The lister still shows SNOToHACompact in progress, but the API
+		// server already holds a different committed transition.
+		other := currentInfra(t, c)
+		setTopologyTransitionCompleted(other, metav1.ConditionFalse, "OtherTransition", "other transition in progress", evaluationTime)
+		assert.NoError(t, client.Tracker().Update(resource, other, ""))
+
+		assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+
+		completion := completedCondition(t, c)
+		assert.Equal(t, "OtherTransition", completion.Reason)
+		assert.Equal(t, "other transition in progress", completion.Message)
+		assert.Zero(t, statusWrites(client))
+	})
+
+	t.Run("an up-to-date cache skips the API read", func(t *testing.T) {
+		c, client := committedTransitionController(committedAt, failing)
+		assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+		assert.Equal(t, failingMessage, completedCondition(t, c).Message)
+		refreshInfraCache(t, c)
+		reads, writes := infraReads(client), statusWrites(client)
+
+		assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+
+		assert.Equal(t, reads, infraReads(client), "a cached message that already lists the failures needs no API read")
+		assert.Equal(t, writes, statusWrites(client))
+	})
+
+	t.Run("a conflict retries against fresh state and keeps concurrent writes", func(t *testing.T) {
+		c, client := committedTransitionController(committedAt, failing)
+		attempts := 0
+		client.PrependReactor("update", "infrastructures", func(action clienttesting.Action) (bool, runtime.Object, error) {
+			attempts++
+			assert.Equal(t, "status", action.GetSubresource())
+			if attempts > 1 {
+				return false, nil, nil
+			}
+			// A discovery refresh lands between the read and the write.
+			obj, err := client.Tracker().Get(resource, "", "cluster")
+			if !assert.NoError(t, err) {
+				return true, nil, err
+			}
+			newer := obj.(*configv1.Infrastructure).DeepCopy()
+			newer.Status.APIServerURL = "https://concurrent.example"
+			meta.FindStatusCondition(newer.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType).Message = "concurrent discovery refresh"
+			assert.NoError(t, client.Tracker().Update(resource, newer, ""))
+			return true, nil, apierrors.NewConflict(schema.GroupResource{Group: configv1.GroupName, Resource: "infrastructures"}, "cluster", errors.New("concurrent update"))
+		})
+
+		assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+
+		assert.Equal(t, 2, attempts)
+		updated := currentInfra(t, c)
+		assert.Equal(t, "https://concurrent.example", updated.Status.APIServerURL)
+		evaluated := meta.FindStatusCondition(updated.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
+		if assert.NotNil(t, evaluated) {
+			assert.Equal(t, "concurrent discovery refresh", evaluated.Message)
+		}
+		completion := completedCondition(t, c)
+		assert.Equal(t, metav1.ConditionFalse, completion.Status)
+		assert.Equal(t, "SNOToHACompact", completion.Reason)
+		assert.Equal(t, metav1.NewTime(committedAt), completion.LastTransitionTime)
+		assert.Equal(t, failingMessage, completion.Message)
+	})
+
+	t.Run("a read failure is returned without writing", func(t *testing.T) {
+		c, client := committedTransitionController(committedAt, failing)
+		client.PrependReactor("get", "infrastructures", func(clienttesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("apiserver unavailable")
+		})
+
+		assert.ErrorContains(t, c.sync(context.TODO(), newTestSyncContext()), "apiserver unavailable")
+		assert.Zero(t, statusWrites(client))
+	})
+
+	t.Run("a write failure is returned and leaves state unchanged", func(t *testing.T) {
+		c, client := committedTransitionController(committedAt, failing)
+		_, operatorStatus, _, err := c.operatorClient.GetOperatorState()
+		if !assert.NoError(t, err) {
+			return
+		}
+		gating := append([]operatorv1.OperatorCondition(nil), operatorStatus.Conditions...)
+		client.PrependReactor("update", "infrastructures", func(clienttesting.Action) (bool, runtime.Object, error) {
+			return true, nil, errors.New("apiserver unavailable")
+		})
+
+		assert.ErrorContains(t, c.sync(context.TODO(), newTestSyncContext()), "apiserver unavailable")
+
+		completion := completedCondition(t, c)
+		assert.Equal(t, metav1.ConditionFalse, completion.Status)
+		assert.Equal(t, "SNOToHACompact", completion.Reason)
+		assert.Equal(t, committedMessage, completion.Message)
+		_, operatorStatus, _, err = c.operatorClient.GetOperatorState()
+		if assert.NoError(t, err) {
+			assert.Equal(t, gating, operatorStatus.Conditions)
+		}
+	})
 }

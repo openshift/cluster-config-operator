@@ -134,6 +134,44 @@ func (c *TopologyTransitionController) completeTopologyTransition(ctx context.Co
 	})
 }
 
+// updateTopologyTransitionInProgressMessage refreshes the message of the
+// in-progress TopologyTransitionCompleted=False condition whose Reason is
+// reason, for example to publish the post-transition checks that are still
+// failing. It reads fresh state inside the retry so neither a stale cache nor
+// a conflict can clobber discovery or other status fields written
+// concurrently by the evaluation worker.
+//
+// Only the message, and the ObservedGeneration recorded with it, change. The
+// Reason identifies the committed transition for crash recovery and is kept
+// verbatim, and because the status stays False the LastTransitionTime, which
+// anchors the reconciliation soak, is preserved. Nothing is written when the
+// condition is no longer False for the same committed transition (it
+// completed, was never committed, or names another transition) or when
+// nothing changed.
+func (c *TopologyTransitionController) updateTopologyTransitionInProgressMessage(ctx context.Context, reason, message string) error {
+	return retry.RetryOnConflict(retry.DefaultRetry, func() error {
+		current, err := c.infraClient.Get(ctx, "cluster", metav1.GetOptions{})
+		if err != nil {
+			return err
+		}
+
+		completion := meta.FindStatusCondition(current.Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+		if completion == nil || completion.Status != metav1.ConditionFalse || completion.Reason != reason {
+			return nil
+		}
+
+		updated := current.DeepCopy()
+		setTopologyTransitionCompleted(updated, metav1.ConditionFalse, reason, message, c.clock.Now())
+
+		if equality.Semantic.DeepEqual(current.Status, updated.Status) {
+			return nil
+		}
+
+		_, err = c.infraClient.UpdateStatus(ctx, updated, metav1.UpdateOptions{})
+		return err
+	})
+}
+
 // invalidateDiscovery clears the old report when topology inputs change.
 func (c *TopologyTransitionController) invalidateDiscovery(infra *configv1.Infrastructure) {
 	condition := metav1.Condition{

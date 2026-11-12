@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"strings"
 	"time"
+	"unicode/utf8"
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
@@ -36,6 +37,11 @@ const (
 	reasonPreflightCheckFailed  = "PreflightCheckFailed"
 
 	messageTransitionReconciliationComplete = "Topology transition reconciliation complete"
+
+	// postTransitionFailureSeparator joins the failing post-transition check
+	// entries, and postTransitionWaitingHint ends the message that lists them.
+	postTransitionFailureSeparator = "; "
+	postTransitionWaitingHint      = ". The transition completes automatically when all checks pass."
 
 	// minReconciliationSoakTime is the minimum time to wait after a transition
 	// starts before accepting reconciliation checks as passing. This prevents
@@ -359,7 +365,9 @@ func (c *TopologyTransitionController) reconcileTransition(ctx context.Context, 
 // checkClusterReconciliation runs the post-transition TransitionValidators for
 // the transition matching the current Infrastructure spec, to verify downstream
 // workloads have reconciled after a topology transition. All validators must
-// pass before the progressing condition is cleared.
+// pass before the progressing condition is cleared. While any validator
+// fails, the failing checks and their errors are published in the
+// TopologyTransitionCompleted=False message on the Infrastructure CR.
 //
 // Only a committed transition (TopologyTransitionCompleted=False on the
 // Infrastructure CR) is reconciled here. Progressing conditions without a
@@ -461,13 +469,22 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 		return updateErr
 	}
 
-	transitionValidators := activeTransition.TransitionValidators
-
-	for i, check := range transitionValidators {
-		if err := check.Validate(); err != nil {
-			klog.V(4).Infof("TopologyTransitionController: reconciliation check %d/%d %s not yet satisfied: %v", i+1, len(transitionValidators), check.Name, err)
+	// Run every check so the published message names all unmet checks, not
+	// just the first. While any check fails the transition stays incomplete:
+	// only the Completed=False message is refreshed, and the operator
+	// conditions keep gating upgrades.
+	checks := activeTransition.TransitionValidators
+	if failures := runPostTransitionChecks(checks); len(failures) > 0 {
+		message := postTransitionWaitingMessage(failures, len(checks))
+		klog.V(4).Infof("TopologyTransitionController: post-transition reconciliation not yet satisfied: %s", message)
+		if completion.Message == message {
+			// The cached condition already publishes these failures. Only this
+			// sync writes the message, and each write re-triggers it through
+			// the Infrastructure informer, so a stale cache converges without
+			// an API read on every failing sync.
 			return nil
 		}
+		return c.updateTopologyTransitionInProgressMessage(ctx, completion.Reason, message)
 	}
 
 	// Mark the transition complete on the Infrastructure CR first. If this
@@ -479,6 +496,51 @@ func (c *TopologyTransitionController) checkClusterReconciliation(ctx context.Co
 	}
 
 	return c.clearTransitionConditions(ctx)
+}
+
+// runPostTransitionChecks runs every check in registration order and returns
+// a "<name>: <error>" entry for each check that fails, in that same order.
+func runPostTransitionChecks(checks []PostTransitionCheck) []string {
+	var failures []string
+	for _, check := range checks {
+		if err := check.Validate(); err != nil {
+			failures = append(failures, fmt.Sprintf("%s: %v", check.Name, err))
+		}
+	}
+	return failures
+}
+
+// postTransitionWaitingMessage builds the TopologyTransitionCompleted=False
+// message that lists the failing post-transition checks. The message has no
+// timestamps, so unchanged failures produce an identical message and no
+// status write. To stay within the API condition message limit while still
+// naming every failing check, each entry gets an equal share of the space
+// left after the fixed text and is truncated with an ellipsis if it is
+// longer.
+func postTransitionWaitingMessage(failures []string, total int) string {
+	prefix := fmt.Sprintf("Topology transition committed; waiting for %d of %d post-transition checks: ", len(failures), total)
+	budget := maxEvaluationMessageCharacters - utf8.RuneCountInString(prefix) - utf8.RuneCountInString(postTransitionWaitingHint) -
+		utf8.RuneCountInString(postTransitionFailureSeparator)*max(len(failures)-1, 0)
+	share := budget / max(len(failures), 1)
+
+	entries := make([]string, len(failures))
+	for i, failure := range failures {
+		entries[i] = truncateWithEllipsis(failure, share)
+	}
+	return limitEvaluationMessage(prefix + strings.Join(entries, postTransitionFailureSeparator) + postTransitionWaitingHint)
+}
+
+// truncateWithEllipsis shortens s to at most limit characters, marking a cut
+// with an ellipsis, without splitting UTF-8 characters.
+func truncateWithEllipsis(s string, limit int) string {
+	characters := []rune(s)
+	if len(characters) <= limit {
+		return s
+	}
+	if limit <= 0 {
+		return ""
+	}
+	return string(characters[:limit-1]) + "…"
 }
 
 // clearTransitionConditions closes out the operator-side transition gating:
