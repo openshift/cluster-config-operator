@@ -104,7 +104,7 @@ spec:
           periodSeconds: 3
         resources:
           requests:
-            memory: 50Mi
+            memory: 95Mi
             cpu: 10m
         volumeMounts:
         - mountPath: /var/run/secrets/serving-cert
