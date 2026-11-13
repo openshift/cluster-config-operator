@@ -21,3 +21,6 @@ status:
     - group: ""
       name: openshift-config-operator
       resource: namespaces
+    - group: rbac.authorization.k8s.io
+      name: system:openshift:operator:openshift-config-operator
+      resource: clusterrolebindings
