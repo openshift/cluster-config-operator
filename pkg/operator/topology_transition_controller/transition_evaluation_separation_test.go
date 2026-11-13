@@ -21,13 +21,13 @@ func TestEvaluationKeepsOperatorTransitionProgress(t *testing.T) {
 	c, _, clk := statusTestController(infra)
 	ready := false
 	validatorCalls := 0
-	c.transitions[0].TransitionValidators = []TransitionValidatorFunc{func() error {
+	c.transitions[0].TransitionValidators = []PostTransitionCheck{{Name: "DownstreamReconciled", Validate: func() error {
 		validatorCalls++
 		if !ready {
 			return errors.New("downstream reconciliation pending")
 		}
 		return nil
-	}}
+	}}}
 	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
 	assert.NoError(t, indexer.Add(infra))
 	c.infraLister = configlistersv1.NewInfrastructureLister(indexer)

@@ -25,6 +25,15 @@ type PreflightCheck struct {
 	Validate TransitionValidatorFunc
 }
 
+// PostTransitionCheck pairs a post-transition validator with a stable,
+// user-visible name. While the check fails, the name and the validator's
+// error are published in the Infrastructure TopologyTransitionCompleted
+// condition message.
+type PostTransitionCheck struct {
+	Name     string
+	Validate TransitionValidatorFunc
+}
+
 // clusterStateReadError distinguishes unreadable state from a known unmet prerequisite.
 type clusterStateReadError struct {
 	err error
@@ -43,13 +52,15 @@ func (e *clusterStateReadError) Unwrap() error { return e.err }
 // matchers. Name uniquely identifies the transition and is stored in the
 // Progressing condition's Reason so that checkClusterReconciliation can
 // look up the correct descriptor after the status update has been applied.
+// TransitionValidators are the named post-transition checks that must all
+// pass before the transition is reported complete.
 type TransitionDescriptor struct {
 	Name                 string
 	From                 configv1.InfrastructureStatus
 	To                   configv1.InfrastructureSpec
 	PreflightValidators  []PreflightCheck
 	UpdateStatus         func(infra *configv1.Infrastructure)
-	TransitionValidators []TransitionValidatorFunc
+	TransitionValidators []PostTransitionCheck
 }
 
 type TransitionValidationListers struct {
@@ -99,20 +110,20 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 				infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
 				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 			},
-			TransitionValidators: []TransitionValidatorFunc{
-				validateControlPlaneNodesSchedulable(3, listers.NodeLister),
-				validateControlPlaneNodesReady(3, listers.NodeLister),
-				validateWorkerNodesReady(2, listers.NodeLister),
-				validateEtcdQuorum(listers.EtcdLister),
-				validateEtcdNotProgressing(listers.EtcdLister),
-				validateEtcdVotingMembers(3, listers.EtcdConfigMapLister),
-				validateMachineConfigNotPresent("50-master-dnsmasq-configuration", listers.MachineConfigLister),
-				validateNewRenderedMasterConfig(listers.MachineConfigLister, listers.OperatorClient),
-				validateNewRenderedWorkerConfig(listers.MachineConfigLister, listers.OperatorClient),
-				validateMachineConfigPoolReadyCount(3, listers.MachineConfigPoolLister),
-				validateIngressRouterCount(2, listers.IngressControllerLister),
-				validateKubeAPIServerNodeCount(3, listers.KubeAPIServerLister),
-				validateOpenShiftAPIServerReadyReplicas(3, listers.OpenShiftAPIServerDeploymentLister),
+			TransitionValidators: []PostTransitionCheck{
+				{Name: "ControlPlaneNodesSchedulable", Validate: validateControlPlaneNodesSchedulable(3, listers.NodeLister)},
+				{Name: "ControlPlaneNodesReady", Validate: validateControlPlaneNodesReady(3, listers.NodeLister)},
+				{Name: "WorkerNodesReady", Validate: validateWorkerNodesReady(2, listers.NodeLister)},
+				{Name: "EtcdQuorumAvailable", Validate: validateEtcdQuorum(listers.EtcdLister)},
+				{Name: "EtcdNotProgressing", Validate: validateEtcdNotProgressing(listers.EtcdLister)},
+				{Name: "EtcdVotingMembersSatisfied", Validate: validateEtcdVotingMembers(3, listers.EtcdConfigMapLister)},
+				{Name: "DnsmasqMachineConfigRemoved", Validate: validateMachineConfigNotPresent("50-master-dnsmasq-configuration", listers.MachineConfigLister)},
+				{Name: "MasterRenderedConfigUpdated", Validate: validateNewRenderedMasterConfig(listers.MachineConfigLister, listers.OperatorClient)},
+				{Name: "WorkerRenderedConfigUpdated", Validate: validateNewRenderedWorkerConfig(listers.MachineConfigLister, listers.OperatorClient)},
+				{Name: "MasterMachineConfigPoolReady", Validate: validateMachineConfigPoolReadyCount(3, listers.MachineConfigPoolLister)},
+				{Name: "IngressRoutersAvailable", Validate: validateIngressRouterCount(2, listers.IngressControllerLister)},
+				{Name: "KubeAPIServerNodesSatisfied", Validate: validateKubeAPIServerNodeCount(3, listers.KubeAPIServerLister)},
+				{Name: "OpenShiftAPIServerReplicasReady", Validate: validateOpenShiftAPIServerReadyReplicas(3, listers.OpenShiftAPIServerDeploymentLister)},
 			},
 		},
 		// Infrastructure SingleReplica to HighlyAvailable
@@ -134,16 +145,16 @@ func buildSupportedTransitions(listers TransitionValidationListers) []Transition
 			UpdateStatus: func(infra *configv1.Infrastructure) {
 				infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 			},
-			TransitionValidators: []TransitionValidatorFunc{
-				validateWorkerCapableNodesReady(minWorkerCapableNodes, listers.NodeLister),
-				whenCapabilityEnabled(configv1.ClusterVersionCapabilityIngress, listers.ClusterVersionLister,
-					validateIngressRouterCount(minWorkerCapableNodes, listers.IngressControllerLister)),
-				whenCapabilityEnabled(configv1.ClusterVersionCapabilityImageRegistry, listers.ClusterVersionLister,
-					validateImageRegistryIfScaled(minWorkerCapableNodes, listers.ImageRegistryDeploymentLister)),
-				whenCapabilityEnabled(configv1.ClusterVersionCapabilityConsole, listers.ClusterVersionLister,
-					validateDeploymentReadyReplicas("console", minWorkerCapableNodes, listers.ConsoleDeploymentLister)),
-				whenWorkloadExists(validateStatefulSetReadyReplicas("prometheus-k8s", minWorkerCapableNodes, listers.MonitoringStatefulSetLister)),
-				whenWorkloadExists(validateStatefulSetReadyReplicas("alertmanager-main", minWorkerCapableNodes, listers.MonitoringStatefulSetLister)),
+			TransitionValidators: []PostTransitionCheck{
+				{Name: "WorkerCapableNodesReady", Validate: validateWorkerCapableNodesReady(minWorkerCapableNodes, listers.NodeLister)},
+				{Name: "IngressRoutersAvailable", Validate: whenCapabilityEnabled(configv1.ClusterVersionCapabilityIngress, listers.ClusterVersionLister,
+					validateIngressRouterCount(minWorkerCapableNodes, listers.IngressControllerLister))},
+				{Name: "ImageRegistryReplicasReady", Validate: whenCapabilityEnabled(configv1.ClusterVersionCapabilityImageRegistry, listers.ClusterVersionLister,
+					validateImageRegistryIfScaled(minWorkerCapableNodes, listers.ImageRegistryDeploymentLister))},
+				{Name: "ConsoleReplicasReady", Validate: whenCapabilityEnabled(configv1.ClusterVersionCapabilityConsole, listers.ClusterVersionLister,
+					validateDeploymentReadyReplicas("console", minWorkerCapableNodes, listers.ConsoleDeploymentLister))},
+				{Name: "PrometheusReplicasReady", Validate: whenWorkloadExists(validateStatefulSetReadyReplicas("prometheus-k8s", minWorkerCapableNodes, listers.MonitoringStatefulSetLister))},
+				{Name: "AlertmanagerReplicasReady", Validate: whenWorkloadExists(validateStatefulSetReadyReplicas("alertmanager-main", minWorkerCapableNodes, listers.MonitoringStatefulSetLister))},
 			},
 		},
 	}

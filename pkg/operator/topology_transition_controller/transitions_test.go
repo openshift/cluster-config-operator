@@ -2,6 +2,7 @@ package topology_transition_controller
 
 import (
 	"context"
+	"regexp"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -283,6 +284,9 @@ func TestInfrastructureSingleToHA(t *testing.T) {
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+		assert.Equal(t,
+			"Topology transition committed; waiting for 1 of 6 post-transition checks: ImageRegistryReplicasReady: insufficient image-registry ready replicas: need 2, have 1. The transition completes automatically when all checks pass.",
+			completedCondition(t, ctrl).Message)
 	})
 
 	t.Run("post-transition blocked by insufficient prometheus replicas", func(t *testing.T) {
@@ -300,6 +304,9 @@ func TestInfrastructureSingleToHA(t *testing.T) {
 		_, status, _, _ := ctrl.operatorClient.GetOperatorState()
 		assert.True(t, v1helpers.IsOperatorConditionTrue(status.Conditions, transitionProgressingCondition))
 		assert.True(t, v1helpers.IsOperatorConditionFalse(status.Conditions, upgradeableCondition))
+		assert.Equal(t,
+			"Topology transition committed; waiting for 1 of 6 post-transition checks: PrometheusReplicasReady: insufficient prometheus-k8s ready replicas: need 2, have 1. The transition completes automatically when all checks pass.",
+			completedCondition(t, ctrl).Message)
 	})
 
 	t.Run("post-transition not blocked when console capability is disabled", func(t *testing.T) {
@@ -609,4 +616,24 @@ func TestSNOToHACompact(t *testing.T) {
 		assert.Contains(t, cond.Message, "is not supported")
 		assert.Contains(t, cond.Message, "platform=AWS")
 	})
+}
+
+// TestSupportedTransitionsNamePostTransitionChecks guards the names published
+// in the TopologyTransitionCompleted message: every registered post-transition
+// check needs a validator and a unique identifier-style name, so the
+// "<name>: <error>" entries stay unambiguous.
+func TestSupportedTransitionsNamePostTransitionChecks(t *testing.T) {
+	identifier := regexp.MustCompile(`^[A-Z][A-Za-z0-9]*$`)
+	for _, transition := range newTestFixture().buildTransitions() {
+		t.Run(transition.Name, func(t *testing.T) {
+			assert.NotEmpty(t, transition.TransitionValidators)
+			seen := map[string]bool{}
+			for i, check := range transition.TransitionValidators {
+				assert.Regexp(t, identifier, check.Name, "check %d needs an identifier-style name", i)
+				assert.False(t, seen[check.Name], "duplicate check name %q", check.Name)
+				assert.NotNil(t, check.Validate, "check %q has no validator", check.Name)
+				seen[check.Name] = true
+			}
+		})
+	}
 }

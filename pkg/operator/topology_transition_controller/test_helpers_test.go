@@ -2,6 +2,7 @@ package topology_transition_controller
 
 import (
 	"fmt"
+	"testing"
 	"time"
 
 	configv1 "github.com/openshift/api/config/v1"
@@ -314,9 +315,25 @@ func noopTransitions() []TransitionDescriptor {
 // noopTransitions, but with the given TransitionValidators wired in so tests
 // can control post-transition reconciliation behavior.
 func noopTransitionsWithValidators(validators ...TransitionValidatorFunc) []TransitionDescriptor {
+	return noopTransitionsWithChecks(namedChecks(validators...)...)
+}
+
+// noopTransitionsWithChecks is noopTransitionsWithValidators for tests that
+// assert on the names of failing post-transition checks.
+func noopTransitionsWithChecks(checks ...PostTransitionCheck) []TransitionDescriptor {
 	transitions := noopTransitions()
-	transitions[0].TransitionValidators = validators
+	transitions[0].TransitionValidators = checks
 	return transitions
+}
+
+// namedChecks wraps bare validators into post-transition checks named
+// Check1, Check2, ... for tests that only care whether checks pass.
+func namedChecks(validators ...TransitionValidatorFunc) []PostTransitionCheck {
+	var checks []PostTransitionCheck
+	for i, validate := range validators {
+		checks = append(checks, PostTransitionCheck{Name: fmt.Sprintf("Check%d", i+1), Validate: validate})
+	}
+	return checks
 }
 
 // noopInfraTransitions returns a transitions list that matches
@@ -346,7 +363,7 @@ func noopInfraTransitions() []TransitionDescriptor {
 // noopInfraTransitions, but with the given TransitionValidators wired in.
 func noopInfraTransitionsWithValidators(validators ...TransitionValidatorFunc) []TransitionDescriptor {
 	transitions := noopInfraTransitions()
-	transitions[0].TransitionValidators = validators
+	transitions[0].TransitionValidators = namedChecks(validators...)
 	return transitions
 }
 
@@ -359,7 +376,7 @@ func reconciliationTestTransitions(validators ...TransitionValidatorFunc) []Tran
 		{
 			Name:                 "TestTransition",
 			To:                   configv1.InfrastructureSpec{},
-			TransitionValidators: validators,
+			TransitionValidators: namedChecks(validators...),
 		},
 	}
 }
@@ -806,6 +823,17 @@ func (f *testFixture) withMonitoringStatefulSet(name string, readyReplicas int32
 		panic(fmt.Sprintf("failed to add %s statefulset to indexer: %v", name, err))
 	}
 	return f
+}
+
+// refreshInfraCache replaces the controller's Infrastructure lister with one
+// that serves the live object, as if the informer had caught up.
+func refreshInfraCache(t *testing.T, c *TopologyTransitionController) {
+	t.Helper()
+	indexer := cache.NewIndexer(cache.MetaNamespaceKeyFunc, cache.Indexers{})
+	if err := indexer.Add(currentInfra(t, c)); err != nil {
+		t.Fatal(err)
+	}
+	c.infraLister = configlistersv1.NewInfrastructureLister(indexer)
 }
 
 // markTransitionCommitted stamps TopologyTransitionCompleted=False on the

@@ -2,14 +2,18 @@ package topology_transition_controller
 
 import (
 	"context"
+	"errors"
 	"fmt"
+	"strings"
 	"testing"
 	"time"
+	"unicode/utf8"
 
 	"github.com/stretchr/testify/assert"
 
 	configv1 "github.com/openshift/api/config/v1"
 	operatorv1 "github.com/openshift/api/operator/v1"
+	configfakeclient "github.com/openshift/client-go/config/clientset/versioned/fake"
 	"github.com/openshift/library-go/pkg/operator/v1helpers"
 	"k8s.io/apimachinery/pkg/api/meta"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -530,8 +534,8 @@ func TestSync(t *testing.T) {
 					infra.Status.ControlPlaneTopology = configv1.HighlyAvailableTopologyMode
 					infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 				},
-				TransitionValidators: []TransitionValidatorFunc{
-					func() error { snoValidatorCalled = true; return nil },
+				TransitionValidators: []PostTransitionCheck{
+					{Name: "SNOCheck", Validate: func() error { snoValidatorCalled = true; return nil }},
 				},
 			},
 			{
@@ -546,8 +550,8 @@ func TestSync(t *testing.T) {
 				UpdateStatus: func(infra *configv1.Infrastructure) {
 					infra.Status.InfrastructureTopology = configv1.HighlyAvailableTopologyMode
 				},
-				TransitionValidators: []TransitionValidatorFunc{
-					func() error { infraValidatorCalled = true; return nil },
+				TransitionValidators: []PostTransitionCheck{
+					{Name: "InfraCheck", Validate: func() error { infraValidatorCalled = true; return nil }},
 				},
 			},
 		}
@@ -1160,4 +1164,218 @@ func TestReconciliationSoakAnchorsOnCommitTimestamp(t *testing.T) {
 			assert.Equal(t, metav1.ConditionTrue, completion.Status, "past the commit-anchored soak: transition must complete")
 		}
 	})
+}
+
+// committedMessage is the TopologyTransitionCompleted=False message written
+// atomically with the topology status commit.
+const committedMessage = "Topology transition committed; post-transition reconciliation in progress"
+
+// committedTransitionController returns a controller whose SNOToHACompact
+// transition was committed at committedAt and is reconciled with the given
+// post-transition checks. Operator conditions gate upgrades, and the
+// Infrastructure carries a discovery condition that writes to the completion
+// condition must preserve.
+func committedTransitionController(committedAt time.Time, checks ...PostTransitionCheck) (*TopologyTransitionController, *configfakeclient.Clientset) {
+	return committedTransitionControllerWithReason(committedAt, "SNOToHACompact", checks...)
+}
+
+// committedTransitionControllerWithReason is committedTransitionController
+// with an explicit TopologyTransitionCompleted Reason, for markers whose
+// Reason does not name the transition and that are resolved through the
+// operator conditions instead.
+func committedTransitionControllerWithReason(committedAt time.Time, reason string, checks ...PostTransitionCheck) (*TopologyTransitionController, *configfakeclient.Clientset) {
+	infra := newTestInfra(configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.HighlyAvailableTopologyMode, configv1.NonePlatformType)
+	infra.Status.TopologyTransitionStatus = configv1.TopologyTransitionStatus{
+		Conditions: []metav1.Condition{
+			{Type: configv1.TopologyTransitionsEvaluatedConditionType, Status: metav1.ConditionTrue, Reason: "EvaluationComplete", Message: "Supported topology transitions evaluated", LastTransitionTime: metav1.NewTime(committedAt)},
+			{Type: configv1.TopologyTransitionCompletedConditionType, Status: metav1.ConditionFalse, Reason: reason, Message: committedMessage, LastTransitionTime: metav1.NewTime(committedAt)},
+		},
+	}
+	c, client, _ := statusTestController(infra)
+	c.transitions = noopTransitionsWithChecks(checks...)
+	c.operatorClient = v1helpers.NewFakeOperatorClient(&operatorv1.OperatorSpec{}, &operatorv1.OperatorStatus{
+		Conditions: transitionInProgressConditionsAt(committedAt, "SNOToHACompact"),
+	}, nil)
+	return c, client
+}
+
+// completedCondition returns the live TopologyTransitionCompleted condition
+// and fails the test if it is missing.
+func completedCondition(t *testing.T, c *TopologyTransitionController) *metav1.Condition {
+	t.Helper()
+	condition := meta.FindStatusCondition(currentInfra(t, c).Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionCompletedConditionType)
+	if condition == nil {
+		t.Fatal("TopologyTransitionCompleted condition is missing")
+	}
+	return condition
+}
+
+// TestPostTransitionFailuresPublishedInCompletedMessage pins how failing
+// post-transition checks are reported on the Infrastructure CR: every failing
+// check is named in the TopologyTransitionCompleted=False message, unchanged
+// failures are not rewritten, the message follows the current failures, and
+// completion replaces it. Throughout, the Reason keeps identifying the
+// committed transition, the soak anchor does not move, and the upgrade gating
+// conditions are left alone until every check passes.
+func TestPostTransitionFailuresPublishedInCompletedMessage(t *testing.T) {
+	committedAt := evaluationTime.Add(-2 * minReconciliationSoakTime)
+	bravoErr := errors.New("insufficient bravo replicas: need 2, have 1")
+	charlieErr := errors.New("no rendered charlie config found")
+	var deltaErr error
+	deltaCalls := 0
+	c, client := committedTransitionController(committedAt,
+		PostTransitionCheck{Name: "AlphaReady", Validate: func() error { return nil }},
+		PostTransitionCheck{Name: "BravoReady", Validate: func() error { return bravoErr }},
+		PostTransitionCheck{Name: "CharlieReady", Validate: func() error { return charlieErr }},
+		PostTransitionCheck{Name: "DeltaReady", Validate: func() error { deltaCalls++; return deltaErr }},
+	)
+	_, operatorStatus, _, err := c.operatorClient.GetOperatorState()
+	if !assert.NoError(t, err) {
+		return
+	}
+	gating := append([]operatorv1.OperatorCondition(nil), operatorStatus.Conditions...)
+	evaluated := *meta.FindStatusCondition(currentInfra(t, c).Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType)
+
+	assertStillGated := func(t *testing.T) {
+		t.Helper()
+		completion := completedCondition(t, c)
+		assert.Equal(t, metav1.ConditionFalse, completion.Status, "failing checks must block completion")
+		assert.Equal(t, "SNOToHACompact", completion.Reason, "the Reason must keep identifying the committed transition")
+		assert.Equal(t, metav1.NewTime(committedAt), completion.LastTransitionTime, "message updates must not move the soak anchor")
+		assert.Equal(t, &evaluated, meta.FindStatusCondition(currentInfra(t, c).Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType), "the discovery report must be preserved")
+		_, operatorStatus, _, err := c.operatorClient.GetOperatorState()
+		if assert.NoError(t, err) {
+			assert.Equal(t, gating, operatorStatus.Conditions, "failing checks must leave the upgrade gating conditions untouched")
+		}
+	}
+
+	// The steps below build on each other's state, so they run in sequence
+	// rather than as independent subtests. The informer cache keeps the
+	// commit-time message throughout, so every step also exercises the fresh
+	// read behind the cache.
+
+	// Every failing check is named, in registration order, and checks after a
+	// failing check still run.
+	assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+	assert.Equal(t,
+		"Topology transition committed; waiting for 2 of 4 post-transition checks: BravoReady: insufficient bravo replicas: need 2, have 1; CharlieReady: no rendered charlie config found. The transition completes automatically when all checks pass.",
+		completedCondition(t, c).Message)
+	assert.Equal(t, 1, deltaCalls, "checks after a failing check must still run")
+	assert.Equal(t, 1, statusWrites(client))
+	assertStillGated(t)
+
+	// Unchanged failures do not rewrite status.
+	assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+	assert.Equal(t, 1, statusWrites(client), "unchanged failures must not rewrite status")
+	assertStillGated(t)
+
+	// The message follows the current failures: a recovered check drops out,
+	// a changed error is updated, and a new failure is added.
+	bravoErr = nil
+	charlieErr = errors.New("rendered charlie config predates the transition")
+	deltaErr = errors.New("insufficient delta replicas: need 3, have 2")
+	assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+	message := completedCondition(t, c).Message
+	assert.Equal(t,
+		"Topology transition committed; waiting for 2 of 4 post-transition checks: CharlieReady: rendered charlie config predates the transition; DeltaReady: insufficient delta replicas: need 3, have 2. The transition completes automatically when all checks pass.",
+		message)
+	assert.NotContains(t, message, "BravoReady", "a recovered check must not linger in the message")
+	assert.Equal(t, 2, statusWrites(client))
+	assertStillGated(t)
+
+	// Completion replaces the published failures and releases the gating.
+	charlieErr = nil
+	deltaErr = nil
+	assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+	completion := completedCondition(t, c)
+	assert.Equal(t, metav1.ConditionTrue, completion.Status)
+	assert.Equal(t, reasonTopologyTransitionComplete, completion.Reason)
+	assert.Equal(t, "Topology transition complete", completion.Message)
+	assert.Equal(t, &evaluated, meta.FindStatusCondition(currentInfra(t, c).Status.TopologyTransitionStatus.Conditions, configv1.TopologyTransitionsEvaluatedConditionType))
+	_, operatorStatus, _, err = c.operatorClient.GetOperatorState()
+	if assert.NoError(t, err) {
+		assert.True(t, v1helpers.IsOperatorConditionFalse(operatorStatus.Conditions, transitionProgressingCondition))
+		assert.True(t, v1helpers.IsOperatorConditionTrue(operatorStatus.Conditions, upgradeableCondition))
+	}
+}
+
+// TestPostTransitionFailuresKeepUnnamedCompletedReason checks that the
+// Completed Reason is preserved verbatim when it does not name the
+// transition and the descriptor was resolved through the operator
+// conditions.
+func TestPostTransitionFailuresKeepUnnamedCompletedReason(t *testing.T) {
+	committedAt := evaluationTime.Add(-2 * minReconciliationSoakTime)
+	c, _ := committedTransitionControllerWithReason(committedAt, "TransitionInProgress",
+		PostTransitionCheck{Name: "AlphaReady", Validate: func() error { return errors.New("alpha not ready") }},
+	)
+
+	assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+
+	completion := completedCondition(t, c)
+	assert.Equal(t, metav1.ConditionFalse, completion.Status)
+	assert.Equal(t, "TransitionInProgress", completion.Reason)
+	assert.Equal(t, metav1.NewTime(committedAt), completion.LastTransitionTime)
+	assert.Equal(t,
+		"Topology transition committed; waiting for 1 of 1 post-transition checks: AlphaReady: alpha not ready. The transition completes automatically when all checks pass.",
+		completion.Message)
+}
+
+// TestPostTransitionMessageUnchangedDuringSoak checks that no check runs and
+// no failure is published before the reconciliation soak has elapsed.
+func TestPostTransitionMessageUnchangedDuringSoak(t *testing.T) {
+	calls := 0
+	c, client := committedTransitionController(evaluationTime.Add(-minReconciliationSoakTime/2),
+		PostTransitionCheck{Name: "AlphaReady", Validate: func() error { calls++; return errors.New("not ready") }},
+	)
+
+	assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+
+	assert.Zero(t, calls)
+	assert.Equal(t, committedMessage, completedCondition(t, c).Message)
+	assert.Zero(t, statusWrites(client))
+}
+
+// TestPostTransitionMessageIsCappedAtConditionLimit checks that an oversized
+// check error is truncated so the message fits the API condition message
+// limit, without splitting UTF-8 characters and without hiding the other
+// failing checks or the closing hint.
+func TestPostTransitionMessageIsCappedAtConditionLimit(t *testing.T) {
+	verbose := strings.Repeat("é", maxEvaluationMessageCharacters)
+	c, _ := committedTransitionController(evaluationTime.Add(-2*minReconciliationSoakTime),
+		PostTransitionCheck{Name: "VerboseCheck", Validate: func() error { return errors.New(verbose) }},
+		PostTransitionCheck{Name: "LaterCheck", Validate: func() error { return errors.New("later failure") }},
+	)
+
+	assert.NoError(t, c.sync(context.TODO(), newTestSyncContext()))
+
+	message := completedCondition(t, c).Message
+	assert.LessOrEqual(t, utf8.RuneCountInString(message), maxEvaluationMessageCharacters)
+	assert.True(t, utf8.ValidString(message))
+	assert.True(t, strings.HasPrefix(message, "Topology transition committed; waiting for 2 of 2 post-transition checks: VerboseCheck: éé"))
+	assert.Contains(t, message, "é…; LaterCheck: later failure", "the oversized error is cut, and the next failing check is still named")
+	assert.True(t, strings.HasSuffix(message, postTransitionWaitingHint), "the closing hint must survive truncation")
+}
+
+// TestTruncateWithEllipsis covers the character-safe truncation used to fit
+// failing check entries into the condition message.
+func TestTruncateWithEllipsis(t *testing.T) {
+	for _, tc := range []struct {
+		name  string
+		input string
+		limit int
+		want  string
+	}{
+		{name: "shorter than the limit is unchanged", input: "abc", limit: 5, want: "abc"},
+		{name: "exactly the limit is unchanged", input: "abcde", limit: 5, want: "abcde"},
+		{name: "longer than the limit ends with an ellipsis", input: "abcdef", limit: 5, want: "abcd…"},
+		{name: "multi-byte characters are not split", input: "éééééé", limit: 3, want: "éé…"},
+		{name: "a limit of one leaves only the ellipsis", input: "abc", limit: 1, want: "…"},
+		{name: "a non-positive limit leaves nothing", input: "abc", limit: 0, want: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			got := truncateWithEllipsis(tc.input, tc.limit)
+			assert.Equal(t, tc.want, got)
+			assert.LessOrEqual(t, utf8.RuneCountInString(got), max(tc.limit, 0))
+		})
+	}
 }
