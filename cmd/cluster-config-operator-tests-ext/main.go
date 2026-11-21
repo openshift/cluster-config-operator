@@ -18,7 +18,9 @@ import (
 
 	otecmd "github.com/openshift-eng/openshift-tests-extension/pkg/cmd"
 	oteextension "github.com/openshift-eng/openshift-tests-extension/pkg/extension"
+	oteextensiontests "github.com/openshift-eng/openshift-tests-extension/pkg/extension/extensiontests"
 	oteginkgo "github.com/openshift-eng/openshift-tests-extension/pkg/ginkgo"
+	configv1 "github.com/openshift/api/config/v1"
 
 	"k8s.io/klog/v2"
 
@@ -62,7 +64,7 @@ func prepareOperatorTestsRegistry() (*oteextension.Registry, error) {
 	extension := oteextension.NewExtension("openshift", "payload", "cluster-config-operator")
 
 	// parallel conformance suite - contributes to main OpenShift conformance/parallel suite.
-	// Tests run across all platforms, topologies, and network configurations.
+	// Tests run across all platforms, in-cluster control-plane topologies, and network configurations.
 	// Tests must be explicitly marked with [Parallel] and pass at >= 99% to remain in conformance.
 	extension.AddSuite(oteextension.Suite{
 		Name:        "openshift/cluster-config-operator/conformance/parallel",
@@ -102,6 +104,7 @@ func prepareOperatorTestsRegistry() (*oteextension.Registry, error) {
 		return nil, fmt.Errorf("couldn't build extension test specs from ginkgo: %w", err)
 	}
 
+	specs.Exclude(oteextensiontests.TopologyEquals(string(configv1.ExternalTopologyMode)))
 	extension.AddSpecs(specs)
 	registry.Register(extension)
 	return registry, nil
